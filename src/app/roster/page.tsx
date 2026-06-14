@@ -96,10 +96,22 @@ export default function RosterPage() {
       : null;
 
   const takenFactions = useMemo(() => {
+    const smSuperFaction = [
+      "Space Marines",
+      "Dark Angels",
+      "Blood Angels",
+      "Space Wolves",
+      "Black Templars",
+      "Deathwatch",
+    ];
     const set = new Set<string>();
     armies.forEach((a, i) => {
       if (i !== activeArmy && a.detachments.length > 0) {
-        set.add(a.detachments[0].faction);
+        const fac = a.detachments[0].faction;
+        set.add(fac);
+        if (smSuperFaction.includes(fac)) {
+          smSuperFaction.forEach((f) => set.add(f));
+        }
       }
     });
     return set;
