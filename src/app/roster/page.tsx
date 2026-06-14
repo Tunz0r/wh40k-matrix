@@ -11,26 +11,47 @@ import {
   GROUPS,
 } from "@/lib/data";
 
-interface RosterSlot {
+interface DetachmentPick {
   detachment: Detachment;
   faction: string;
 }
 
-const MAX_ARMIES = 8;
-const MAX_PER_DISPOSITION = 2;
-const MAX_DP_PER_ARMY = 3;
+interface Army {
+  detachments: DetachmentPick[];
+  chosenDisposition: Disposition | null;
+}
 
-function getDispositionCounts(roster: RosterSlot[]): Record<Disposition, number> {
+const MAX_ARMIES = 8;
+const MAX_DP_PER_ARMY = 3;
+const MAX_PER_DISPOSITION = 2;
+
+function emptyArmy(): Army {
+  return { detachments: [], chosenDisposition: null };
+}
+
+function armyDp(army: Army): number {
+  return army.detachments.reduce((s, d) => s + d.detachment.dp, 0);
+}
+
+function armyDispositions(army: Army): Disposition[] {
+  const unique = new Set(army.detachments.map((d) => d.detachment.d));
+  return [...unique];
+}
+
+function getChosenDispositionCounts(armies: Army[]): Record<Disposition, number> {
   const counts: Record<string, number> = {};
   for (const d of DISPOSITIONS) counts[d] = 0;
-  for (const slot of roster) counts[slot.detachment.d]++;
+  for (const army of armies) {
+    if (army.chosenDisposition) counts[army.chosenDisposition]++;
+  }
   return counts as Record<Disposition, number>;
 }
 
-function getAvailableDispositions(roster: RosterSlot[]): Disposition[] {
-  if (roster.length >= MAX_ARMIES) return [];
-  const counts = getDispositionCounts(roster);
-  const remaining = MAX_ARMIES - roster.length;
+function getAvailableDispositionsForTeam(armies: Army[]): Disposition[] {
+  const counts = getChosenDispositionCounts(armies);
+  const armiesWithChoice = armies.filter((a) => a.chosenDisposition).length;
+  const remaining = MAX_ARMIES - armiesWithChoice;
+  if (remaining <= 0) return [];
 
   const missingRequired = DISPOSITIONS.filter((d) => counts[d] === 0);
   const slotsForExtras = remaining - missingRequired.length;
@@ -42,8 +63,8 @@ function getAvailableDispositions(roster: RosterSlot[]): Disposition[] {
   return DISPOSITIONS.filter((d) => counts[d] < MAX_PER_DISPOSITION);
 }
 
-function getAllDetachments(): { detachment: Detachment; faction: string }[] {
-  const all: { detachment: Detachment; faction: string }[] = [];
+function getAllDetachments(): DetachmentPick[] {
+  const all: DetachmentPick[] = [];
   for (const [faction, dets] of Object.entries(FACTIONS)) {
     for (const det of dets) {
       all.push({ detachment: det, faction });
@@ -52,28 +73,27 @@ function getAllDetachments(): { detachment: Detachment; faction: string }[] {
   return all;
 }
 
-function getGroupForFaction(faction: string): string {
-  for (const [group, facs] of Object.entries(GROUPS)) {
-    if (facs.includes(faction)) return group;
-  }
-  return "";
-}
-
 export default function RosterPage() {
-  const [roster, setRoster] = useState<RosterSlot[]>([]);
+  const [armies, setArmies] = useState<Army[]>(
+    () => Array.from({ length: MAX_ARMIES }, emptyArmy)
+  );
+  const [activeArmy, setActiveArmy] = useState(0);
   const [filterGroup, setFilterGroup] = useState("");
   const [filterFaction, setFilterFaction] = useState("");
   const [search, setSearch] = useState("");
 
   const allDetachments = useMemo(getAllDetachments, []);
-  const availableDispositions = getAvailableDispositions(roster);
-  const dispCounts = getDispositionCounts(roster);
+  const dispCounts = getChosenDispositionCounts(armies);
+  const availableTeamDispositions = getAvailableDispositionsForTeam(armies);
+
+  const currentArmy = armies[activeArmy];
+  const currentDp = armyDp(currentArmy);
+  const remainingDp = MAX_DP_PER_ARMY - currentDp;
+  const currentDispositions = armyDispositions(currentArmy);
 
   const filteredDetachments = useMemo(() => {
     const query = search.toLowerCase().trim();
-    let pool = allDetachments.filter((d) =>
-      availableDispositions.includes(d.detachment.d)
-    );
+    let pool = allDetachments.filter((d) => d.detachment.dp <= remainingDp);
 
     if (filterGroup) {
       const groupFactions = GROUPS[filterGroup] || [];
@@ -97,7 +117,7 @@ export default function RosterPage() {
     });
 
     return pool;
-  }, [allDetachments, availableDispositions, filterGroup, filterFaction, search]);
+  }, [allDetachments, remainingDp, filterGroup, filterFaction, search]);
 
   const factionOptions = useMemo(() => {
     let facs = Object.keys(FACTIONS);
@@ -107,18 +127,64 @@ export default function RosterPage() {
     return facs.sort();
   }, [filterGroup]);
 
-  function addToRoster(det: Detachment, faction: string) {
-    if (roster.length >= MAX_ARMIES) return;
-    if (!availableDispositions.includes(det.d)) return;
-    setRoster([...roster, { detachment: det, faction }]);
+  function updateArmy(index: number, updater: (a: Army) => Army) {
+    setArmies((prev) => prev.map((a, i) => (i === index ? updater(a) : a)));
   }
 
-  function removeFromRoster(index: number) {
-    setRoster(roster.filter((_, i) => i !== index));
+  function addDetachment(det: Detachment, faction: string) {
+    if (det.dp > remainingDp) return;
+    updateArmy(activeArmy, (a) => {
+      const newDets = [...a.detachments, { detachment: det, faction }];
+      const disps = new Set(newDets.map((d) => d.detachment.d));
+      const newChosen =
+        disps.size === 1 ? [...disps][0] : a.chosenDisposition;
+      return { detachments: newDets, chosenDisposition: newChosen };
+    });
   }
 
-  const isComplete = roster.length === MAX_ARMIES;
-  const totalDp = roster.reduce((s, r) => s + r.detachment.dp, 0);
+  function removeDetachment(armyIdx: number, detIdx: number) {
+    updateArmy(armyIdx, (a) => {
+      const newDets = a.detachments.filter((_, i) => i !== detIdx);
+      if (newDets.length === 0) return emptyArmy();
+      const disps = new Set(newDets.map((d) => d.detachment.d));
+      let newChosen = a.chosenDisposition;
+      if (newChosen && !disps.has(newChosen)) {
+        newChosen = disps.size === 1 ? [...disps][0] : null;
+      }
+      return { detachments: newDets, chosenDisposition: newChosen };
+    });
+  }
+
+  function setDisposition(armyIdx: number, disp: Disposition) {
+    updateArmy(armyIdx, (a) => ({ ...a, chosenDisposition: disp }));
+  }
+
+  function clearArmy(armyIdx: number) {
+    updateArmy(armyIdx, () => emptyArmy());
+  }
+
+  function resetAll() {
+    setArmies(Array.from({ length: MAX_ARMIES }, emptyArmy));
+    setActiveArmy(0);
+  }
+
+  const filledArmies = armies.filter((a) => a.detachments.length > 0).length;
+  const completeArmies = armies.filter(
+    (a) => a.detachments.length > 0 && a.chosenDisposition
+  ).length;
+  const totalDp = armies.reduce((s, a) => s + armyDp(a), 0);
+
+  const isComplete =
+    completeArmies === MAX_ARMIES &&
+    DISPOSITIONS.every((d) => dispCounts[d] >= 1) &&
+    DISPOSITIONS.every((d) => dispCounts[d] <= MAX_PER_DISPOSITION);
+
+  const isDetachmentInAnyArmy = (det: Detachment, faction: string) =>
+    armies.some((a) =>
+      a.detachments.some(
+        (d) => d.detachment.n === det.n && d.faction === faction
+      )
+    );
 
   return (
     <>
@@ -134,28 +200,26 @@ export default function RosterPage() {
           Hold Roster Builder
         </h1>
         <p className="text-xs text-[#8888a0] mt-1">
-          8 hære · Hver disposition mindst 1× · Max 2× per disposition · Max 3
-          DP per hær
+          8 hære · Max 3 DP per hær · Hver disposition mindst 1× · Max 2× per
+          disposition · Vælg aktiv disposition per hær
         </p>
       </header>
 
       <div className="flex flex-col lg:flex-row">
         {/* Roster panel */}
-        <div className="lg:w-[380px] shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.08] p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="lg:w-[420px] shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.08] p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-[#e8e8f0]">
-              Dit hold ({roster.length}/{MAX_ARMIES})
+              Dit hold ({completeArmies}/{MAX_ARMIES} klar)
             </h2>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-[#8888a0]">
-                {totalDp} DP total
-              </span>
-              {roster.length > 0 && (
+              <span className="text-xs text-[#8888a0]">{totalDp} DP</span>
+              {filledArmies > 0 && (
                 <button
-                  onClick={() => setRoster([])}
+                  onClick={resetAll}
                   className="text-[11px] text-red-400 hover:text-red-300 transition-colors"
                 >
-                  Reset
+                  Reset alt
                 </button>
               )}
             </div>
@@ -167,76 +231,162 @@ export default function RosterPage() {
               const s = DISP_STYLES[d];
               const count = dispCounts[d];
               const full = count >= MAX_PER_DISPOSITION;
+              const missing = count === 0;
               return (
                 <span
                   key={d}
-                  className={`text-[10px] font-medium px-2 py-0.5 rounded ${full ? "opacity-40" : ""}`}
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded ${full ? "opacity-40" : ""} ${missing ? "ring-1 ring-current" : ""}`}
                   style={{ background: s.bg, color: s.color }}
                 >
-                  {d.split(" ")[0]} {count}/{MAX_PER_DISPOSITION}
+                  {d} {count}/{MAX_PER_DISPOSITION}
                 </span>
               );
             })}
           </div>
 
-          {/* Roster slots */}
+          {/* Army slots */}
           <div className="space-y-2">
-            {roster.map((slot, i) => {
-              const s = DISP_STYLES[slot.detachment.d];
+            {armies.map((army, i) => {
+              const dp = armyDp(army);
+              const disps = armyDispositions(army);
+              const isActive = i === activeArmy;
+              const chosenStyle = army.chosenDisposition
+                ? DISP_STYLES[army.chosenDisposition]
+                : null;
+              const needsChoice = disps.length > 1 && !army.chosenDisposition;
+              const validChoices = disps.filter((d) =>
+                availableTeamDispositions.includes(d)
+              );
+
               return (
                 <div
                   key={i}
-                  className="flex items-center gap-2 bg-[#1a1a22] border border-white/[0.08] rounded-lg px-3 py-2"
+                  onClick={() => setActiveArmy(i)}
+                  className={`rounded-lg border transition-colors cursor-pointer ${
+                    isActive
+                      ? "border-[#a855f7]/50 bg-[#1a1a22]"
+                      : "border-white/[0.08] hover:border-white/[0.14]"
+                  } ${needsChoice ? "ring-1 ring-amber-500/40" : ""}`}
                 >
-                  <span className="text-xs font-semibold text-[#8888a0] w-5">
-                    {i + 1}.
-                  </span>
-                  <div
-                    className="w-1.5 h-8 rounded-full shrink-0"
-                    style={{ background: s.color }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] text-[#e8e8f0] truncate">
-                      {slot.detachment.n}
-                      {slot.detachment.new && (
-                        <span className="ml-1.5 text-[9px] font-semibold px-1 py-px rounded bg-[rgba(34,197,94,0.15)] text-[#4ade80]">
-                          NEW
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-[#8888a0]">
-                      {slot.faction} · {slot.detachment.dp} DP
-                    </div>
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <span className="text-xs font-semibold text-[#8888a0] w-5 shrink-0">
+                      {i + 1}.
+                    </span>
+                    {army.detachments.length > 0 ? (
+                      <>
+                        <div
+                          className="w-1.5 self-stretch rounded-full shrink-0"
+                          style={{
+                            background: chosenStyle?.color || "#8888a0",
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          {army.detachments.map((d, di) => (
+                            <div
+                              key={di}
+                              className="flex items-center gap-1.5 group/det"
+                            >
+                              <span className="text-[12px] text-[#e8e8f0] truncate">
+                                {d.detachment.n}
+                              </span>
+                              <span className="text-[10px] text-[#8888a0]">
+                                {d.detachment.dp}DP
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeDetachment(i, di);
+                                }}
+                                className="text-[#8888a0] hover:text-red-400 transition-colors text-xs opacity-0 group-hover/det:opacity-100"
+                                title="Fjern"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] text-[#8888a0]">
+                              {dp}/{MAX_DP_PER_ARMY} DP ·{" "}
+                              <span className="italic">
+                                {army.detachments
+                                  .map((d) => d.faction)
+                                  .filter(
+                                    (v, idx, a) => a.indexOf(v) === idx
+                                  )
+                                  .join(", ")}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          {disps.length === 1 ? (
+                            <span
+                              className="text-[9px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap"
+                              style={{
+                                background: DISP_STYLES[disps[0]].bg,
+                                color: DISP_STYLES[disps[0]].color,
+                              }}
+                            >
+                              {disps[0]}
+                            </span>
+                          ) : (
+                            <select
+                              value={army.chosenDisposition || ""}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setDisposition(
+                                  i,
+                                  e.target.value as Disposition
+                                );
+                              }}
+                              className="bg-[#22222e] text-[10px] border border-white/[0.14] rounded px-1.5 py-0.5 outline-none cursor-pointer"
+                              style={{
+                                color: chosenStyle?.color || "#e8e8f0",
+                              }}
+                            >
+                              <option value="">Vælg disposition...</option>
+                              {disps.map((d) => {
+                                const canPick =
+                                  availableTeamDispositions.includes(d) ||
+                                  army.chosenDisposition === d;
+                                return (
+                                  <option
+                                    key={d}
+                                    value={d}
+                                    disabled={!canPick}
+                                  >
+                                    {d}
+                                    {!canPick ? " (max)" : ""}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              clearArmy(i);
+                            }}
+                            className="text-[10px] text-[#8888a0] hover:text-red-400 transition-colors"
+                          >
+                            Ryd hær
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <span
+                        className={`text-[11px] ${isActive ? "text-[#a855f7]" : "text-[#8888a0]/40"}`}
+                      >
+                        {isActive
+                          ? "← Tilføj detachments fra listen"
+                          : "Tom — klik for at vælge"}
+                      </span>
+                    )}
                   </div>
-                  <span
-                    className="text-[9px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap"
-                    style={{ background: s.bg, color: s.color }}
-                  >
-                    {slot.detachment.d}
-                  </span>
-                  <button
-                    onClick={() => removeFromRoster(i)}
-                    className="text-[#8888a0] hover:text-red-400 transition-colors ml-1 text-sm"
-                    title="Fjern"
-                  >
-                    ×
-                  </button>
                 </div>
               );
             })}
-            {Array.from({ length: MAX_ARMIES - roster.length }).map((_, i) => (
-              <div
-                key={`empty-${i}`}
-                className="flex items-center gap-2 border border-dashed border-white/[0.08] rounded-lg px-3 py-2.5"
-              >
-                <span className="text-xs font-semibold text-[#8888a0]/40 w-5">
-                  {roster.length + i + 1}.
-                </span>
-                <span className="text-[11px] text-[#8888a0]/40">
-                  Vælg detachment...
-                </span>
-              </div>
-            ))}
           </div>
 
           {isComplete && (
@@ -245,7 +395,7 @@ export default function RosterPage() {
                 Hold komplet!
               </div>
               <div className="text-[11px] text-[#8888a0] mt-0.5">
-                {roster.length} hære · {totalDp} DP total
+                {MAX_ARMIES} hære · {totalDp} DP total
               </div>
             </div>
           )}
@@ -253,6 +403,16 @@ export default function RosterPage() {
 
         {/* Detachment picker */}
         <div className="flex-1 min-w-0">
+          <div className="px-4 sm:px-6 py-2 bg-[#22222e] border-b border-white/[0.08]">
+            <span className="text-[12px] text-[#a855f7] font-medium">
+              Hær {activeArmy + 1}
+            </span>
+            <span className="text-[12px] text-[#8888a0] ml-2">
+              {currentDp}/{MAX_DP_PER_ARMY} DP brugt
+              {remainingDp > 0 && ` · ${remainingDp} DP ledig`}
+              {remainingDp === 0 && " · Fuld"}
+            </span>
+          </div>
           <div className="px-4 sm:px-6 py-3 flex flex-wrap gap-2.5 items-center border-b border-white/[0.08]">
             <input
               type="text"
@@ -292,9 +452,10 @@ export default function RosterPage() {
             </span>
           </div>
 
-          {isComplete ? (
+          {remainingDp === 0 ? (
             <div className="px-6 py-12 text-center text-[#8888a0]">
-              Holdet er komplet — fjern en hær for at vælge en anden
+              Hær {activeArmy + 1} er fuld ({MAX_DP_PER_ARMY} DP) — vælg en
+              anden hær eller fjern en detachment
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -319,14 +480,11 @@ export default function RosterPage() {
                 <tbody>
                   {filteredDetachments.map(({ detachment: det, faction }) => {
                     const s = DISP_STYLES[det.d];
-                    const alreadyPicked = roster.some(
-                      (r) =>
-                        r.detachment.n === det.n && r.faction === faction
-                    );
+                    const taken = isDetachmentInAnyArmy(det, faction);
                     return (
                       <tr
                         key={`${faction}-${det.n}`}
-                        className={`group ${alreadyPicked ? "opacity-30" : ""}`}
+                        className={`group ${taken ? "opacity-30" : ""}`}
                       >
                         <td className="px-4 py-[7px] border-b border-white/[0.08] group-hover:bg-[#1a1a22]">
                           <div className="text-[13px] text-[#e8e8f0]">
@@ -360,9 +518,9 @@ export default function RosterPage() {
                           </span>
                         </td>
                         <td className="px-4 py-[7px] border-b border-white/[0.08] group-hover:bg-[#1a1a22]">
-                          {!alreadyPicked && (
+                          {!taken && (
                             <button
-                              onClick={() => addToRoster(det, faction)}
+                              onClick={() => addDetachment(det, faction)}
                               className="text-[11px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors"
                             >
                               + Tilføj
@@ -379,6 +537,8 @@ export default function RosterPage() {
                         className="px-4 py-8 text-center text-[#8888a0]"
                       >
                         Ingen detachments matcher
+                        {remainingDp < 3 &&
+                          ` (max ${remainingDp} DP ledig i hær ${activeArmy + 1})`}
                       </td>
                     </tr>
                   )}
