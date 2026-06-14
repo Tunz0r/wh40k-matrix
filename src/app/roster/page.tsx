@@ -90,17 +90,24 @@ export default function RosterPage() {
   const currentDp = armyDp(currentArmy);
   const remainingDp = MAX_DP_PER_ARMY - currentDp;
   const currentDispositions = armyDispositions(currentArmy);
+  const lockedFaction =
+    currentArmy.detachments.length > 0
+      ? currentArmy.detachments[0].faction
+      : null;
 
   const filteredDetachments = useMemo(() => {
     const query = search.toLowerCase().trim();
     let pool = allDetachments.filter((d) => d.detachment.dp <= remainingDp);
 
-    if (filterGroup) {
+    if (lockedFaction) {
+      pool = pool.filter((d) => d.faction === lockedFaction);
+    } else if (filterFaction) {
+      pool = pool.filter((d) => d.faction === filterFaction);
+    }
+
+    if (!lockedFaction && filterGroup) {
       const groupFactions = GROUPS[filterGroup] || [];
       pool = pool.filter((d) => groupFactions.includes(d.faction));
-    }
-    if (filterFaction) {
-      pool = pool.filter((d) => d.faction === filterFaction);
     }
     if (query) {
       pool = pool.filter(
@@ -117,7 +124,7 @@ export default function RosterPage() {
     });
 
     return pool;
-  }, [allDetachments, remainingDp, filterGroup, filterFaction, search]);
+  }, [allDetachments, remainingDp, lockedFaction, filterGroup, filterFaction, search]);
 
   const factionOptions = useMemo(() => {
     let facs = Object.keys(FACTIONS);
@@ -411,6 +418,7 @@ export default function RosterPage() {
               {currentDp}/{MAX_DP_PER_ARMY} DP brugt
               {remainingDp > 0 && ` · ${remainingDp} DP ledig`}
               {remainingDp === 0 && " · Fuld"}
+              {lockedFaction && ` · ${lockedFaction}`}
             </span>
           </div>
           <div className="px-4 sm:px-6 py-3 flex flex-wrap gap-2.5 items-center border-b border-white/[0.08]">
