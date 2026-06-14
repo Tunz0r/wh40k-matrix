@@ -1,6 +1,6 @@
 export interface Mission {
   name: string;
-  desc: string;
+  scoring: string;
 }
 
 export interface DispositionInfo {
@@ -71,23 +71,23 @@ export const MISSIONS: Record<Disposition, DispositionInfo> = {
     vs: {
       "Take and Hold": {
         name: "Battlefield Dominance",
-        desc: "Klassisk symmetrisk kamp — score VP for at holde flest markers ved slutningen af hvert battle round.",
+        scoring: "VP for flest holdte objektiver ved rundens slutning",
       },
       "Purge the Foe": {
         name: "Immovable Object",
-        desc: "Hold objectives mens modstanderen forsøger at destruere dine styrker. Overlev angrebet og bevar boardcontrol.",
+        scoring: "VP for holdte obj. · Fjenden scorer for dræbte enheder",
       },
       Disruption: {
         name: "Determined Acquisition",
-        desc: "Race om at låse markers ned inden fjenden kan udføre actions i nærheden af dem.",
+        scoring: "VP for holdte obj. · Fjenden scorer for actions i dit territorium",
       },
       Reconnaissance: {
         name: "Purge and Secure",
-        desc: "Hold objectives mens Recon-fjenden ranger frit. Kontrol skifter konstant — dynamisk og krævende.",
+        scoring: "VP for holdte obj. · Fjenden scorer for scannede zoner",
       },
       "Priority Assets": {
         name: "Inescapable Dominion",
-        desc: "Begge sider tiltrækkes til de samme hotspots — hold dine objectives og benægt fjenden Priority Markers.",
+        scoring: "VP for holdte obj. · Fjenden scorer for markerede obj.",
       },
     },
   },
@@ -98,23 +98,23 @@ export const MISSIONS: Record<Disposition, DispositionInfo> = {
     vs: {
       "Take and Hold": {
         name: "Unstoppable Force",
-        desc: "Jagt og destruer fjenden mens de forsøger at holde objectives. Klassisk angriber vs. forsvarer.",
+        scoring: "VP for destruerede enheder · Fjenden scorer for holdte obj.",
       },
       "Purge the Foe": {
         name: "Meatgrinder",
-        desc: "Begge sider scorer for at destruere enheder. Brutal symmetrisk tilintetgørelseskamp — den hårdeste vinder.",
+        scoring: "Begge scorer VP for destruerede fjendtlige enheder",
       },
       Disruption: {
         name: "Punishment",
-        desc: "Jagt den undvigende Disruption-fjend mens de forsøger at udføre actions. Spind dem ned.",
+        scoring: "VP for dræb · Fjenden scorer for actions + denial",
       },
       Reconnaissance: {
         name: "Consecrate",
-        desc: "Dræb enheder mens Recon-fjenden forsøger at nå alle zoner. Mobil og attritional kamp over hele bordet.",
+        scoring: "VP for dræb · Fjenden scorer for scannede zoner",
       },
       "Priority Assets": {
         name: "Destroyer's Wrath",
-        desc: "Bryd igennem og destruer forsvarernes enheder, der klynger sig om Priority Assets.",
+        scoring: "VP for dræb · Fjenden scorer for markerede obj.",
       },
     },
   },
@@ -125,23 +125,23 @@ export const MISSIONS: Record<Disposition, DispositionInfo> = {
     vs: {
       "Take and Hold": {
         name: "Death Trap",
-        desc: "Infiltrer fjendtligt holdt territorium og udfør actions mens fjenden scorer for objectives. Høj risiko, høj belønning.",
+        scoring: "VP for actions i fjendtligt territorium · Fjenden scorer for holdte obj.",
       },
       "Purge the Foe": {
         name: "Delaying Action",
-        desc: "Overlev og udfør actions mens en aggressiv fjend jager dig. Bliv mobil og levende.",
+        scoring: "VP for actions + denial · Fjenden scorer for dræb",
       },
       Disruption: {
         name: "Outmanoeuvre",
-        desc: "Begge sider scorer for actions og denial. Positionering og action economy afgør vinderen.",
+        scoring: "Begge scorer for actions i modstanderens zone + denial",
       },
       Reconnaissance: {
         name: "Smoke and Mirrors",
-        desc: "Disruption udfører actions; Recon scanner zoner. En duel om hurtighed og snedighed.",
+        scoring: "VP for actions + denial · Fjenden scorer for scans",
       },
       "Priority Assets": {
         name: "Locate and Deny",
-        desc: "Act near or deny priority markers while the defender protects them. Specific terrain is decisive.",
+        scoring: "VP for actions nær priority markers · Fjenden forsvarer dem",
       },
     },
   },
@@ -152,23 +152,23 @@ export const MISSIONS: Record<Disposition, DispositionInfo> = {
     vs: {
       "Take and Hold": {
         name: "Reconnaissance Sweep",
-        desc: "Scan zoner og range frit over et board fjenden forsøger at låse ned. Spred dig og skor.",
+        scoring: "VP for scannede board-zoner · Fjenden scorer for holdte obj.",
       },
       "Purge the Foe": {
         name: "Triangulation",
-        desc: "Scan kvadranter mens en fjend jager dine enheder. Scouts skal overleve en ubarmhjertig jæger.",
+        scoring: "VP for scannede zoner · Fjenden scorer for dræb",
       },
       Disruption: {
         name: "Surveil the Foe",
-        desc: "Begge er mobile og hurtige — scanner og udfører actions. Afgjort af hvem der afslutter sine opgaver først.",
+        scoring: "VP for scans · Fjenden scorer for actions + denial",
       },
       Reconnaissance: {
         name: "Gather Intel",
-        desc: "Symmetrisk race over bordet — speed og boarddækning vinder. Scan mest, skor mest.",
+        scoring: "Begge scorer for scannede zoner — ren speed-race",
       },
       "Priority Assets": {
         name: "Search and Scour",
-        desc: "Sweep hele bordet mens Priority-fjenden forsvarer markers. Nå alle hjørner mens de klynger sig.",
+        scoring: "VP for scannede zoner · Fjenden scorer for markerede obj.",
       },
     },
   },
@@ -179,23 +179,23 @@ export const MISSIONS: Record<Disposition, DispositionInfo> = {
     vs: {
       "Take and Hold": {
         name: "Secure Asset",
-        desc: "Scorer for markerede objectives mens fjenden scorer for alle. Contested markers er afgørende hotspots.",
+        scoring: "VP for markerede obj. · Fjenden scorer for alle obj.",
       },
       "Purge the Foe": {
         name: "Vital Link",
-        desc: "Forsvar Priority Assets mod en destruktiv fjend. Hold linjen og beskyt dine prized objectives.",
+        scoring: "VP for markerede obj. · Fjenden scorer for dræb",
       },
       Disruption: {
         name: "Extract Relic",
-        desc: "Forsvar markers mod en fjend der forsøger at act near dem. Spændt defensivt mission.",
+        scoring: "VP for markerede obj. · Fjenden scorer for actions nær dem",
       },
       Reconnaissance: {
         name: "Vanguard Operation",
-        desc: "Forankr om assets mens Recon-fjenden ranger frit og scorer andre steder på bordet.",
+        scoring: "VP for markerede obj. · Fjenden scorer for scannede zoner",
       },
       "Priority Assets": {
         name: "Sabotage",
-        desc: "Begge kæmper om de samme markerede objectives. High-stakes symmetrisk kamp om nøglepunkter.",
+        scoring: "Begge scorer for de samme markerede objektiver",
       },
     },
   },
