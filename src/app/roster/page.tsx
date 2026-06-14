@@ -82,6 +82,7 @@ export default function RosterPage() {
   const [activeArmy, setActiveArmy] = useState(0);
   const [filterGroup, setFilterGroup] = useState("");
   const [filterFaction, setFilterFaction] = useState("");
+  const [filterDisposition, setFilterDisposition] = useState<Disposition | "">("");
   const [search, setSearch] = useState("");
   const [rosterName, setRosterName] = useState("Mit hold");
   const [showImport, setShowImport] = useState(false);
@@ -139,6 +140,9 @@ export default function RosterPage() {
       const groupFactions = GROUPS[filterGroup] || [];
       pool = pool.filter((d) => groupFactions.includes(d.faction));
     }
+    if (filterDisposition) {
+      pool = pool.filter((d) => d.detachment.d === filterDisposition);
+    }
     if (query) {
       pool = pool.filter(
         (d) =>
@@ -154,7 +158,7 @@ export default function RosterPage() {
     });
 
     return pool;
-  }, [allDetachments, remainingDp, lockedFaction, takenFactions, filterGroup, filterFaction, search]);
+  }, [allDetachments, remainingDp, lockedFaction, takenFactions, filterGroup, filterFaction, filterDisposition, search]);
 
   const factionOptions = useMemo(() => {
     let facs = Object.keys(FACTIONS);
@@ -553,6 +557,18 @@ export default function RosterPage() {
               {factionOptions.map((f) => (
                 <option key={f} value={f}>
                   {f}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filterDisposition}
+              onChange={(e) => setFilterDisposition(e.target.value as Disposition | "")}
+              className="bg-[#1a1a22] text-[#e8e8f0] border border-white/[0.14] rounded-md px-2.5 py-1.5 text-[13px] font-[inherit] cursor-pointer outline-none hover:border-white/25 focus:border-[#a855f7]"
+            >
+              <option value="">Alle dispositioner</option>
+              {DISPOSITIONS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
                 </option>
               ))}
             </select>
