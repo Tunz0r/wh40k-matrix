@@ -177,8 +177,17 @@ export default function RosterPage() {
     updateArmy(activeArmy, (a) => {
       const newDets = [...a.detachments, { detachment: det, faction }];
       const disps = new Set(newDets.map((d) => d.detachment.d));
-      const newChosen =
-        disps.size === 1 ? [...disps][0] : a.chosenDisposition;
+      let newChosen = a.chosenDisposition;
+      if (disps.size === 1) {
+        const only = [...disps][0];
+        const counts = getChosenDispositionCounts(armies);
+        const alreadyCounted = a.chosenDisposition === only ? 1 : 0;
+        if (counts[only] - alreadyCounted < MAX_PER_DISPOSITION) {
+          newChosen = only;
+        } else {
+          newChosen = null;
+        }
+      }
       return { detachments: newDets, chosenDisposition: newChosen };
     });
   }
@@ -391,13 +400,15 @@ export default function RosterPage() {
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           {disps.length === 1 ? (
                             <span
-                              className="text-[9px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap"
+                              className={`text-[9px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${!army.chosenDisposition ? "opacity-50 ring-1 ring-red-500/50" : ""}`}
                               style={{
                                 background: DISP_STYLES[disps[0]].bg,
                                 color: DISP_STYLES[disps[0]].color,
                               }}
+                              title={!army.chosenDisposition ? `${disps[0]} er på max (${MAX_PER_DISPOSITION}×)` : undefined}
                             >
                               {disps[0]}
+                              {!army.chosenDisposition && " ⚠"}
                             </span>
                           ) : (
                             <select
