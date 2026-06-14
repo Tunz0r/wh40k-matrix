@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { type Disposition } from "@/lib/data";
 import { FilterBar } from "@/components/FilterBar";
 import { Legend } from "@/components/Legend";
@@ -18,6 +19,12 @@ export default function Home() {
           WH40K — Detachment & Disposition Matrix
         </h1>
         <p className="text-xs text-[#8888a0]">11th edition</p>
+        <Link
+          href="/roster"
+          className="ml-auto text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors bg-[rgba(168,85,247,0.1)] px-3 py-1 rounded-md border border-[rgba(168,85,247,0.2)]"
+        >
+          Roster Builder
+        </Link>
       </header>
 
       <FilterBar
