@@ -95,9 +95,21 @@ export default function RosterPage() {
       ? currentArmy.detachments[0].faction
       : null;
 
+  const takenFactions = useMemo(() => {
+    const set = new Set<string>();
+    armies.forEach((a, i) => {
+      if (i !== activeArmy && a.detachments.length > 0) {
+        set.add(a.detachments[0].faction);
+      }
+    });
+    return set;
+  }, [armies, activeArmy]);
+
   const filteredDetachments = useMemo(() => {
     const query = search.toLowerCase().trim();
     let pool = allDetachments.filter((d) => d.detachment.dp <= remainingDp);
+
+    pool = pool.filter((d) => !takenFactions.has(d.faction));
 
     if (lockedFaction) {
       pool = pool.filter((d) => d.faction === lockedFaction);
@@ -124,7 +136,7 @@ export default function RosterPage() {
     });
 
     return pool;
-  }, [allDetachments, remainingDp, lockedFaction, filterGroup, filterFaction, search]);
+  }, [allDetachments, remainingDp, lockedFaction, takenFactions, filterGroup, filterFaction, search]);
 
   const factionOptions = useMemo(() => {
     let facs = Object.keys(FACTIONS);
