@@ -19,12 +19,20 @@ export default function Home() {
           WH40K — Detachment & Disposition Matrix
         </h1>
         <p className="text-xs text-[#8888a0]">11th edition</p>
-        <Link
-          href="/roster"
-          className="ml-auto text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors bg-[rgba(168,85,247,0.1)] px-3 py-1 rounded-md border border-[rgba(168,85,247,0.2)]"
-        >
-          Roster Builder
-        </Link>
+        <div className="ml-auto flex items-center gap-2">
+          <Link
+            href="/roster"
+            className="text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors bg-[rgba(168,85,247,0.1)] px-3 py-1 rounded-md border border-[rgba(168,85,247,0.2)]"
+          >
+            Roster Builder
+          </Link>
+          <Link
+            href="/pairings"
+            className="text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors bg-[rgba(168,85,247,0.1)] px-3 py-1 rounded-md border border-[rgba(168,85,247,0.2)]"
+          >
+            Mock Pairings
+          </Link>
+        </div>
       </header>
 
       <FilterBar

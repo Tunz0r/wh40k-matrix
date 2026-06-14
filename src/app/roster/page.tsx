@@ -11,6 +11,7 @@ import {
   GROUPS,
 } from "@/lib/data";
 import { DispositionBadge } from "@/components/DispositionBadge";
+import { serializeRoster, deserializeRoster, rosterToArmies } from "@/lib/roster";
 
 interface DetachmentPick {
   detachment: Detachment;
@@ -82,6 +83,10 @@ export default function RosterPage() {
   const [filterGroup, setFilterGroup] = useState("");
   const [filterFaction, setFilterFaction] = useState("");
   const [search, setSearch] = useState("");
+  const [rosterName, setRosterName] = useState("Mit hold");
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [exportCopied, setExportCopied] = useState(false);
 
   const allDetachments = useMemo(getAllDetachments, []);
   const dispCounts = getChosenDispositionCounts(armies);
@@ -200,6 +205,27 @@ export default function RosterPage() {
     setActiveArmy(0);
   }
 
+  function exportRoster() {
+    const code = serializeRoster(rosterName, armies);
+    navigator.clipboard.writeText(code);
+    setExportCopied(true);
+    setTimeout(() => setExportCopied(false), 2000);
+  }
+
+  function handleImport() {
+    const data = deserializeRoster(importText.trim());
+    if (!data) {
+      alert("Ugyldigt roster format.");
+      return;
+    }
+    const imported = rosterToArmies(data);
+    setArmies(imported);
+    setRosterName(data.name);
+    setShowImport(false);
+    setImportText("");
+    setActiveArmy(0);
+  }
+
   const filledArmies = armies.filter((a) => a.detachments.length > 0).length;
   const completeArmies = armies.filter(
     (a) => a.detachments.length > 0 && a.chosenDisposition
@@ -228,9 +254,17 @@ export default function RosterPage() {
           <span>/</span>
           <span className="text-[#e8e8f0]">Roster Builder</span>
         </div>
-        <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
-          Hold Roster Builder
-        </h1>
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
+            Hold Roster Builder
+          </h1>
+          <Link
+            href="/pairings"
+            className="ml-auto text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors bg-[rgba(168,85,247,0.1)] px-3 py-1 rounded-md border border-[rgba(168,85,247,0.2)]"
+          >
+            Mock Pairings
+          </Link>
+        </div>
         <p className="text-xs text-[#8888a0] mt-1">
           8 hære · Max 3 DP per hær · Hver disposition mindst 1× · Max 2× per
           disposition · Vælg aktiv disposition per hær
@@ -421,8 +455,50 @@ export default function RosterPage() {
             })}
           </div>
 
+          {/* Export/Import */}
+          <div className="flex flex-wrap gap-2 mt-3">
+            {isComplete && (
+              <button
+                onClick={exportRoster}
+                className="text-[11px] font-medium text-[#4ade80] hover:text-[#86efac] bg-[rgba(34,197,94,0.08)] px-2.5 py-1 rounded-md border border-[rgba(34,197,94,0.2)] transition-colors"
+              >
+                {exportCopied ? "Kopieret!" : "Eksportér roster"}
+              </button>
+            )}
+            <button
+              onClick={() => setShowImport(!showImport)}
+              className="text-[11px] font-medium text-[#8888a0] hover:text-[#e8e8f0] bg-[#22222e] px-2.5 py-1 rounded-md border border-white/[0.08] transition-colors"
+            >
+              Importér roster
+            </button>
+          </div>
+          {showImport && (
+            <div className="mt-2 p-3 bg-[#22222e] rounded-lg border border-white/[0.08]">
+              <textarea
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                placeholder="Indsæt roster-kode her..."
+                className="w-full h-16 bg-[#1a1a22] border border-white/[0.14] rounded p-2 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
+              />
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={handleImport}
+                  className="text-[11px] font-medium text-[#a855f7] hover:text-[#c084fc] px-2.5 py-1 rounded-md bg-[rgba(168,85,247,0.1)] border border-[rgba(168,85,247,0.2)]"
+                >
+                  Importér
+                </button>
+                <button
+                  onClick={() => { setShowImport(false); setImportText(""); }}
+                  className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0] px-2 py-1"
+                >
+                  Annullér
+                </button>
+              </div>
+            </div>
+          )}
+
           {isComplete && (
-            <div className="mt-4 p-3 bg-[rgba(34,197,94,0.08)] border border-[rgba(34,197,94,0.2)] rounded-lg">
+            <div className="mt-3 p-3 bg-[rgba(34,197,94,0.08)] border border-[rgba(34,197,94,0.2)] rounded-lg">
               <div className="text-[13px] font-semibold text-[#4ade80]">
                 Hold komplet!
               </div>
