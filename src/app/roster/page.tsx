@@ -10,6 +10,7 @@ import {
   FACTIONS,
   GROUPS,
 } from "@/lib/data";
+import { DispositionBadge } from "@/components/DispositionBadge";
 
 interface DetachmentPick {
   detachment: Detachment;
@@ -511,7 +512,6 @@ export default function RosterPage() {
                 </thead>
                 <tbody>
                   {filteredDetachments.map(({ detachment: det, faction }) => {
-                    const s = DISP_STYLES[det.d];
                     const taken = isDetachmentInAnyArmy(det, faction);
                     return (
                       <tr
@@ -538,16 +538,7 @@ export default function RosterPage() {
                           {det.dp}
                         </td>
                         <td className="px-4 py-[7px] border-b border-white/[0.08] group-hover:bg-[#1a1a22]">
-                          <span
-                            className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded whitespace-nowrap"
-                            style={{ background: s.bg, color: s.color }}
-                          >
-                            <span
-                              className="w-[5px] h-[5px] rounded-full shrink-0 opacity-50"
-                              style={{ background: "currentColor" }}
-                            />
-                            {det.d}
-                          </span>
+                          <DispositionBadge disposition={det.d} />
                         </td>
                         <td className="px-4 py-[7px] border-b border-white/[0.08] group-hover:bg-[#1a1a22]">
                           {!taken && (
