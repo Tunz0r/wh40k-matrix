@@ -12,6 +12,7 @@ import {
   type RosterArmy,
   deserializeRoster,
 } from "@/lib/roster";
+import { getLayouts, getLayoutImage } from "@/lib/layouts";
 
 type Phase =
   | "setup"
@@ -31,6 +32,7 @@ interface Matchup {
   b: RosterArmy;
   module: string;
   aIsDefender: boolean;
+  layoutPage: number | null;
 }
 
 interface TeamState {
@@ -154,6 +156,8 @@ export default function PairingsPage() {
   const [attackersB, setAttackersB] = useState<number[]>([]);
   const [choiceA, setChoiceA] = useState<number | null>(null);
   const [choiceB, setChoiceB] = useState<number | null>(null);
+  const [layoutChoiceA, setLayoutChoiceA] = useState<"A" | "B" | "C" | null>(null);
+  const [layoutChoiceB, setLayoutChoiceB] = useState<"A" | "B" | "C" | null>(null);
   const [revealStep, setRevealStep] = useState(0);
 
   const pairedA = useMemo(
@@ -203,6 +207,8 @@ export default function PairingsPage() {
     setAttackersB([]);
     setChoiceA(null);
     setChoiceB(null);
+    setLayoutChoiceA(null);
+    setLayoutChoiceB(null);
     setRevealStep(0);
   }
 
@@ -235,8 +241,19 @@ export default function PairingsPage() {
     setRevealStep(0);
   }
 
+  function getLayoutPage(dispA: Disposition | null, dispB: Disposition | null, layout: "A" | "B" | "C"): number | null {
+    if (!dispA || !dispB) return null;
+    const layouts = getLayouts(dispA, dispB);
+    if (!layouts) return null;
+    const found = layouts.find((l) => l.layout === layout);
+    return found?.page ?? null;
+  }
+
+  const roundLayout = (["A", "B", "C"] as const)[(round - 1) % 3];
+
   function confirmChoice() {
     if (choiceA === null || choiceB === null) return;
+    if (layoutChoiceA === null || layoutChoiceB === null) return;
     if (!teamA.roster || !teamB.roster) return;
 
     const armiesA = teamA.roster.armies;
@@ -249,6 +266,7 @@ export default function PairingsPage() {
       b: armiesB[choiceA!],
       module: moduleName,
       aIsDefender: true,
+      layoutPage: getLayoutPage(armiesA[defenderA!].disposition, armiesB[choiceA!].disposition, layoutChoiceA),
     };
     // Matchup 2: Team B's defender vs chosen attacker from A
     const m2: Matchup = {
@@ -256,11 +274,12 @@ export default function PairingsPage() {
       b: armiesB[defenderB!],
       module: moduleName,
       aIsDefender: false,
+      layoutPage: getLayoutPage(armiesA[choiceB!].disposition, armiesB[defenderB!].disposition, layoutChoiceB),
     };
 
     const newMatchups = [...matchups, m1, m2];
 
-    // For Main Engagement: refused attackers play each other
+    // For Main Engagement: refused attackers play each other (layout based on round)
     if (phase.startsWith("main")) {
       const refusedA = attackersA.find((i) => i !== choiceB!)!;
       const refusedB = attackersB.find((i) => i !== choiceA!)!;
@@ -269,6 +288,7 @@ export default function PairingsPage() {
         b: armiesB[refusedB],
         module: "Main Engagement (Refused)",
         aIsDefender: false,
+        layoutPage: getLayoutPage(armiesA[refusedA].disposition, armiesB[refusedB].disposition, roundLayout),
       };
       newMatchups.push(m3);
     }
@@ -282,7 +302,7 @@ export default function PairingsPage() {
     } else if (phase.startsWith("skirmish2")) {
       setPhase("main-defender");
     } else if (phase.startsWith("main")) {
-      // Champion system: remaining players
+      // Champion system: remaining players (layout based on round)
       const usedA = new Set(newMatchups.map((m) => armiesA.indexOf(m.a)));
       const usedB = new Set(newMatchups.map((m) => armiesB.indexOf(m.b)));
       const champA = armiesA.find((_, i) => !usedA.has(i));
@@ -293,6 +313,7 @@ export default function PairingsPage() {
           b: champB,
           module: "Champion",
           aIsDefender: false,
+          layoutPage: getLayoutPage(champA.disposition, champB.disposition, roundLayout),
         });
         setMatchups(newMatchups);
       }
@@ -321,10 +342,7 @@ export default function PairingsPage() {
     resetModuleState();
   }
 
-  const layoutLabel = (() => {
-    const layouts = ["A", "B", "C"];
-    return layouts[(round - 1) % 3];
-  })();
+  const layoutLabel = roundLayout;
 
   // --- RENDER ---
 
@@ -635,9 +653,9 @@ export default function PairingsPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center space-y-4">
-                    <h3 className="text-sm font-semibold text-[#e8e8f0]">Matchups fra {currentModuleName()}</h3>
-                    <div className="inline-block text-left space-y-3">
+                  <div className="space-y-6">
+                    <h3 className="text-sm font-semibold text-[#e8e8f0] text-center">Matchups fra {currentModuleName()}</h3>
+                    <div className="max-w-xl mx-auto space-y-3">
                       <MatchupPreview
                         label="Matchup"
                         aArmy={teamA.roster!.armies[defenderA!]}
@@ -661,7 +679,7 @@ export default function PairingsPage() {
                         const refB = attackersB.find((i) => i !== choiceA!)!;
                         return (
                           <MatchupPreview
-                            label="Refused Attackers"
+                            label={`Refused Attackers (Layout ${roundLayout})`}
                             aArmy={teamA.roster!.armies[refA]}
                             aIdx={refA}
                             aRole="REF"
@@ -672,10 +690,37 @@ export default function PairingsPage() {
                         );
                       })()}
                     </div>
-                    <div>
+
+                    {/* Layout selection by defenders */}
+                    <div className="border-t border-white/[0.08] pt-4">
+                      <h4 className="text-xs font-semibold text-[#8888a0] text-center mb-3 uppercase tracking-wider">
+                        Defenders vælger layout
+                      </h4>
+                      <div className="grid md:grid-cols-2 gap-6">
+                        {/* Defender A picks layout for matchup 1 */}
+                        <LayoutPicker
+                          label={`Hold A Defender — ${teamA.roster!.armies[defenderA!].faction}`}
+                          dispA={teamA.roster!.armies[defenderA!].disposition}
+                          dispB={teamB.roster!.armies[choiceA!].disposition}
+                          selected={layoutChoiceA}
+                          onSelect={setLayoutChoiceA}
+                        />
+                        {/* Defender B picks layout for matchup 2 */}
+                        <LayoutPicker
+                          label={`Hold B Defender — ${teamB.roster!.armies[defenderB!].faction}`}
+                          dispA={teamA.roster!.armies[choiceB!].disposition}
+                          dispB={teamB.roster!.armies[defenderB!].disposition}
+                          selected={layoutChoiceB}
+                          onSelect={setLayoutChoiceB}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="text-center">
                       <button
                         onClick={confirmChoice}
-                        className="text-sm font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] px-5 py-2 rounded-lg transition-colors"
+                        disabled={layoutChoiceA === null || layoutChoiceB === null}
+                        className="text-sm font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] disabled:opacity-30 disabled:cursor-not-allowed px-5 py-2 rounded-lg transition-colors"
                       >
                         Bekræft og fortsæt →
                       </button>
@@ -728,6 +773,18 @@ export default function PairingsPage() {
                   </div>
                   {m.a.disposition && m.b.disposition && (
                     <MissionInfo a={m.a.disposition} b={m.b.disposition} />
+                  )}
+                  {m.layoutPage && (
+                    <details className="mt-2">
+                      <summary className="text-[10px] text-[#a855f7] cursor-pointer hover:text-[#c084fc]">
+                        Vis layout
+                      </summary>
+                      <img
+                        src={getLayoutImage(m.layoutPage)}
+                        alt={`Layout for ${m.a.faction} vs ${m.b.faction}`}
+                        className="mt-2 rounded-lg border border-white/[0.08] w-full max-w-md"
+                      />
+                    </details>
                   )}
                 </div>
               ))}
@@ -816,6 +873,66 @@ function MatchupPreview({
           <DispBadge d={bArmy.disposition} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function LayoutPicker({
+  label,
+  dispA,
+  dispB,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  dispA: Disposition | null;
+  dispB: Disposition | null;
+  selected: "A" | "B" | "C" | null;
+  onSelect: (layout: "A" | "B" | "C") => void;
+}) {
+  const layouts = dispA && dispB ? getLayouts(dispA, dispB) : null;
+  if (!layouts) {
+    return (
+      <div className="text-[11px] text-[#8888a0]">{label}: Ingen layouts fundet</div>
+    );
+  }
+
+  return (
+    <div>
+      <h4 className="text-[11px] font-semibold text-[#e8e8f0] mb-2">{label}</h4>
+      <div className="grid grid-cols-3 gap-2">
+        {layouts.map((l) => (
+          <button
+            key={l.layout}
+            onClick={() => onSelect(l.layout)}
+            className={`rounded-lg border overflow-hidden transition-colors ${
+              selected === l.layout
+                ? "border-[#a855f7] ring-2 ring-[#a855f7]/30"
+                : "border-white/[0.08] hover:border-white/[0.18]"
+            }`}
+          >
+            <img
+              src={getLayoutImage(l.page)}
+              alt={`Layout ${l.layout}`}
+              className="w-full aspect-[3/4] object-cover object-top"
+            />
+            <div className="px-2 py-1.5 bg-[#1a1a22] text-center">
+              <span className={`text-[11px] font-semibold ${selected === l.layout ? "text-[#a855f7]" : "text-[#8888a0]"}`}>
+                Layout {l.layout}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+      {selected && (
+        <div className="mt-2">
+          <img
+            src={getLayoutImage(layouts.find((l) => l.layout === selected)!.page)}
+            alt={`Layout ${selected} preview`}
+            className="w-full rounded-lg border border-white/[0.08]"
+          />
+        </div>
+      )}
     </div>
   );
 }
