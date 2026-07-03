@@ -626,6 +626,20 @@ export default function TournamentPage() {
         { faction: "Adeptus Custodes", detachments: ["Shield Host"], disposition: "Priority Assets" },
       ],
     };
+    const oppRoster: RosterExport = {
+      v: 1,
+      name: "Team Sweden",
+      armies: [
+        { faction: "World Eaters", detachments: ["Berzerker Warband"], disposition: "Purge the Foe" },
+        { faction: "Death Guard", detachments: ["Plague Company"], disposition: "Take and Hold" },
+        { faction: "Thousand Sons", detachments: ["Cult of Magic"], disposition: "Reconnaissance" },
+        { faction: "Drukhari", detachments: ["Realspace Raiders"], disposition: "Disruption" },
+        { faction: "Leagues of Votann", detachments: ["Oathband"], disposition: "Priority Assets" },
+        { faction: "Adepta Sororitas", detachments: ["Hallowed Martyrs"], disposition: "Purge the Foe" },
+        { faction: "Chaos Knights", detachments: ["War Dog Lance"], disposition: "Take and Hold" },
+        { faction: "Imperial Knights", detachments: ["Noble Lance"], disposition: "Priority Assets" },
+      ],
+    };
     const testSeeding: SeedingTier[] = [
       { name: "Tier 1", teams: ["England", "Poland", "Germany", "France"] },
       { name: "Tier 2", teams: ["Denmark", "Sweden", "Finland", "Spain"] },
@@ -633,7 +647,9 @@ export default function TournamentPage() {
       { name: "Tier 4", teams: ["Austria", "Czech Republic", "Portugal", "Ireland"] },
     ];
     updateTournament({ teamName: "Team Denmark", roster: testRoster, seedingTiers: testSeeding });
-    setView("overview");
+    setOpponentRoster(oppRoster);
+    setMatchups([]);
+    setView("round-opponent");
   }
 
   if (!initialized) {
