@@ -27,10 +27,10 @@ export default function Home() {
             Roster Builder
           </Link>
           <Link
-            href="/pairings"
+            href="/tournament"
             className="text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors bg-[rgba(168,85,247,0.1)] px-3 py-1 rounded-md border border-[rgba(168,85,247,0.2)]"
           >
-            Mock Pairings
+            WTC Turnering
           </Link>
         </div>
       </header>
