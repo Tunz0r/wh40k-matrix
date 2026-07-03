@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import {
   type Disposition,
@@ -13,6 +13,7 @@ import {
   deserializeRoster,
 } from "@/lib/roster";
 import { getLayouts, getLayoutImage } from "@/lib/layouts";
+import { createSession, type MatchupData } from "@/lib/session";
 
 type Phase =
   | "setup"
@@ -148,6 +149,8 @@ export default function PairingsPage() {
   const [phase, setPhase] = useState<Phase>("setup");
   const [matchups, setMatchups] = useState<Matchup[]>([]);
   const [round, setRound] = useState(1);
+  const [creatingSession, setCreatingSession] = useState(false);
+  const [sessionUrl, setSessionUrl] = useState<string | null>(null);
 
   // Per-module state
   const [defenderA, setDefenderA] = useState<number | null>(null);
@@ -342,7 +345,87 @@ export default function PairingsPage() {
     resetModuleState();
   }
 
+  function loadTestData() {
+    const disps: Disposition[] = [
+      "Take and Hold", "Purge the Foe", "Priority Assets", "Reconnaissance",
+      "Disruption", "Take and Hold", "Purge the Foe", "Priority Assets",
+    ];
+    const teamARoster: RosterExport = {
+      v: 1,
+      name: "Team Denmark",
+      armies: [
+        { faction: "Space Marines", detachments: ["Gladius Task Force"], disposition: "Take and Hold" },
+        { faction: "Dark Angels", detachments: ["Inner Circle Task Force"], disposition: "Purge the Foe" },
+        { faction: "Aeldari", detachments: ["Battle Host"], disposition: "Priority Assets" },
+        { faction: "Orks", detachments: ["Waaagh! Tribe"], disposition: "Reconnaissance" },
+        { faction: "Necrons", detachments: ["Awakened Dynasty"], disposition: "Disruption" },
+        { faction: "Tyranids", detachments: ["Invasion Fleet"], disposition: "Take and Hold" },
+        { faction: "T'au Empire", detachments: ["Kauyon"], disposition: "Purge the Foe" },
+        { faction: "Adeptus Custodes", detachments: ["Shield Host"], disposition: "Priority Assets" },
+      ],
+    };
+    const teamBRoster: RosterExport = {
+      v: 1,
+      name: "Team Sweden",
+      armies: [
+        { faction: "World Eaters", detachments: ["Berzerker Warband"], disposition: "Purge the Foe" },
+        { faction: "Death Guard", detachments: ["Plague Company"], disposition: "Take and Hold" },
+        { faction: "Thousand Sons", detachments: ["Cult of Magic"], disposition: "Reconnaissance" },
+        { faction: "Drukhari", detachments: ["Realspace Raiders"], disposition: "Disruption" },
+        { faction: "Leagues of Votann", detachments: ["Oathband"], disposition: "Priority Assets" },
+        { faction: "Adepta Sororitas", detachments: ["Hallowed Martyrs"], disposition: "Purge the Foe" },
+        { faction: "Chaos Knights", detachments: ["War Dog Lance"], disposition: "Take and Hold" },
+        { faction: "Imperial Knights", detachments: ["Noble Lance"], disposition: "Priority Assets" },
+      ],
+    };
+    setTeamA({ roster: teamARoster, importText: "" });
+    setTeamB({ roster: teamBRoster, importText: "" });
+
+    const testMatchups: Matchup[] = teamARoster.armies.map((a, i) => ({
+      a,
+      b: teamBRoster.armies[i],
+      module: i < 2 ? "Initial Skirmish" : i < 6 ? "Main Engagement" : "Champion",
+      aIsDefender: i % 2 === 0,
+      layoutPage: null,
+    }));
+    setMatchups(testMatchups);
+    setPhase("done");
+  }
+
   const layoutLabel = roundLayout;
+
+  const startCoachingSession = useCallback(async () => {
+    if (!teamA.roster || !teamB.roster || matchups.length === 0) return;
+    setCreatingSession(true);
+    try {
+      const matchupData: MatchupData[] = matchups.map((m) => ({
+        aFaction: m.a.faction,
+        aDetachments: m.a.detachments,
+        aDisposition: m.a.disposition,
+        bFaction: m.b.faction,
+        bDetachments: m.b.detachments,
+        bDisposition: m.b.disposition,
+        module: m.module,
+        layoutPage: m.layoutPage,
+        estimate: 0,
+        round: 1,
+        notes: "",
+        final: false,
+      }));
+      const id = await createSession({
+        teamAName: teamA.roster.name || "Hold A",
+        teamBName: teamB.roster.name || "Hold B",
+        createdAt: Date.now(),
+        matchups: matchupData,
+      });
+      setSessionUrl(`/coaching/${id}`);
+    } catch (e) {
+      console.error("Failed to create session:", e);
+      alert("Kunne ikke oprette coaching session. Tjek Firebase-konfigurationen.");
+    } finally {
+      setCreatingSession(false);
+    }
+  }, [teamA.roster, teamB.roster, matchups]);
 
   // --- RENDER ---
 
@@ -447,6 +530,17 @@ export default function PairingsPage() {
               className="text-sm font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-6 py-2.5 rounded-lg transition-colors"
             >
               Start pairings
+            </button>
+          </div>
+        )}
+
+        {phase === "setup" && !teamA.roster && !teamB.roster && (
+          <div className="mt-4 text-center">
+            <button
+              onClick={loadTestData}
+              className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
+            >
+              Indlæs testdata (skip til done)
             </button>
           </div>
         )}
@@ -789,12 +883,44 @@ export default function PairingsPage() {
                 </div>
               ))}
             </div>
+            <div className="rounded-lg border border-[rgba(74,222,128,0.2)] bg-[rgba(74,222,128,0.05)] p-4 mb-4">
+              {sessionUrl ? (
+                <div className="space-y-2">
+                  <p className="text-[12px] text-[#4ade80] font-medium">
+                    Coaching session oprettet!
+                  </p>
+                  <Link
+                    href={sessionUrl}
+                    className="inline-block text-[12px] font-semibold text-[#0f0f13] bg-[#4ade80] hover:bg-[#22c55e] px-4 py-2 rounded-md transition-colors"
+                  >
+                    Åbn coaching dashboard
+                  </Link>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.origin + sessionUrl);
+                    }}
+                    className="ml-2 text-[11px] text-[#4ade80] hover:text-[#22c55e] transition-colors"
+                  >
+                    Kopiér link
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={startCoachingSession}
+                  disabled={creatingSession}
+                  className="text-[12px] font-semibold text-[#0f0f13] bg-[#4ade80] hover:bg-[#22c55e] disabled:opacity-50 px-4 py-2 rounded-md transition-colors"
+                >
+                  {creatingSession ? "Opretter session..." : "Start coaching session"}
+                </button>
+              )}
+            </div>
             <div className="flex gap-3">
               <button
                 onClick={() => {
                   setPhase("setup");
                   setMatchups([]);
                   resetModuleState();
+                  setSessionUrl(null);
                 }}
                 className="text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] bg-[rgba(168,85,247,0.1)] px-3 py-1.5 rounded-md border border-[rgba(168,85,247,0.2)] transition-colors"
               >
