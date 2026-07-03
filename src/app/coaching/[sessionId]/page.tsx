@@ -295,6 +295,11 @@ function MatchupCard({
             }`}>
               {aAhead ? bp.winner : bp.loser} BP
             </span>
+            {matchup.estimate !== 0 && (
+              <span className={`text-[9px] ${matchup.estimate > 0 ? "text-[#4ade80]" : "text-[#f87171]"}`}>
+                Est {matchup.estimate > 0 ? "+" : ""}{matchup.estimate}
+              </span>
+            )}
             <div className="flex items-center gap-1">
               {[1, 2, 3, 4, 5].map((r) => (
                 <span
@@ -338,6 +343,11 @@ function MatchupCard({
           }`}>
             {aAhead ? bp.winner : bp.loser} BP
           </span>
+          {matchup.estimate !== 0 && (
+            <span className={`text-[9px] shrink-0 ${matchup.estimate > 0 ? "text-[#4ade80]" : "text-[#f87171]"}`}>
+              Est {matchup.estimate > 0 ? "+" : ""}{matchup.estimate}
+            </span>
+          )}
           <div className="flex items-center gap-1 shrink-0 ml-1">
             {[1, 2, 3, 4, 5].map((r) => (
               <span

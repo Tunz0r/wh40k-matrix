@@ -41,6 +41,7 @@ interface Matchup {
   module: string;
   aIsDefender: boolean;
   layoutPage: number | null;
+  estimate: number;
 }
 
 interface CompletedRound {
@@ -481,6 +482,7 @@ export default function TournamentPage() {
       module: moduleName,
       aIsDefender: true,
       layoutPage: getLayoutPage(armiesA[defenderA!].disposition, armiesB[choiceA!].disposition, layoutChoiceA),
+      estimate: 0,
     };
     const m2: Matchup = {
       a: armiesA[choiceB!],
@@ -488,6 +490,7 @@ export default function TournamentPage() {
       module: moduleName,
       aIsDefender: false,
       layoutPage: getLayoutPage(armiesA[choiceB!].disposition, armiesB[defenderB!].disposition, layoutChoiceB),
+      estimate: 0,
     };
 
     const newMatchups = [...matchups, m1, m2];
@@ -501,6 +504,7 @@ export default function TournamentPage() {
         module: "Main Engagement (Refused)",
         aIsDefender: false,
         layoutPage: getLayoutPage(armiesA[refusedA].disposition, armiesB[refusedB].disposition, roundLayout),
+        estimate: 0,
       };
       newMatchups.push(m3);
     }
@@ -524,6 +528,7 @@ export default function TournamentPage() {
           module: "Champion",
           aIsDefender: false,
           layoutPage: getLayoutPage(champA.disposition, champB.disposition, roundLayout),
+          estimate: 0,
         });
         setMatchups(newMatchups);
       }
@@ -556,7 +561,7 @@ export default function TournamentPage() {
         bDisposition: m.b.disposition,
         module: m.module,
         layoutPage: m.layoutPage,
-        estimate: 0,
+        estimate: m.estimate,
         aVP: 0,
         bVP: 0,
         round: 1,
@@ -680,10 +685,11 @@ export default function TournamentPage() {
       ],
     };
     const modules = ["Initial Skirmish", "Initial Skirmish", "Main Engagement", "Main Engagement", "Main Engagement", "Main Engagement", "Main Engagement", "Champion"];
+    const estimates = [10, -5, 15, 0, -10, 5, 20, -5];
     const matchupData: MatchupData[] = dk.armies.map((a, i) => ({
       aFaction: a.faction, aDetachments: a.detachments, aDisposition: a.disposition,
       bFaction: se.armies[i].faction, bDetachments: se.armies[i].detachments, bDisposition: se.armies[i].disposition,
-      module: modules[i], layoutPage: null, estimate: 0, aVP: 0, bVP: 0, round: 1, notes: "", final: false,
+      module: modules[i], layoutPage: null, estimate: estimates[i], aVP: 0, bVP: 0, round: 1, notes: "", final: false,
     }));
     try {
       const id = await createSession({ teamAName: "Team Denmark", teamBName: "Team Sweden", createdAt: Date.now(), matchups: matchupData });
@@ -1357,6 +1363,21 @@ export default function TournamentPage() {
                       </div>
                       <DispBadge d={m.b.disposition} />
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[10px] text-[#8888a0]">Estimat (VP diff):</span>
+                    <input
+                      type="number"
+                      value={m.estimate}
+                      onChange={(e) => {
+                        const val = Number(e.target.value) || 0;
+                        setMatchups((prev) => prev.map((mm, j) => j === i ? { ...mm, estimate: val } : mm));
+                      }}
+                      className="w-16 text-center text-[12px] font-semibold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-0.5 text-[#e8e8f0] outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <span className={`text-[10px] font-semibold ${m.estimate > 0 ? "text-[#4ade80]" : m.estimate < 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+                      {m.estimate > 0 ? `+${m.estimate}` : m.estimate}
+                    </span>
                   </div>
                   {m.a.disposition && m.b.disposition && (
                     <MissionInfo a={m.a.disposition} b={m.b.disposition} />
