@@ -652,6 +652,48 @@ export default function TournamentPage() {
     setView("round-opponent");
   }
 
+  async function testCoaching() {
+    const dk: RosterExport = {
+      v: 1, name: "Team Denmark",
+      armies: [
+        { faction: "Space Marines", detachments: ["Gladius Task Force"], disposition: "Take and Hold" },
+        { faction: "Dark Angels", detachments: ["Inner Circle Task Force"], disposition: "Purge the Foe" },
+        { faction: "Aeldari", detachments: ["Battle Host"], disposition: "Priority Assets" },
+        { faction: "Orks", detachments: ["Waaagh! Tribe"], disposition: "Reconnaissance" },
+        { faction: "Necrons", detachments: ["Awakened Dynasty"], disposition: "Disruption" },
+        { faction: "Tyranids", detachments: ["Invasion Fleet"], disposition: "Take and Hold" },
+        { faction: "T'au Empire", detachments: ["Kauyon"], disposition: "Purge the Foe" },
+        { faction: "Adeptus Custodes", detachments: ["Shield Host"], disposition: "Priority Assets" },
+      ],
+    };
+    const se: RosterExport = {
+      v: 1, name: "Team Sweden",
+      armies: [
+        { faction: "World Eaters", detachments: ["Berzerker Warband"], disposition: "Purge the Foe" },
+        { faction: "Death Guard", detachments: ["Plague Company"], disposition: "Take and Hold" },
+        { faction: "Thousand Sons", detachments: ["Cult of Magic"], disposition: "Reconnaissance" },
+        { faction: "Drukhari", detachments: ["Realspace Raiders"], disposition: "Disruption" },
+        { faction: "Leagues of Votann", detachments: ["Oathband"], disposition: "Priority Assets" },
+        { faction: "Adepta Sororitas", detachments: ["Hallowed Martyrs"], disposition: "Purge the Foe" },
+        { faction: "Chaos Knights", detachments: ["War Dog Lance"], disposition: "Take and Hold" },
+        { faction: "Imperial Knights", detachments: ["Noble Lance"], disposition: "Priority Assets" },
+      ],
+    };
+    const modules = ["Initial Skirmish", "Initial Skirmish", "Main Engagement", "Main Engagement", "Main Engagement", "Main Engagement", "Main Engagement", "Champion"];
+    const matchupData: MatchupData[] = dk.armies.map((a, i) => ({
+      aFaction: a.faction, aDetachments: a.detachments, aDisposition: a.disposition,
+      bFaction: se.armies[i].faction, bDetachments: se.armies[i].detachments, bDisposition: se.armies[i].disposition,
+      module: modules[i], layoutPage: null, estimate: 0, aVP: 0, bVP: 0, round: 1, notes: "", final: false,
+    }));
+    try {
+      const id = await createSession({ teamAName: "Team Denmark", teamBName: "Team Sweden", createdAt: Date.now(), matchups: matchupData });
+      window.location.href = `/coaching/${id}`;
+    } catch (e) {
+      console.error("Failed to create test coaching session:", e);
+      alert("Kunne ikke oprette coaching session. Tjek Firebase-konfigurationen.");
+    }
+  }
+
   if (!initialized) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -746,12 +788,18 @@ export default function TournamentPage() {
                 </button>
               </div>
             </div>
-            <div className="text-center border-t border-white/[0.08] pt-4">
+            <div className="text-center border-t border-white/[0.08] pt-4 flex justify-center gap-2">
               <button
                 onClick={loadTestData}
                 className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
               >
                 Indlæs testdata
+              </button>
+              <button
+                onClick={testCoaching}
+                className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
+              >
+                Test coaching
               </button>
             </div>
           </div>
