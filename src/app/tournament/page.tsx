@@ -71,14 +71,9 @@ interface TournamentState {
   rounds: CompletedRound[];
 }
 
-function generateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9æøå]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
 
 const STORAGE_KEY = "wtc-tournament";
+const TEAM_SLUG = "team-denmark";
 
 function loadTournament(): TournamentState {
   if (typeof window === "undefined") return { teamName: "", slug: "", roster: null, seedingTiers: [], rounds: [] };
@@ -339,7 +334,6 @@ export default function TournamentPage() {
   // Setup state
   const [setupImportText, setSetupImportText] = useState("");
   const [setupTeamName, setSetupTeamName] = useState("");
-  const [setupSlug, setSetupSlug] = useState("");
 
   // Initialize from localStorage
   useEffect(() => {
@@ -378,14 +372,12 @@ export default function TournamentPage() {
   function completeSetup() {
     const name = setupTeamName.trim();
     if (!name) { alert("Indtast holdnavn"); return; }
-    const slug = setupSlug.trim() || generateSlug(name);
-    if (!slug) { alert("Indtast en team-URL"); return; }
     const roster = deserializeRoster(setupImportText.trim());
     if (!roster) { alert("Ugyldigt roster format"); return; }
     if (roster.armies.length !== 8) { alert(`Roster skal have 8 hære (fandt ${roster.armies.length})`); return; }
     roster.name = name;
-    updateTournament({ teamName: name, slug, roster });
-    createTournament(slug, name).catch(() => {});
+    updateTournament({ teamName: name, slug: TEAM_SLUG, roster });
+    createTournament(TEAM_SLUG, name).catch(() => {});
     setView("overview");
   }
 
@@ -437,9 +429,7 @@ export default function TournamentPage() {
     setPairingPhase("skirmish1-defender");
     resetModuleState();
     setView("round-pairing");
-    if (tournament.slug) {
-      updateRoundStatus(tournament.slug, currentRoundNumber, "pairing").catch(() => {});
-    }
+    updateRoundStatus(TEAM_SLUG, currentRoundNumber, "pairing").catch(() => {});
   }
 
   function resetModuleState() {
@@ -602,9 +592,7 @@ export default function TournamentPage() {
       setSessionUrl(url);
 
       // Update team room in Firebase
-      if (tournament.slug) {
-        await setActiveSession(tournament.slug, id, currentRoundNumber, opponentRoster.name || "Modstander");
-      }
+      await setActiveSession(TEAM_SLUG, id, currentRoundNumber, opponentRoster.name || "Modstander");
 
       // Save round to tournament
       const completedRound: CompletedRound = {
@@ -806,27 +794,10 @@ export default function TournamentPage() {
                   <input
                     type="text"
                     value={setupTeamName}
-                    onChange={(e) => {
-                      setSetupTeamName(e.target.value);
-                      setSetupSlug(generateSlug(e.target.value));
-                    }}
+                    onChange={(e) => setSetupTeamName(e.target.value)}
                     placeholder="f.eks. Team Denmark"
                     className="w-full bg-[#1a1a22] border border-white/[0.14] rounded-lg px-3 py-2 text-sm text-[#e8e8f0] placeholder:text-[#8888a0] outline-none focus:border-[#a855f7]"
                   />
-                </div>
-                <div>
-                  <label className="text-[11px] text-[#8888a0] block mb-1">Team Room URL</label>
-                  <div className="flex items-center gap-0">
-                    <span className="text-[11px] text-[#8888a0] bg-[#22222e] border border-white/[0.14] border-r-0 rounded-l-lg px-2.5 py-2 shrink-0">/team/</span>
-                    <input
-                      type="text"
-                      value={setupSlug}
-                      onChange={(e) => setSetupSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-æøå]/g, ""))}
-                      placeholder="team-denmark"
-                      className="flex-1 bg-[#1a1a22] border border-white/[0.14] rounded-r-lg px-2.5 py-2 text-sm text-[#e8e8f0] placeholder:text-[#8888a0] outline-none focus:border-[#a855f7]"
-                    />
-                  </div>
-                  <p className="text-[10px] text-[#8888a0] mt-1">Coaches bruger dette link til at følge med live</p>
                 </div>
                 <div>
                   <label className="text-[11px] text-[#8888a0] block mb-1">Roster-kode (fra Roster Builder)</label>
@@ -994,28 +965,26 @@ export default function TournamentPage() {
                 Start runde {currentRoundNumber}
               </button>
 
-              {tournament.slug && (
-                <div className="mt-4 pt-4 border-t border-white/[0.08]">
-                  <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold mb-1">
-                    Team Room
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/team/${tournament.slug}`}
-                      className="text-[12px] text-[#a855f7] hover:text-[#c084fc] transition-colors font-mono"
-                    >
-                      /team/{tournament.slug}
-                    </Link>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(window.location.origin + `/team/${tournament.slug}`)}
-                      className="text-[10px] text-[#8888a0] hover:text-[#e8e8f0] transition-colors"
-                    >
-                      Kopiér
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-[#8888a0] mt-0.5">Del med coaches — opdateres live</p>
+              <div className="mt-4 pt-4 border-t border-white/[0.08]">
+                <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold mb-1">
+                  Team Room
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/team/${TEAM_SLUG}`}
+                    className="text-[12px] text-[#a855f7] hover:text-[#c084fc] transition-colors font-mono"
+                  >
+                    /team/{TEAM_SLUG}
+                  </Link>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(window.location.origin + `/team/${TEAM_SLUG}`)}
+                    className="text-[10px] text-[#8888a0] hover:text-[#e8e8f0] transition-colors"
+                  >
+                    Kopiér
+                  </button>
+                </div>
+                <p className="text-[10px] text-[#8888a0] mt-0.5">Del med coaches — opdateres live</p>
+              </div>
             </div>
           </div>
         )}
