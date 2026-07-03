@@ -10,7 +10,7 @@ import {
   type SessionData,
   type MatchupData,
   subscribeToSession,
-  updateMatchupEstimate,
+  updateMatchupVP,
   updateMatchupRound,
   updateMatchupNotes,
   updateMatchupFinal,
@@ -74,9 +74,9 @@ export default function CoachingPage() {
     }
   }, [sessionId]);
 
-  const handleEstimate = useCallback(
-    (idx: number, value: number) => {
-      updateMatchupEstimate(sessionId, idx, value);
+  const handleVP = useCallback(
+    (idx: number, aVP: number, bVP: number) => {
+      updateMatchupVP(sessionId, idx, aVP, bVP);
     },
     [sessionId]
   );
@@ -122,8 +122,8 @@ export default function CoachingPage() {
   }
 
   const estimates = session.matchups.map((m) => ({
-    aVP: Math.max(0, 50 + m.estimate / 2),
-    bVP: Math.max(0, 50 - m.estimate / 2),
+    aVP: m.aVP ?? 0,
+    bVP: m.bVP ?? 0,
   }));
   const { teamABP, teamBBP } = calculateTeamBP(estimates);
   const result = teamResult(teamABP, teamBBP);
@@ -170,7 +170,7 @@ export default function CoachingPage() {
         {/* Scoreboard */}
         <div className="mt-3 flex items-center gap-4 bg-[#1a1a22] rounded-lg p-3 border border-white/[0.08]">
           <div className={`flex-1 text-center ${result === "A" ? "" : "opacity-60"}`}>
-            <div className="text-[11px] text-[#8888a0] uppercase tracking-wider">
+            <div className="text-[10px] text-[#4ade80] uppercase tracking-wider font-semibold">
               {session.teamAName}
             </div>
             <div className={`text-2xl font-bold ${result === "A" ? "text-[#4ade80]" : "text-[#e8e8f0]"}`}>
@@ -216,7 +216,7 @@ export default function CoachingPage() {
               expanded={expandedMatch === idx}
               onToggle={() => setExpandedMatch(expandedMatch === idx ? null : idx)}
               isCoach={view === "coach"}
-              onEstimate={handleEstimate}
+              onVP={handleVP}
               onRound={handleRound}
               onNotes={handleNotes}
               onFinal={handleFinal}
@@ -236,7 +236,7 @@ function MatchupCard({
   expanded,
   onToggle,
   isCoach,
-  onEstimate,
+  onVP,
   onRound,
   onNotes,
   onFinal,
@@ -248,13 +248,16 @@ function MatchupCard({
   expanded: boolean;
   onToggle: () => void;
   isCoach: boolean;
-  onEstimate: (idx: number, v: number) => void;
+  onVP: (idx: number, aVP: number, bVP: number) => void;
   onRound: (idx: number, r: number) => void;
   onNotes: (idx: number, n: string) => void;
   onFinal: (idx: number, f: boolean) => void;
 }) {
-  const bp = vpToBP(matchup.estimate);
-  const aAhead = matchup.estimate >= 0;
+  const aVP = matchup.aVP ?? 0;
+  const bVP = matchup.bVP ?? 0;
+  const vpDiff = aVP - bVP;
+  const bp = vpToBP(vpDiff);
+  const aAhead = vpDiff >= 0;
 
   return (
     <div
@@ -277,24 +280,20 @@ function MatchupCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <DispDot d={matchup.aDisposition} />
-              <span className="text-[12px] text-[#e8e8f0] truncate">{matchup.aFaction}</span>
-              <BPBadge vp={matchup.estimate} />
+              <span className="text-[12px] text-[#e8e8f0] truncate font-medium">{matchup.aFaction}</span>
+              <span className={`text-[12px] font-bold ml-auto shrink-0 ${aAhead ? "text-[#4ade80]" : "text-[#e8e8f0]"}`}>{aVP}</span>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <DispDot d={matchup.bDisposition} />
-              <span className="text-[12px] text-[#e8e8f0] truncate">{matchup.bFaction}</span>
-              <BPBadge vp={-matchup.estimate} />
+              <span className="text-[12px] text-[#8888a0] truncate">{matchup.bFaction}</span>
+              <span className={`text-[12px] font-bold ml-auto shrink-0 ${!aAhead && vpDiff !== 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>{bVP}</span>
             </div>
           </div>
-          <div className="flex flex-col items-center gap-1 shrink-0">
-            <span className={`text-[13px] font-bold ${
-              matchup.estimate > 5
-                ? "text-[#4ade80]"
-                : matchup.estimate < -5
-                  ? "text-[#f87171]"
-                  : "text-[#8888a0]"
+          <div className="flex flex-col items-center gap-1 shrink-0 pl-2 border-l border-white/[0.06]">
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+              aAhead ? "bg-[rgba(34,197,94,0.12)] text-[#4ade80]" : !aAhead && vpDiff !== 0 ? "bg-[rgba(239,68,68,0.12)] text-[#f87171]" : "bg-[#8888a0]/10 text-[#8888a0]"
             }`}>
-              {matchup.estimate > 0 ? "+" : ""}{matchup.estimate}
+              {aAhead ? bp.winner : bp.loser} BP
             </span>
             <div className="flex items-center gap-1">
               {[1, 2, 3, 4, 5].map((r) => (
@@ -322,26 +321,23 @@ function MatchupCard({
             {idx + 1}.
           </span>
           <DispDot d={matchup.aDisposition} />
-          <span className="text-[12px] text-[#e8e8f0] truncate flex-1 min-w-0">
+          <span className="text-[12px] text-[#e8e8f0] truncate flex-1 min-w-0 font-medium">
             {matchup.aFaction}
           </span>
-          <div className="flex items-center gap-2 shrink-0">
-            <BPBadge vp={matchup.estimate} />
-            <span className={`text-[13px] font-bold w-8 text-center ${
-              matchup.estimate > 5
-                ? "text-[#4ade80]"
-                : matchup.estimate < -5
-                  ? "text-[#f87171]"
-                  : "text-[#8888a0]"
-            }`}>
-              {matchup.estimate > 0 ? "+" : ""}{matchup.estimate}
-            </span>
-            <BPBadge vp={-matchup.estimate} />
+          <div className="flex items-center gap-3 shrink-0">
+            <span className={`text-[14px] font-bold w-7 text-right ${aAhead ? "text-[#4ade80]" : "text-[#e8e8f0]"}`}>{aVP}</span>
+            <span className="text-[11px] text-[#8888a0]">–</span>
+            <span className={`text-[14px] font-bold w-7 ${!aAhead && vpDiff !== 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>{bVP}</span>
           </div>
-          <span className="text-[12px] text-[#e8e8f0] truncate flex-1 min-w-0 text-right">
+          <span className="text-[12px] text-[#8888a0] truncate flex-1 min-w-0 text-right">
             {matchup.bFaction}
           </span>
           <DispDot d={matchup.bDisposition} />
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${
+            aAhead ? "bg-[rgba(34,197,94,0.12)] text-[#4ade80]" : !aAhead && vpDiff !== 0 ? "bg-[rgba(239,68,68,0.12)] text-[#f87171]" : "bg-[#8888a0]/10 text-[#8888a0]"
+          }`}>
+            {aAhead ? bp.winner : bp.loser} BP
+          </span>
           <div className="flex items-center gap-1 shrink-0 ml-1">
             {[1, 2, 3, 4, 5].map((r) => (
               <span
@@ -402,64 +398,85 @@ function MatchupCard({
             </div>
           </div>
 
-          {/* Estimate slider */}
+          {/* VP Score input */}
           <div>
-            <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-1.5 font-semibold">
-              VP Estimat
+            <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-2 font-semibold">
+              Score
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-[#e8e8f0] w-12 sm:w-20 truncate shrink-0">{matchup.aFaction}</span>
-              <input
-                type="range"
-                min={-50}
-                max={50}
-                step={5}
-                value={matchup.estimate}
-                onChange={(e) => isCoach && onEstimate(idx, Number(e.target.value))}
-                disabled={!isCoach}
-                className="flex-1 accent-[#a855f7] h-2 cursor-pointer disabled:cursor-default min-w-0"
-              />
-              <span className="text-[10px] text-[#e8e8f0] w-12 sm:w-20 truncate text-right shrink-0">{matchup.bFaction}</span>
-            </div>
-            <div className="flex justify-between text-[10px] text-[#8888a0] mt-0.5 px-12 sm:px-20">
-              <span>+50</span>
-              <span>0</span>
-              <span>+50</span>
-            </div>
-            <div className="text-center mt-1">
-              <span className={`text-sm font-bold ${
-                matchup.estimate > 5
-                  ? "text-[#4ade80]"
-                  : matchup.estimate < -5
-                    ? "text-[#f87171]"
-                    : "text-[#8888a0]"
-              }`}>
-                {matchup.estimate > 0 ? "+" : ""}{matchup.estimate} VP
-              </span>
-              <div className="text-[10px] text-[#8888a0] mt-0.5 sm:inline sm:ml-2">
-                → {aAhead ? teamAName : teamBName} {bp.winner} BP / {aAhead ? teamBName : teamAName} {bp.loser} BP
+            <div className="grid grid-cols-2 gap-3">
+              {/* Team A (our team) */}
+              <div className="rounded-lg border border-[rgba(34,197,94,0.2)] bg-[rgba(34,197,94,0.03)] p-2.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <DispDot d={matchup.aDisposition} />
+                  <span className="text-[11px] text-[#4ade80] font-medium truncate">{matchup.aFaction}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isCoach && (
+                    <button
+                      onClick={() => onVP(idx, Math.max(0, aVP - 1), bVP)}
+                      className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
+                    >
+                      −
+                    </button>
+                  )}
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={aVP}
+                    onChange={(e) => isCoach && onVP(idx, Math.max(0, Number(e.target.value) || 0), bVP)}
+                    disabled={!isCoach}
+                    className="flex-1 text-center text-xl font-bold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-1.5 text-[#e8e8f0] outline-none focus:border-[#4ade80] disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  {isCoach && (
+                    <button
+                      onClick={() => onVP(idx, Math.min(100, aVP + 1), bVP)}
+                      className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
+              </div>
+              {/* Team B (opponent) */}
+              <div className="rounded-lg border border-white/[0.08] p-2.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <DispDot d={matchup.bDisposition} />
+                  <span className="text-[11px] text-[#8888a0] font-medium truncate">{matchup.bFaction}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isCoach && (
+                    <button
+                      onClick={() => onVP(idx, aVP, Math.max(0, bVP - 1))}
+                      className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
+                    >
+                      −
+                    </button>
+                  )}
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={bVP}
+                    onChange={(e) => isCoach && onVP(idx, aVP, Math.max(0, Number(e.target.value) || 0))}
+                    disabled={!isCoach}
+                    className="flex-1 text-center text-xl font-bold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-1.5 text-[#e8e8f0] outline-none focus:border-[#a855f7] disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  {isCoach && (
+                    <button
+                      onClick={() => onVP(idx, aVP, Math.min(100, bVP + 1))}
+                      className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-
-          {/* Quick estimate buttons */}
-          {isCoach && (
-            <div className="flex flex-wrap gap-1.5">
-              {[-40, -30, -20, -10, 0, 10, 20, 30, 40].map((v) => (
-                <button
-                  key={v}
-                  onClick={() => onEstimate(idx, v)}
-                  className={`text-[10px] px-2 py-1 rounded border transition-colors ${
-                    matchup.estimate === v
-                      ? "border-[#a855f7] bg-[rgba(168,85,247,0.15)] text-[#a855f7]"
-                      : "border-white/[0.08] text-[#8888a0] hover:border-white/[0.18] hover:text-[#e8e8f0]"
-                  }`}
-                >
-                  {v > 0 ? "+" : ""}{v}
-                </button>
-              ))}
+            <div className="text-center mt-2 text-[10px] text-[#8888a0]">
+              → {teamAName} {aAhead ? bp.winner : bp.loser} BP / {teamBName} {aAhead ? bp.loser : bp.winner} BP
             </div>
-          )}
+          </div>
 
           {/* Notes */}
           {isCoach && (

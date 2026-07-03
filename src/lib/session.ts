@@ -11,7 +11,9 @@ export interface MatchupData {
   bDisposition: Disposition | null;
   module: string;
   layoutPage: number | null;
-  estimate: number; // VP differential estimate (positive = team A ahead)
+  estimate: number; // deprecated, kept for compat
+  aVP: number; // Team A victory points
+  bVP: number; // Team B victory points
   round: number; // current game round (1-5)
   notes: string;
   final: boolean; // true when game is done
@@ -76,6 +78,20 @@ export async function updateMatchupNotes(
     `sessions/${sessionId}/matchups/${matchupIndex}/notes`
   );
   await set(matchupRef, notes);
+}
+
+export async function updateMatchupVP(
+  sessionId: string,
+  matchupIndex: number,
+  aVP: number,
+  bVP: number
+): Promise<void> {
+  const base = `sessions/${sessionId}/matchups/${matchupIndex}`;
+  await Promise.all([
+    set(ref(getDb(), `${base}/aVP`), aVP),
+    set(ref(getDb(), `${base}/bVP`), bVP),
+    set(ref(getDb(), `${base}/estimate`), aVP - bVP),
+  ]);
 }
 
 export async function updateMatchupFinal(

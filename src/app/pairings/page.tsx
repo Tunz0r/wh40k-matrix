@@ -408,6 +408,8 @@ export default function PairingsPage() {
         module: m.module,
         layoutPage: m.layoutPage,
         estimate: 0,
+        aVP: 0,
+        bVP: 0,
         round: 1,
         notes: "",
         final: false,
