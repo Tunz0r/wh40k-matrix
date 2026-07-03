@@ -93,6 +93,19 @@ export async function updateRoundStatus(
   await set(tournamentRef, { ...doc, ...updates });
 }
 
+export async function resetTournamentDoc(slug: string): Promise<void> {
+  const tournamentRef = ref(getDb(), `tournaments/${slug}`);
+  const snapshot = await get(tournamentRef);
+  const doc: TournamentDoc | null = snapshot.val();
+  const teamName = doc?.teamName || "";
+  await set(tournamentRef, {
+    teamName,
+    activeSessionId: null,
+    currentRound: 0,
+    rounds: [],
+  });
+}
+
 export function subscribeToTournament(
   slug: string,
   callback: (data: TournamentDoc | null) => void

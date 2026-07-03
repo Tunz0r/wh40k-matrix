@@ -18,6 +18,7 @@ import {
   createTournament,
   setActiveSession,
   updateRoundStatus,
+  resetTournamentDoc,
 } from "@/lib/tournament-db";
 
 // --- Types ---
@@ -614,6 +615,7 @@ export default function TournamentPage() {
 
   function resetTournament() {
     if (!confirm("Er du sikker? Alt turneringsdata slettes.")) return;
+    resetTournamentDoc(TEAM_SLUG).catch(() => {});
     const empty: TournamentState = { teamName: "", slug: "", roster: null, seedingTiers: [], rounds: [] };
     setTournament(empty);
     saveTournament(empty);

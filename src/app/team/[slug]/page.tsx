@@ -6,6 +6,7 @@ import Link from "next/link";
 import CoachingDashboard from "@/components/CoachingDashboard";
 import {
   subscribeToTournament,
+  resetTournamentDoc,
   type TournamentDoc,
 } from "@/lib/tournament-db";
 
@@ -93,6 +94,15 @@ export default function TeamRoomPage() {
               LIVE
             </span>
           )}
+          <button
+            onClick={() => {
+              if (!confirm("Nulstil turnering? Alle aktive kampe og rundehistorik slettes.")) return;
+              resetTournamentDoc(slug);
+            }}
+            className="ml-auto text-[10px] text-red-400 hover:text-red-300 transition-colors"
+          >
+            Reset turnering
+          </button>
         </div>
       </header>
 
