@@ -671,7 +671,7 @@ export default function TournamentPage() {
       { name: "Tier 4", teams: ["Austria", "Czech Republic", "Portugal", "Ireland"] },
     ];
     const slug = "team-denmark";
-    updateTournament({ teamName: "Team Denmark", slug, roster: testRoster, seedingTiers: testSeeding });
+    updateTournament({ teamName: "Team Denmark", slug, roster: testRoster, seedingTiers: testSeeding, rounds: [] });
     createTournament(slug, "Team Denmark").catch(() => {});
     setOpponentRoster(oppRoster);
     setMatchups([]);
@@ -1409,8 +1409,8 @@ export default function TournamentPage() {
                       <DispBadge d={m.b.disposition} />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-[10px] text-[#8888a0]">Estimat:</span>
+                  <div className="flex items-center gap-3 mt-3 p-2 rounded-lg bg-[#1a1a22] border border-white/[0.08]">
+                    <span className="text-[11px] text-[#8888a0] font-semibold uppercase tracking-wider">Estimat</span>
                     <input
                       type="number"
                       min={0}
@@ -1420,8 +1420,11 @@ export default function TournamentPage() {
                         const val = Math.max(0, Math.min(20, Number(e.target.value) || 0));
                         setMatchups((prev) => prev.map((mm, j) => j === i ? { ...mm, estimate: val } : mm));
                       }}
-                      className="w-12 text-center text-[12px] font-semibold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-0.5 text-[#e8e8f0] outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-16 text-center text-lg font-bold bg-[#0f0f13] border border-white/[0.14] rounded-md px-2 py-1 text-[#e8e8f0] outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
+                    <span className={`text-sm font-bold ${m.estimate >= 11 ? "text-[#4ade80]" : m.estimate <= 9 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+                      {m.estimate >= 11 ? "Favorit" : m.estimate <= 9 ? "Underdog" : "Lige"}
+                    </span>
                   </div>
                   {m.a.disposition && m.b.disposition && (
                     <MissionInfo a={m.a.disposition} b={m.b.disposition} />
@@ -1474,9 +1477,20 @@ export default function TournamentPage() {
             </div>
 
             <div className="flex gap-3">
+              {sessionUrl && (
+                <button
+                  onClick={() => {
+                    updateRoundStatus(TEAM_SLUG, currentRoundNumber, "completed").catch(() => {});
+                    backToOverview();
+                  }}
+                  className="text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-5 py-2 rounded-md transition-colors"
+                >
+                  Afslut runde {currentRoundNumber}
+                </button>
+              )}
               <button
                 onClick={backToOverview}
-                className="text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] bg-[rgba(168,85,247,0.1)] px-3 py-1.5 rounded-md border border-[rgba(168,85,247,0.2)] transition-colors"
+                className="text-[12px] font-medium text-[#8888a0] hover:text-[#e8e8f0] transition-colors"
               >
                 ← Tilbage til oversigt
               </button>
