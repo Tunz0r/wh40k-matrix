@@ -685,7 +685,7 @@ export default function TournamentPage() {
       ],
     };
     const modules = ["Initial Skirmish", "Initial Skirmish", "Main Engagement", "Main Engagement", "Main Engagement", "Main Engagement", "Main Engagement", "Champion"];
-    const estimates = [10, -5, 15, 0, -10, 5, 20, -5];
+    const estimates = [15, 8, 17, 10, 5, 12, 18, 6];
     const matchupData: MatchupData[] = dk.armies.map((a, i) => ({
       aFaction: a.faction, aDetachments: a.detachments, aDisposition: a.disposition,
       bFaction: se.armies[i].faction, bDetachments: se.armies[i].detachments, bDisposition: se.armies[i].disposition,
@@ -1365,19 +1365,18 @@ export default function TournamentPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 mt-2">
-                    <span className="text-[10px] text-[#8888a0]">Estimat (VP diff):</span>
+                    <span className="text-[10px] text-[#8888a0]">Estimat:</span>
                     <input
                       type="number"
+                      min={0}
+                      max={20}
                       value={m.estimate}
                       onChange={(e) => {
-                        const val = Number(e.target.value) || 0;
+                        const val = Math.max(0, Math.min(20, Number(e.target.value) || 0));
                         setMatchups((prev) => prev.map((mm, j) => j === i ? { ...mm, estimate: val } : mm));
                       }}
-                      className="w-16 text-center text-[12px] font-semibold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-0.5 text-[#e8e8f0] outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-12 text-center text-[12px] font-semibold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-0.5 text-[#e8e8f0] outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <span className={`text-[10px] font-semibold ${m.estimate > 0 ? "text-[#4ade80]" : m.estimate < 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
-                      {m.estimate > 0 ? `+${m.estimate}` : m.estimate}
-                    </span>
                   </div>
                   {m.a.disposition && m.b.disposition && (
                     <MissionInfo a={m.a.disposition} b={m.b.disposition} />
