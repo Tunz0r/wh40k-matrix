@@ -1,5 +1,6 @@
-import { ref, set, get, onValue, off } from "firebase/database";
+import { ref, set, get, onValue, off, update } from "firebase/database";
 import { getDb } from "./firebase";
+import type { RosterExport } from "./roster";
 
 export type RoundStatus = "pairing" | "live" | "completed";
 
@@ -10,16 +11,24 @@ export interface TournamentRound {
   status: RoundStatus;
 }
 
+export interface SeedingTier {
+  name: string;
+  teams: string[];
+}
+
 export interface TournamentDoc {
   teamName: string;
   activeSessionId: string | null;
   currentRound: number;
   rounds: TournamentRound[];
+  roster?: RosterExport | null;
+  seedingTiers?: SeedingTier[];
 }
 
 export async function createTournament(
   slug: string,
-  teamName: string
+  teamName: string,
+  roster?: RosterExport
 ): Promise<void> {
   const tournamentRef = ref(getDb(), `tournaments/${slug}`);
   await set(tournamentRef, {
@@ -27,7 +36,16 @@ export async function createTournament(
     activeSessionId: null,
     currentRound: 0,
     rounds: [],
+    roster: roster ?? null,
   });
+}
+
+// Patch team setup fields without touching round state.
+export async function saveTeamSetup(
+  slug: string,
+  data: Partial<Pick<TournamentDoc, "teamName" | "roster" | "seedingTiers">>
+): Promise<void> {
+  await update(ref(getDb(), `tournaments/${slug}`), data);
 }
 
 export async function setActiveSession(
@@ -97,12 +115,13 @@ export async function resetTournamentDoc(slug: string): Promise<void> {
   const tournamentRef = ref(getDb(), `tournaments/${slug}`);
   const snapshot = await get(tournamentRef);
   const doc: TournamentDoc | null = snapshot.val();
-  const teamName = doc?.teamName || "";
   await set(tournamentRef, {
-    teamName,
+    teamName: doc?.teamName || "",
     activeSessionId: null,
     currentRound: 0,
     rounds: [],
+    roster: doc?.roster ?? null,
+    seedingTiers: doc?.seedingTiers ?? null,
   });
 }
 

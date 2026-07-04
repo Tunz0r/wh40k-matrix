@@ -16,9 +16,9 @@ import { getLayouts, getLayoutImage } from "@/lib/layouts";
 import { createSession, type MatchupData } from "@/lib/session";
 import {
   createTournament,
+  saveTeamSetup,
   setActiveSession,
   updateRoundStatus,
-  resetTournamentDoc,
   subscribeToTournament,
   type TournamentDoc,
 } from "@/lib/tournament-db";
@@ -362,6 +362,20 @@ export default function TournamentPage() {
     } catch {}
   }, []);
 
+  // Hydrate team setup from Firebase when localStorage is empty (new browser,
+  // cleared storage, or session created via test tools) — skip the setup screen.
+  useEffect(() => {
+    if (!initialized || !fbDoc?.roster || tournament.roster) return;
+    updateTournament({
+      teamName: fbDoc.teamName,
+      slug: TEAM_SLUG,
+      roster: fbDoc.roster,
+      seedingTiers: (fbDoc.seedingTiers || []).map((t) => ({ name: t.name, teams: t.teams || [] })),
+    });
+    setSetupTeamName(fbDoc.teamName);
+    setView((v) => (v === "setup" ? "overview" : v));
+  }, [fbDoc, initialized, tournament.roster]);
+
   const fbRounds = useMemo(() => fbDoc?.rounds || [], [fbDoc]);
   const activeRound = fbRounds.find((r) => r.status === "live");
   const completedMax = fbRounds
@@ -422,7 +436,7 @@ export default function TournamentPage() {
     if (roster.armies.length !== 8) { alert(`Roster skal have 8 hære (fandt ${roster.armies.length})`); return; }
     roster.name = name;
     updateTournament({ teamName: name, slug: TEAM_SLUG, roster });
-    createTournament(TEAM_SLUG, name).catch(() => {});
+    createTournament(TEAM_SLUG, name, roster).catch(() => {});
     setView("overview");
   }
 
@@ -445,6 +459,7 @@ export default function TournamentPage() {
   function saveSeedingTiers() {
     const tiers = parseSeedingText(seedingText);
     updateTournament({ seedingTiers: tiers });
+    saveTeamSetup(TEAM_SLUG, { seedingTiers: tiers }).catch(() => {});
     setEditingSeeding(false);
   }
 
@@ -659,7 +674,10 @@ export default function TournamentPage() {
 
   function resetTournament() {
     if (!confirm("Er du sikker? Alt turneringsdata slettes.")) return;
-    resetTournamentDoc(TEAM_SLUG).catch(() => {});
+    // Full wipe including roster — clear local fbDoc first so the hydration
+    // effect doesn't restore the team from a stale snapshot.
+    setFbDoc(null);
+    createTournament(TEAM_SLUG, "").catch(() => {});
     const empty: TournamentState = { teamName: "", slug: "", roster: null, seedingTiers: [], rounds: [] };
     setTournament(empty);
     saveTournament(empty);
@@ -716,7 +734,9 @@ export default function TournamentPage() {
     ];
     const slug = "team-denmark";
     updateTournament({ teamName: "Team Denmark", slug, roster: testRoster, seedingTiers: testSeeding, rounds: [] });
-    createTournament(slug, "Team Denmark").catch(() => {});
+    createTournament(slug, "Team Denmark", testRoster)
+      .then(() => saveTeamSetup(slug, { seedingTiers: testSeeding }))
+      .catch(() => {});
     setOpponentRoster(oppRoster);
     setMatchups([]);
     setView("round-opponent");
@@ -758,7 +778,7 @@ export default function TournamentPage() {
     }));
     try {
       const slug = "team-denmark";
-      await createTournament(slug, "Team Denmark").catch(() => {});
+      await createTournament(slug, "Team Denmark", dk).catch(() => {});
       const id = await createSession({ teamAName: "Team Denmark", teamBName: "Team Sweden", createdAt: Date.now(), matchups: matchupData });
       await setActiveSession(slug, id, 1, "Team Sweden");
       window.location.href = `/coaching/${id}`;
