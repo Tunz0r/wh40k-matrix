@@ -109,7 +109,12 @@ export default function TeamRoomPage() {
       <div className="p-4 sm:p-6 max-w-4xl mx-auto">
         {/* Active coaching session */}
         {doc.activeSessionId && (
-          <CoachingDashboard sessionId={doc.activeSessionId} embedded />
+          <CoachingDashboard
+            sessionId={doc.activeSessionId}
+            embedded
+            teamSlug={slug}
+            roundNumber={currentRound?.number}
+          />
         )}
 
         {/* Pairing in progress, no active session yet */}

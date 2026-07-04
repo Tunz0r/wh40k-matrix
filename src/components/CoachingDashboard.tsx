@@ -14,6 +14,7 @@ import {
   updateMatchupNotes,
   updateMatchupFinal,
 } from "@/lib/session";
+import { updateRoundStatus } from "@/lib/tournament-db";
 
 function DispDot({ d }: { d: Disposition | null }) {
   if (!d) return null;
@@ -30,9 +31,12 @@ function DispDot({ d }: { d: Disposition | null }) {
 interface CoachingDashboardProps {
   sessionId: string;
   embedded?: boolean;
+  teamSlug?: string;
+  roundNumber?: number;
+  onRoundCompleted?: () => void;
 }
 
-export default function CoachingDashboard({ sessionId, embedded }: CoachingDashboardProps) {
+export default function CoachingDashboard({ sessionId, embedded, teamSlug, roundNumber, onRoundCompleted }: CoachingDashboardProps) {
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -245,6 +249,23 @@ export default function CoachingDashboard({ sessionId, embedded }: CoachingDashb
             />
           ))}
         </div>
+
+        {teamSlug && roundNumber && finishedCount === session.matchups.length && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => {
+                if (!confirm(`Afslut runde ${roundNumber}? Alle kampe er færdige.`)) return;
+                updateRoundStatus(teamSlug, roundNumber, "completed").then(() => {
+                  onRoundCompleted?.();
+                }).catch(() => {});
+              }}
+              className="text-[13px] font-semibold text-white bg-[#4ade80] hover:bg-[#22c55e] px-6 py-2.5 rounded-lg transition-colors"
+            >
+              Afslut runde {roundNumber}
+            </button>
+            <p className="text-[10px] text-[#8888a0] mt-1.5">Alle {session.matchups.length} kampe er markeret som færdige</p>
+          </div>
+        )}
       </div>
     </>
   );
