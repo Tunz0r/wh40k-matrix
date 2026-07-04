@@ -130,6 +130,10 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
               Matrix
             </Link>
             <span>/</span>
+            <Link href="/tournament" className="hover:text-[#e8e8f0] transition-colors">
+              Turnering
+            </Link>
+            <span>/</span>
             <span className="text-[#e8e8f0]">Coaching</span>
           </div>
           <div className="flex items-center gap-3 flex-wrap">

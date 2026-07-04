@@ -19,7 +19,10 @@ import {
   setActiveSession,
   updateRoundStatus,
   resetTournamentDoc,
+  subscribeToTournament,
+  type TournamentDoc,
 } from "@/lib/tournament-db";
+import { TEAM_SLUG, TOTAL_ROUNDS } from "@/lib/team";
 
 // --- Types ---
 
@@ -74,7 +77,6 @@ interface TournamentState {
 
 
 const STORAGE_KEY = "wtc-tournament";
-const TEAM_SLUG = "team-denmark";
 
 function loadTournament(): TournamentState {
   if (typeof window === "undefined") return { teamName: "", slug: "", roster: null, seedingTiers: [], rounds: [] };
@@ -352,8 +354,50 @@ export default function TournamentPage() {
     if (initialized) saveTournament(tournament);
   }, [tournament, initialized]);
 
-  const currentRoundNumber = tournament.rounds.length + 1;
+  // Live tournament doc from Firebase — authoritative for round status across devices
+  const [fbDoc, setFbDoc] = useState<TournamentDoc | null>(null);
+  useEffect(() => {
+    try {
+      return subscribeToTournament(TEAM_SLUG, setFbDoc);
+    } catch {}
+  }, []);
+
+  const fbRounds = useMemo(() => fbDoc?.rounds || [], [fbDoc]);
+  const activeRound = fbRounds.find((r) => r.status === "live");
+  const completedMax = fbRounds
+    .filter((r) => r.status === "completed")
+    .reduce((m, r) => Math.max(m, r.number), 0);
+  // If a round is live in Firebase, that IS the current round. Otherwise the next
+  // round is one past whichever source (localStorage or Firebase) has come furthest.
+  const currentRoundNumber = activeRound
+    ? activeRound.number
+    : Math.max(tournament.rounds.length, completedMax) + 1;
+  const tournamentFinished = !activeRound && currentRoundNumber > TOTAL_ROUNDS;
   const roundLayout = (["A", "B", "C"] as const)[(currentRoundNumber - 1) % 3];
+
+  // Rounds to display: union of localStorage rounds (rich data) and Firebase rounds
+  // (covers rounds started from another device or test sessions)
+  const displayRounds = useMemo(() => {
+    const map = new Map<number, { number: number; opponentName: string; sessionUrl: string | null; status: string }>();
+    for (const r of fbRounds) {
+      map.set(r.number, {
+        number: r.number,
+        opponentName: r.opponentName,
+        sessionUrl: r.sessionId ? `/coaching/${r.sessionId}` : null,
+        status: r.status,
+      });
+    }
+    for (const r of tournament.rounds) {
+      const existing = map.get(r.number);
+      map.set(r.number, {
+        number: r.number,
+        opponentName: r.opponentName || existing?.opponentName || "",
+        sessionUrl: r.sessionUrl ?? existing?.sessionUrl ?? null,
+        status: existing?.status ?? "completed",
+      });
+    }
+    return [...map.values()].sort((a, b) => a.number - b.number);
+  }, [fbRounds, tournament.rounds]);
 
   const pairedA = useMemo(
     () => new Set(matchups.map((m) => tournament.roster?.armies.indexOf(m.a)).filter((i) => i !== undefined && i >= 0)),
@@ -932,9 +976,9 @@ export default function TournamentPage() {
             <div className="rounded-xl border border-white/[0.08] p-4">
               <h2 className="text-sm font-semibold text-[#e8e8f0] mb-3">Runder</h2>
 
-              {tournament.rounds.length > 0 ? (
+              {displayRounds.length > 0 ? (
                 <div className="space-y-2 mb-4">
-                  {tournament.rounds.map((r) => (
+                  {displayRounds.map((r) => (
                     <div
                       key={r.number}
                       className="flex items-center gap-3 rounded-lg border border-white/[0.08] p-3"
@@ -943,8 +987,18 @@ export default function TournamentPage() {
                         Runde {r.number}
                       </span>
                       <span className="text-[12px] text-[#e8e8f0] flex-1 min-w-0 truncate">
-                        vs {r.opponentName}
+                        vs {r.opponentName || "?"}
                       </span>
+                      {r.status === "live" && (
+                        <span className="text-[9px] font-semibold text-[#4ade80] bg-[rgba(34,197,94,0.1)] px-2 py-0.5 rounded-full animate-pulse shrink-0">
+                          LIVE
+                        </span>
+                      )}
+                      {r.status === "pairing" && (
+                        <span className="text-[9px] font-semibold text-[#a855f7] bg-[rgba(168,85,247,0.1)] px-2 py-0.5 rounded-full shrink-0">
+                          PAIRING
+                        </span>
+                      )}
                       {r.sessionUrl && (
                         <Link
                           href={r.sessionUrl}
@@ -960,12 +1014,56 @@ export default function TournamentPage() {
                 <p className="text-[11px] text-[#8888a0] mb-4">Ingen runder spillet endnu.</p>
               )}
 
-              <button
-                onClick={startNewRound}
-                className="text-sm font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-5 py-2.5 rounded-lg transition-colors"
-              >
-                Start runde {currentRoundNumber}
-              </button>
+              {activeRound ? (
+                <div className="rounded-lg border border-[rgba(34,197,94,0.25)] bg-[rgba(34,197,94,0.04)] p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[9px] font-semibold text-[#4ade80] bg-[rgba(34,197,94,0.12)] px-2 py-0.5 rounded-full animate-pulse">
+                      LIVE
+                    </span>
+                    <span className="text-[13px] font-semibold text-[#e8e8f0]">
+                      Runde {activeRound.number} vs {activeRound.opponentName || "?"} er i gang
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {fbDoc?.activeSessionId && (
+                      <Link
+                        href={`/coaching/${fbDoc.activeSessionId}`}
+                        className="text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-4 py-2 rounded-md transition-colors"
+                      >
+                        Gå til coaching →
+                      </Link>
+                    )}
+                    <Link
+                      href={`/team/${TEAM_SLUG}`}
+                      className="text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors"
+                    >
+                      Team room →
+                    </Link>
+                    <button
+                      onClick={() => {
+                        if (!confirm(`Afslut runde ${activeRound.number}?`)) return;
+                        updateRoundStatus(TEAM_SLUG, activeRound.number, "completed").catch(() => {});
+                      }}
+                      className="ml-auto text-[11px] font-medium text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.1] px-3 py-1.5 rounded-md transition-colors"
+                    >
+                      Afslut runde {activeRound.number}
+                    </button>
+                  </div>
+                </div>
+              ) : tournamentFinished ? (
+                <div className="rounded-lg border border-[rgba(74,222,128,0.25)] bg-[rgba(34,197,94,0.04)] p-4 text-center">
+                  <div className="text-[13px] font-semibold text-[#4ade80]">
+                    Alle {TOTAL_ROUNDS} runder er spillet — turneringen er slut! 🏆
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={startNewRound}
+                  className="text-sm font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-5 py-2.5 rounded-lg transition-colors"
+                >
+                  Start runde {currentRoundNumber}
+                </button>
+              )}
 
               <div className="mt-4 pt-4 border-t border-white/[0.08]">
                 <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold mb-1">

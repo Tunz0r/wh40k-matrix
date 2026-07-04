@@ -146,6 +146,12 @@ export default function TeamRoomPage() {
                 ? "Venter på næste runde..."
                 : "Turneringen er ikke startet endnu."}
             </div>
+            <Link
+              href="/tournament"
+              className="inline-block mt-3 text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors"
+            >
+              Kaptajn: Gå til turneringen og start næste runde →
+            </Link>
           </div>
         )}
 
