@@ -15,14 +15,14 @@ import {
 import { getLayouts, getLayoutImage } from "@/lib/layouts";
 import { createSession, type MatchupData } from "@/lib/session";
 import {
-  createTournament,
   saveTeamSetup,
   setActiveSession,
   updateRoundStatus,
+  resetTournamentDoc,
   subscribeToTournament,
   type TournamentDoc,
 } from "@/lib/tournament-db";
-import { TEAM_SLUG, TOTAL_ROUNDS } from "@/lib/team";
+import { TEAM_SLUG, TEAM_NAME, TOTAL_ROUNDS } from "@/lib/team";
 
 // --- Types ---
 
@@ -38,7 +38,6 @@ type PairingPhase =
   | "main-choice";
 
 type TournamentView =
-  | "setup"
   | "overview"
   | "round-opponent"
   | "round-pairing"
@@ -78,17 +77,22 @@ interface TournamentState {
 
 const STORAGE_KEY = "wtc-tournament";
 
+function emptyTournament(): TournamentState {
+  return { teamName: TEAM_NAME, slug: TEAM_SLUG, roster: null, seedingTiers: [], rounds: [] };
+}
+
 function loadTournament(): TournamentState {
-  if (typeof window === "undefined") return { teamName: "", slug: "", roster: null, seedingTiers: [], rounds: [] };
+  if (typeof window === "undefined") return emptyTournament();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (!parsed.slug) parsed.slug = "";
+      parsed.teamName = TEAM_NAME;
+      parsed.slug = TEAM_SLUG;
       return parsed;
     }
   } catch {}
-  return { teamName: "", slug: "", roster: null, seedingTiers: [], rounds: [] };
+  return emptyTournament();
 }
 
 function saveTournament(state: TournamentState) {
@@ -308,7 +312,7 @@ const PHASE_LABELS: Record<PairingPhase, string> = {
 
 export default function TournamentPage() {
   const [tournament, setTournament] = useState<TournamentState>(() => loadTournament());
-  const [view, setView] = useState<TournamentView>("setup");
+  const [view, setView] = useState<TournamentView>("overview");
   const [initialized, setInitialized] = useState(false);
 
   // Active round state
@@ -334,18 +338,13 @@ export default function TournamentPage() {
   const [editingSeeding, setEditingSeeding] = useState(false);
   const [seedingText, setSeedingText] = useState("");
 
-  // Setup state
-  const [setupImportText, setSetupImportText] = useState("");
-  const [setupTeamName, setSetupTeamName] = useState("");
+  // Roster edit state
+  const [editingRoster, setEditingRoster] = useState(false);
+  const [rosterImportText, setRosterImportText] = useState("");
 
   // Initialize from localStorage
   useEffect(() => {
-    const saved = loadTournament();
-    setTournament(saved);
-    if (saved.roster) {
-      setView("overview");
-      setSetupTeamName(saved.teamName);
-    }
+    setTournament(loadTournament());
     setInitialized(true);
   }, []);
 
@@ -362,19 +361,25 @@ export default function TournamentPage() {
     } catch {}
   }, []);
 
-  // Hydrate team setup from Firebase when localStorage is empty (new browser,
-  // cleared storage, or session created via test tools) — skip the setup screen.
+  // Firebase is the authority for roster and seeding — sync down whenever it changes
+  // (covers new browsers, cleared storage, and edits made on another device).
   useEffect(() => {
-    if (!initialized || !fbDoc?.roster || tournament.roster) return;
+    if (!initialized || !fbDoc?.roster) return;
+    const fbSeeding = (fbDoc.seedingTiers || []).map((t) => ({ name: t.name, teams: t.teams || [] }));
+    // Migration: if Firebase has no seeding yet but this browser does, push it up
+    if (fbSeeding.length === 0 && tournament.seedingTiers.length > 0) {
+      saveTeamSetup(TEAM_SLUG, { seedingTiers: tournament.seedingTiers }).catch(() => {});
+    }
+    const rosterChanged = JSON.stringify(fbDoc.roster) !== JSON.stringify(tournament.roster);
+    const seedingChanged = fbSeeding.length > 0 && JSON.stringify(fbSeeding) !== JSON.stringify(tournament.seedingTiers);
+    if (!rosterChanged && !seedingChanged) return;
     updateTournament({
-      teamName: fbDoc.teamName,
+      teamName: TEAM_NAME,
       slug: TEAM_SLUG,
-      roster: fbDoc.roster,
-      seedingTiers: (fbDoc.seedingTiers || []).map((t) => ({ name: t.name, teams: t.teams || [] })),
+      roster: rosterChanged ? fbDoc.roster : tournament.roster,
+      seedingTiers: seedingChanged ? fbSeeding : tournament.seedingTiers,
     });
-    setSetupTeamName(fbDoc.teamName);
-    setView((v) => (v === "setup" ? "overview" : v));
-  }, [fbDoc, initialized, tournament.roster]);
+  }, [fbDoc, initialized, tournament.roster, tournament.seedingTiers]);
 
   const fbRounds = useMemo(() => fbDoc?.rounds || [], [fbDoc]);
   const activeRound = fbRounds.find((r) => r.status === "live");
@@ -428,16 +433,16 @@ export default function TournamentPage() {
     setTournament((prev) => ({ ...prev, ...updates }));
   }
 
-  function completeSetup() {
-    const name = setupTeamName.trim();
-    if (!name) { alert("Indtast holdnavn"); return; }
-    const roster = deserializeRoster(setupImportText.trim());
+  function updateRoster() {
+    const roster = deserializeRoster(rosterImportText.trim());
     if (!roster) { alert("Ugyldigt roster format"); return; }
     if (roster.armies.length !== 8) { alert(`Roster skal have 8 hære (fandt ${roster.armies.length})`); return; }
-    roster.name = name;
-    updateTournament({ teamName: name, slug: TEAM_SLUG, roster });
-    createTournament(TEAM_SLUG, name, roster).catch(() => {});
-    setView("overview");
+    roster.name = TEAM_NAME;
+    updateTournament({ teamName: TEAM_NAME, slug: TEAM_SLUG, roster });
+    // Patch only the roster — rounds and active sessions stay intact
+    saveTeamSetup(TEAM_SLUG, { teamName: TEAM_NAME, roster }).catch(() => {});
+    setEditingRoster(false);
+    setRosterImportText("");
   }
 
   function parseSeedingText(text: string): SeedingTier[] {
@@ -673,20 +678,13 @@ export default function TournamentPage() {
   }, [tournament, opponentRoster, matchups, currentRoundNumber]);
 
   function resetTournament() {
-    if (!confirm("Er du sikker? Alt turneringsdata slettes.")) return;
-    // Full wipe including roster — clear local fbDoc first so the hydration
-    // effect doesn't restore the team from a stale snapshot.
-    setFbDoc(null);
-    createTournament(TEAM_SLUG, "").catch(() => {});
-    const empty: TournamentState = { teamName: "", slug: "", roster: null, seedingTiers: [], rounds: [] };
-    setTournament(empty);
-    saveTournament(empty);
-    setView("setup");
+    if (!confirm("Nulstil turneringen? Runder og aktive kampe slettes — roster og seeding bevares.")) return;
+    resetTournamentDoc(TEAM_SLUG).catch(() => {});
+    updateTournament({ rounds: [] });
+    setView("overview");
     setOpponentRoster(null);
     setMatchups([]);
     setSessionUrl(null);
-    setSetupImportText("");
-    setSetupTeamName("");
   }
 
   function backToOverview() {
@@ -697,22 +695,9 @@ export default function TournamentPage() {
     resetModuleState();
   }
 
-  function loadTestData() {
-    const testRoster: RosterExport = {
-      v: 1,
-      name: "Team Denmark",
-      armies: [
-        { faction: "Space Marines", detachments: ["Gladius Task Force"], disposition: "Take and Hold" },
-        { faction: "Dark Angels", detachments: ["Inner Circle Task Force"], disposition: "Purge the Foe" },
-        { faction: "Aeldari", detachments: ["Battle Host"], disposition: "Priority Assets" },
-        { faction: "Orks", detachments: ["Waaagh! Tribe"], disposition: "Reconnaissance" },
-        { faction: "Necrons", detachments: ["Awakened Dynasty"], disposition: "Disruption" },
-        { faction: "Tyranids", detachments: ["Invasion Fleet"], disposition: "Take and Hold" },
-        { faction: "T'au Empire", detachments: ["Kauyon"], disposition: "Purge the Foe" },
-        { faction: "Adeptus Custodes", detachments: ["Shield Host"], disposition: "Priority Assets" },
-      ],
-    };
-    const oppRoster: RosterExport = {
+  // Test tools use our REAL roster from the database — they only fake the opponent.
+  function testOpponent(): RosterExport {
+    return {
       v: 1,
       name: "Team Sweden",
       armies: [
@@ -726,61 +711,29 @@ export default function TournamentPage() {
         { faction: "Imperial Knights", detachments: ["Noble Lance"], disposition: "Priority Assets" },
       ],
     };
-    const testSeeding: SeedingTier[] = [
-      { name: "Tier 1", teams: ["England", "Poland", "Germany", "France"] },
-      { name: "Tier 2", teams: ["Denmark", "Sweden", "Finland", "Spain"] },
-      { name: "Tier 3", teams: ["Norway", "Belgium", "Netherlands", "Italy"] },
-      { name: "Tier 4", teams: ["Austria", "Czech Republic", "Portugal", "Ireland"] },
-    ];
-    const slug = "team-denmark";
-    updateTournament({ teamName: "Team Denmark", slug, roster: testRoster, seedingTiers: testSeeding, rounds: [] });
-    createTournament(slug, "Team Denmark", testRoster)
-      .then(() => saveTeamSetup(slug, { seedingTiers: testSeeding }))
-      .catch(() => {});
-    setOpponentRoster(oppRoster);
+  }
+
+  function loadTestData() {
+    if (!tournament.roster) { alert("Intet roster fundet — opdater roster først."); return; }
+    setOpponentRoster(testOpponent());
     setMatchups([]);
     setView("round-opponent");
   }
 
   async function testCoaching() {
-    const dk: RosterExport = {
-      v: 1, name: "Team Denmark",
-      armies: [
-        { faction: "Space Marines", detachments: ["Gladius Task Force"], disposition: "Take and Hold" },
-        { faction: "Dark Angels", detachments: ["Inner Circle Task Force"], disposition: "Purge the Foe" },
-        { faction: "Aeldari", detachments: ["Battle Host"], disposition: "Priority Assets" },
-        { faction: "Orks", detachments: ["Waaagh! Tribe"], disposition: "Reconnaissance" },
-        { faction: "Necrons", detachments: ["Awakened Dynasty"], disposition: "Disruption" },
-        { faction: "Tyranids", detachments: ["Invasion Fleet"], disposition: "Take and Hold" },
-        { faction: "T'au Empire", detachments: ["Kauyon"], disposition: "Purge the Foe" },
-        { faction: "Adeptus Custodes", detachments: ["Shield Host"], disposition: "Priority Assets" },
-      ],
-    };
-    const se: RosterExport = {
-      v: 1, name: "Team Sweden",
-      armies: [
-        { faction: "World Eaters", detachments: ["Berzerker Warband"], disposition: "Purge the Foe" },
-        { faction: "Death Guard", detachments: ["Plague Company"], disposition: "Take and Hold" },
-        { faction: "Thousand Sons", detachments: ["Cult of Magic"], disposition: "Reconnaissance" },
-        { faction: "Drukhari", detachments: ["Realspace Raiders"], disposition: "Disruption" },
-        { faction: "Leagues of Votann", detachments: ["Oathband"], disposition: "Priority Assets" },
-        { faction: "Adepta Sororitas", detachments: ["Hallowed Martyrs"], disposition: "Purge the Foe" },
-        { faction: "Chaos Knights", detachments: ["War Dog Lance"], disposition: "Take and Hold" },
-        { faction: "Imperial Knights", detachments: ["Noble Lance"], disposition: "Priority Assets" },
-      ],
-    };
+    if (!tournament.roster) { alert("Intet roster fundet — opdater roster først."); return; }
+    const dk = tournament.roster;
+    const se = testOpponent();
     const modules = ["Initial Skirmish", "Initial Skirmish", "Main Engagement", "Main Engagement", "Main Engagement", "Main Engagement", "Main Engagement", "Champion"];
     const estimates = [15, 8, 17, 10, 5, 12, 18, 6];
     const matchupData: MatchupData[] = dk.armies.map((a, i) => ({
-      aFaction: a.faction, aDetachments: a.detachments, aDisposition: a.disposition,
+      aFaction: a.faction, aDetachments: a.detachments, aDisposition: a.disposition ?? null,
       bFaction: se.armies[i].faction, bDetachments: se.armies[i].detachments, bDisposition: se.armies[i].disposition,
       module: modules[i], layoutPage: null, estimate: estimates[i], aVP: 0, bVP: 0, round: 1, notes: "", final: false,
     }));
     try {
-      const slug = "team-denmark";
-      await createTournament(slug, "Team Denmark", dk).catch(() => {});
-      const id = await createSession({ teamAName: "Team Denmark", teamBName: "Team Sweden", createdAt: Date.now(), matchups: matchupData });
-      await setActiveSession(slug, id, 1, "Team Sweden");
+      const id = await createSession({ teamAName: TEAM_NAME, teamBName: "Team Sweden", createdAt: Date.now(), matchups: matchupData });
+      await setActiveSession(TEAM_SLUG, id, currentRoundNumber, "Team Sweden");
       window.location.href = `/coaching/${id}`;
     } catch (e) {
       console.error("Failed to create test coaching session:", e);
@@ -814,30 +767,26 @@ export default function TournamentPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
             WTC Turnering
-            {tournament.teamName && (
-              <span className="text-[#4ade80] ml-2 text-sm font-normal">
-                — {tournament.teamName}
-              </span>
-            )}
+            <span className="text-[#4ade80] ml-2 text-sm font-normal">
+              — {TEAM_NAME}
+            </span>
           </h1>
-          {view !== "setup" && (
-            <div className="ml-auto flex items-center gap-2">
-              {view !== "overview" && (
-                <button
-                  onClick={backToOverview}
-                  className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0] transition-colors"
-                >
-                  ← Oversigt
-                </button>
-              )}
+          <div className="ml-auto flex items-center gap-2">
+            {view !== "overview" && (
               <button
-                onClick={resetTournament}
-                className="text-[11px] text-red-400 hover:text-red-300 transition-colors"
+                onClick={backToOverview}
+                className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0] transition-colors"
               >
-                Start forfra
+                ← Oversigt
               </button>
-            </div>
-          )}
+            )}
+            <button
+              onClick={resetTournament}
+              className="text-[11px] text-red-400 hover:text-red-300 transition-colors"
+            >
+              Nulstil turnering
+            </button>
+          </div>
         </div>
         {view === "round-pairing" && (
           <p className="text-xs text-[#8888a0] mt-1">
@@ -849,70 +798,55 @@ export default function TournamentPage() {
 
       <div className="p-4 sm:p-6 max-w-6xl mx-auto">
 
-        {/* ===== SETUP ===== */}
-        {view === "setup" && (
-          <div className="max-w-lg mx-auto space-y-6">
-            <div>
-              <h2 className="text-sm font-semibold text-[#e8e8f0] mb-3">Opsæt dit hold</h2>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[11px] text-[#8888a0] block mb-1">Holdnavn</label>
-                  <input
-                    type="text"
-                    value={setupTeamName}
-                    onChange={(e) => setSetupTeamName(e.target.value)}
-                    placeholder="f.eks. Team Denmark"
-                    className="w-full bg-[#1a1a22] border border-white/[0.14] rounded-lg px-3 py-2 text-sm text-[#e8e8f0] placeholder:text-[#8888a0] outline-none focus:border-[#a855f7]"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] text-[#8888a0] block mb-1">Roster-kode (fra Roster Builder)</label>
-                  <textarea
-                    value={setupImportText}
-                    onChange={(e) => setSetupImportText(e.target.value)}
-                    placeholder="Indsæt roster-kode her..."
-                    className="w-full h-20 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-3 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
-                  />
-                </div>
-                <button
-                  onClick={completeSetup}
-                  className="w-full text-sm font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-6 py-2.5 rounded-lg transition-colors"
-                >
-                  Start turnering
-                </button>
-              </div>
-            </div>
-            <div className="text-center border-t border-white/[0.08] pt-4 flex justify-center gap-2">
-              <button
-                onClick={loadTestData}
-                className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
-              >
-                Indlæs testdata
-              </button>
-              <button
-                onClick={testCoaching}
-                className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
-              >
-                Test coaching
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* ===== OVERVIEW ===== */}
-        {view === "overview" && tournament.roster && (
+        {view === "overview" && (
           <div className="space-y-6">
             {/* Our roster */}
             <div className="rounded-xl border border-[rgba(74,222,128,0.2)] bg-[rgba(74,222,128,0.03)] p-4">
               <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold text-[#4ade80]">{tournament.teamName}</h2>
-                <span className="text-[10px] text-[#8888a0]">({tournament.roster.armies.length} hære)</span>
+                <h2 className="text-sm font-semibold text-[#4ade80]">{TEAM_NAME}</h2>
+                {tournament.roster && (
+                  <span className="text-[10px] text-[#8888a0]">({tournament.roster.armies.length} hære)</span>
+                )}
+                <button
+                  onClick={() => {
+                    setRosterImportText("");
+                    setEditingRoster(!editingRoster);
+                  }}
+                  className="text-[10px] text-[#a855f7] hover:text-[#c084fc] ml-auto transition-colors"
+                >
+                  {editingRoster ? "Annullér" : "Opdater roster"}
+                </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                {tournament.roster.armies.map((army, i) => (
-                  <ArmyCard key={i} army={army} index={i} highlight />
-                ))}
-              </div>
+
+              {editingRoster && (
+                <div className="mb-3 space-y-2">
+                  <textarea
+                    value={rosterImportText}
+                    onChange={(e) => setRosterImportText(e.target.value)}
+                    placeholder="Indsæt ny roster-kode fra Roster Builder..."
+                    className="w-full h-20 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-3 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
+                  />
+                  <button
+                    onClick={updateRoster}
+                    className="text-[11px] font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] px-3 py-1.5 rounded-md transition-colors"
+                  >
+                    Gem roster
+                  </button>
+                </div>
+              )}
+
+              {tournament.roster ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {tournament.roster.armies.map((army, i) => (
+                    <ArmyCard key={i} army={army} index={i} highlight />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-[#8888a0]">
+                  Indlæser roster... Hvis intet roster findes, klik &quot;Opdater roster&quot; og indsæt en roster-kode.
+                </p>
+              )}
             </div>
 
             {/* Seeding */}
@@ -1079,7 +1013,8 @@ export default function TournamentPage() {
               ) : (
                 <button
                   onClick={startNewRound}
-                  className="text-sm font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-5 py-2.5 rounded-lg transition-colors"
+                  disabled={!tournament.roster}
+                  className="text-sm font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-5 py-2.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Start runde {currentRoundNumber}
                 </button>
@@ -1105,6 +1040,22 @@ export default function TournamentPage() {
                 </div>
                 <p className="text-[10px] text-[#8888a0] mt-0.5">Del med coaches — opdateres live</p>
               </div>
+            </div>
+
+            {/* Test tools */}
+            <div className="text-center flex justify-center gap-2">
+              <button
+                onClick={loadTestData}
+                className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
+              >
+                Indlæs testdata
+              </button>
+              <button
+                onClick={testCoaching}
+                className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
+              >
+                Test coaching
+              </button>
             </div>
           </div>
         )}
