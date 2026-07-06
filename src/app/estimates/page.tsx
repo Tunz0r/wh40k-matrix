@@ -7,6 +7,8 @@ import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
 import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
 import { DISP_STYLES } from "@/lib/data";
 import ArmyEditor from "@/components/ArmyEditor";
+import EstimateInput from "@/components/EstimateInput";
+import PlayerEstimates from "@/components/PlayerEstimates";
 import {
   type OpponentMap,
   type OpponentTeam,
@@ -29,42 +31,6 @@ function shortFaction(name: string): string {
   return name.length > 14 ? name.slice(0, 13) + "…" : name;
 }
 
-function EstimateInput({
-  cell,
-  onChange,
-  locked,
-}: {
-  cell: EstimateCell | undefined;
-  onChange: (v: number | null) => void;
-  locked?: boolean;
-}) {
-  const style = cell ? estimateStyle(cell.v) : null;
-  return (
-    <div className="relative">
-      <input
-        type="number"
-        min={0}
-        max={20}
-        value={cell?.v ?? ""}
-        disabled={locked}
-        onChange={(e) => {
-          if (e.target.value === "") { onChange(null); return; }
-          onChange(Math.max(0, Math.min(20, Number(e.target.value) || 0)));
-        }}
-        className={`w-11 h-9 text-center text-[13px] font-bold rounded border outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${cell?.auto ? "opacity-70" : ""} ${locked ? "cursor-not-allowed opacity-60" : ""}`}
-        style={
-          style
-            ? { background: style.bg, color: style.fg, borderColor: style.border }
-            : { background: "#1a1a22", color: "#e8e8f0", borderColor: "rgba(255,255,255,0.14)" }
-        }
-        title={locked ? "Låst — holdet er allerede spillet" : cell?.auto ? "Auto-udfyldt fra lignende liste — skriv for at overstyre" : undefined}
-      />
-      {cell?.auto && (
-        <span className="absolute top-0.5 right-1 text-[8px] text-[#8888a0] pointer-events-none">a</span>
-      )}
-    </div>
-  );
-}
 
 export default function EstimatesPage() {
   const [opponents, setOpponents] = useState<OpponentMap>({});
@@ -74,6 +40,17 @@ export default function EstimatesPage() {
   const [importText, setImportText] = useState("");
   const [newTeamName, setNewTeamName] = useState("");
   const [editingList, setEditingList] = useState<{ slug: string; idx: number } | null>(null);
+  const [mode, setMode] = useState<"country" | "player">("country");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("wtc-est-mode");
+    if (saved === "player" || saved === "country") setMode(saved);
+  }, []);
+
+  function switchMode(m: "country" | "player") {
+    setMode(m);
+    localStorage.setItem("wtc-est-mode", m);
+  }
 
   useEffect(() => {
     try {
@@ -207,6 +184,7 @@ export default function EstimatesPage() {
       faction: army.faction,
       detachments: army.detachments,
       disposition: army.disposition ?? null,
+      ...(army.player ? { player: army.player } : {}),
     };
     if (old?.units && old.faction === army.faction) list.units = old.units;
     updateOpponentList(slug, idx, list)
@@ -250,7 +228,29 @@ export default function EstimatesPage() {
             Estimater
             <span className="text-[#4ade80] ml-2 text-sm font-normal">— {TEAM_NAME}</span>
           </h1>
-          <span className="ml-auto text-[11px] text-[#8888a0]">
+          <div className="flex gap-1 ml-auto">
+            <button
+              onClick={() => switchMode("country")}
+              className={`text-[11px] px-2.5 py-1 rounded-md transition-colors ${
+                mode === "country"
+                  ? "bg-[#a855f7] text-white"
+                  : "bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0]"
+              }`}
+            >
+              Pr. land
+            </button>
+            <button
+              onClick={() => switchMode("player")}
+              className={`text-[11px] px-2.5 py-1 rounded-md transition-colors ${
+                mode === "player"
+                  ? "bg-[#a855f7] text-white"
+                  : "bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0]"
+              }`}
+            >
+              Min hær
+            </button>
+          </div>
+          <span className="text-[11px] text-[#8888a0] hidden sm:inline">
             {totals.teams} hold · {totals.manual} manuelle · {totals.auto} auto
           </span>
         </div>
@@ -286,7 +286,16 @@ export default function EstimatesPage() {
           </div>
         )}
 
-        {tiers.map((tier) => (
+        {mode === "player" && ourArmies.length > 0 && (
+          <PlayerEstimates
+            opponents={opponents}
+            ourArmies={ourArmies}
+            playedRounds={playedRounds}
+            onSet={setEstimate}
+          />
+        )}
+
+        {mode === "country" && tiers.map((tier) => (
           <div key={tier.name} className="rounded-xl border border-white/[0.08] p-4">
             <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-3">
               {tier.name}
@@ -478,6 +487,7 @@ export default function EstimatesPage() {
         ))}
 
         {/* Add team outside seeding */}
+        {mode === "country" && (
         <div className="rounded-xl border border-dashed border-white/[0.08] p-4">
           <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-2">
             Tilføj hold uden for seeding
@@ -528,6 +538,7 @@ export default function EstimatesPage() {
             </div>
           )}
         </div>
+        )}
       </div>
     </>
   );

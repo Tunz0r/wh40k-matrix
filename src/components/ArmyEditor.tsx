@@ -18,6 +18,7 @@ export default function ArmyEditor({
   const [faction, setFaction] = useState(initial.faction);
   const [detachments, setDetachments] = useState<string[]>(initial.detachments || []);
   const [disposition, setDisposition] = useState<Disposition | null>(initial.disposition ?? null);
+  const [player, setPlayer] = useState(initial.player || "");
 
   const factionDets = FACTIONS[faction] || [];
 
@@ -101,9 +102,22 @@ export default function ArmyEditor({
         </select>
       </div>
 
+      <div>
+        <label className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold block mb-1">
+          Spiller (valgfri)
+        </label>
+        <input
+          type="text"
+          value={player}
+          onChange={(e) => setPlayer(e.target.value)}
+          placeholder="Spillerens navn"
+          className="w-full bg-[#1a1a22] border border-white/[0.14] rounded-md px-2 py-1.5 text-[12px] text-[#e8e8f0] placeholder:text-[#8888a0] outline-none focus:border-[#a855f7]"
+        />
+      </div>
+
       <div className="flex gap-2 pt-1">
         <button
-          onClick={() => onSave({ faction, detachments, disposition })}
+          onClick={() => onSave({ faction, detachments, disposition, ...(player.trim() ? { player: player.trim() } : {}) })}
           disabled={detachments.length === 0}
           className="text-[11px] font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] px-3 py-1.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >

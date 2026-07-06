@@ -146,6 +146,43 @@ export function listSimilarity(a: OpponentList, b: OpponentList): number {
   return 40 + 40 * detScore + (sameDisp ? 20 : 0);
 }
 
+// --- Archetype clustering ---
+// Groups every list in the field into clusters of ≥threshold similarity, so a
+// player estimates ~50 archetypes instead of ~400 individual lists.
+export interface ClusterMember {
+  teamSlug: string;
+  teamName: string;
+  tier: string;
+  listIdx: number;
+  list: OpponentList;
+}
+
+export interface ListCluster {
+  rep: ClusterMember;
+  members: ClusterMember[]; // includes rep
+}
+
+export function clusterLists(opponents: OpponentMap): ListCluster[] {
+  const clusters: ListCluster[] = [];
+  for (const [slug, team] of Object.entries(opponents)) {
+    (team.armies || []).forEach((list, idx) => {
+      const member: ClusterMember = {
+        teamSlug: slug,
+        teamName: team.name,
+        tier: team.tier || "",
+        listIdx: idx,
+        list,
+      };
+      const home = clusters.find(
+        (c) => listSimilarity(c.rep.list, list) >= SIMILARITY_THRESHOLD
+      );
+      if (home) home.members.push(member);
+      else clusters.push({ rep: member, members: [member] });
+    });
+  }
+  return clusters;
+}
+
 // Look up the best estimate for one of our armies vs an arbitrary opponent list.
 // Prefers the named team's own stored lists, then falls back to the most
 // similar list (≥ threshold) anywhere in the field.

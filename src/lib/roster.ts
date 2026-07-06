@@ -4,6 +4,7 @@ export interface RosterArmy {
   faction: string;
   detachments: string[];
   disposition: Disposition | null;
+  player?: string;
 }
 
 export interface RosterExport {
