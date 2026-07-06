@@ -25,9 +25,11 @@ import {
 import { TEAM_SLUG, TEAM_NAME, TOTAL_ROUNDS } from "@/lib/team";
 import {
   type OpponentMap,
+  type OpponentTeam,
   subscribeToOpponents,
   lookupEstimate,
   estimateStyle,
+  slugifyTeam,
 } from "@/lib/estimates-db";
 
 // --- Types ---
@@ -527,6 +529,54 @@ export default function TournamentPage() {
     }
     return [...map.values()].sort((a, b) => a.number - b.number);
   }, [fbRounds, tournament.rounds]);
+
+  // Country picker for new rounds: seeding tiers + estimate teams outside seeding.
+  // Countries without stored lists or already played are disabled.
+  const opponentChoices = useMemo(() => {
+    const played = new Map<string, number>();
+    for (const r of fbRounds) {
+      if ((r.status === "live" || r.status === "completed") && r.opponentName) {
+        const s = slugifyTeam(r.opponentName);
+        if (!played.has(s)) played.set(s, r.number);
+      }
+    }
+    const tiers = (tournament.seedingTiers || []).map((t) => ({
+      name: t.name,
+      teams: (t.teams || []).filter(
+        (team) => !TEAM_NAME.toLowerCase().includes(team.toLowerCase())
+      ),
+    }));
+    const seeded = new Set(tiers.flatMap((t) => t.teams.map((x) => slugifyTeam(x))));
+    const others = Object.values(opponents)
+      .filter((t) => !seeded.has(slugifyTeam(t.name)))
+      .map((t) => t.name);
+    return [...tiers, { name: "Andre hold", teams: others }]
+      .map((g) => ({
+        name: g.name,
+        teams: g.teams.map((name) => {
+          const slug = slugifyTeam(name);
+          return {
+            name,
+            slug,
+            hasLists: !!opponents[slug]?.armies?.length,
+            playedRound: played.get(slug),
+          };
+        }),
+      }))
+      .filter((g) => g.teams.length > 0);
+  }, [tournament.seedingTiers, opponents, fbRounds]);
+
+  function pickOpponent(team: OpponentTeam) {
+    setOpponentRoster({
+      v: 1,
+      name: team.name,
+      armies: (team.armies || []).map((a) => ({
+        faction: a.faction,
+        detachments: a.detachments || [],
+        disposition: a.disposition ?? null,
+      })),
+    });
+  }
 
   const pairedA = useMemo(
     () => new Set(matchups.map((m) => tournament.roster?.armies.indexOf(m.a)).filter((i): i is number => i !== undefined && i >= 0)),
@@ -1187,10 +1237,10 @@ export default function TournamentPage() {
         {view === "round-opponent" && tournament.roster && (
           <div>
             <h2 className="text-sm font-semibold text-[#e8e8f0] mb-1">
-              Runde {currentRoundNumber} — Importér modstander
+              Runde {currentRoundNumber} — Vælg modstander
             </h2>
             <p className="text-[11px] text-[#8888a0] mb-4">
-              Importér modstanderens roster for at starte pairing-processen.
+              Vælg det land I møder — lists hentes fra estimat-databasen.
             </p>
 
             <div className="grid md:grid-cols-2 gap-6">
@@ -1228,18 +1278,74 @@ export default function TournamentPage() {
                   </>
                 ) : (
                   <div>
-                    <textarea
-                      value={opponentImportText}
-                      onChange={(e) => setOpponentImportText(e.target.value)}
-                      placeholder="Indsæt modstanderens roster-kode..."
-                      className="w-full h-20 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-3 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
-                    />
-                    <button
-                      onClick={importOpponent}
-                      className="mt-2 text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] bg-[rgba(168,85,247,0.1)] px-3 py-1.5 rounded-md border border-[rgba(168,85,247,0.2)] transition-colors"
-                    >
-                      Importér roster
-                    </button>
+                    <div className="space-y-3">
+                      {opponentChoices.map((group) => (
+                        <div key={group.name}>
+                          <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold mb-1">
+                            {group.name}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {group.teams.map((t) => {
+                              const disabled = !t.hasLists || t.playedRound !== undefined;
+                              return (
+                                <button
+                                  key={t.slug}
+                                  disabled={disabled}
+                                  onClick={() => pickOpponent(opponents[t.slug])}
+                                  title={
+                                    t.playedRound !== undefined
+                                      ? `Spillet i runde ${t.playedRound}`
+                                      : !t.hasLists
+                                        ? "Ingen lists — tilføj under Estimater"
+                                        : `Vælg ${t.name}`
+                                  }
+                                  className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
+                                    t.playedRound !== undefined
+                                      ? "border-white/[0.06] text-[#8888a0] line-through opacity-50 cursor-not-allowed"
+                                      : !t.hasLists
+                                        ? "border-white/[0.06] text-[#8888a0] opacity-40 cursor-not-allowed"
+                                        : "border-white/[0.14] text-[#e8e8f0] hover:border-[#a855f7] hover:text-[#c084fc] cursor-pointer"
+                                  }`}
+                                >
+                                  {t.name}
+                                  {t.playedRound !== undefined && (
+                                    <span className="ml-1 text-[9px] no-underline">R{t.playedRound}</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                      {opponentChoices.length === 0 && (
+                        <p className="text-[11px] text-[#8888a0]">
+                          Ingen hold fundet — tilføj seeding på oversigten og lists under Estimater.
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-[#8888a0] mt-3">
+                      Nedtonede hold mangler lists —{" "}
+                      <Link href="/estimates" className="text-[#a855f7] hover:text-[#c084fc]">
+                        tilføj dem under Estimater →
+                      </Link>
+                    </p>
+                    <details className="mt-3">
+                      <summary className="text-[10px] text-[#8888a0] cursor-pointer hover:text-[#e8e8f0] select-none">
+                        Importér roster-kode manuelt...
+                      </summary>
+                      <textarea
+                        value={opponentImportText}
+                        onChange={(e) => setOpponentImportText(e.target.value)}
+                        placeholder="Indsæt modstanderens roster-kode..."
+                        className="mt-2 w-full h-20 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-3 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
+                      />
+                      <button
+                        onClick={importOpponent}
+                        className="mt-2 text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] bg-[rgba(168,85,247,0.1)] px-3 py-1.5 rounded-md border border-[rgba(168,85,247,0.2)] transition-colors"
+                      >
+                        Importér roster
+                      </button>
+                    </details>
                   </div>
                 )}
               </div>
