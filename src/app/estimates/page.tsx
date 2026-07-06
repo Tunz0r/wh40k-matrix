@@ -244,14 +244,7 @@ export default function EstimatesPage() {
 
   return (
     <>
-      <header className="px-4 sm:px-6 py-4 border-b border-white/[0.08] sticky top-0 bg-[#0f0f13] z-20">
-        <div className="flex items-center gap-2 text-xs text-[#8888a0] mb-1">
-          <Link href="/" className="hover:text-[#e8e8f0] transition-colors">Matrix</Link>
-          <span>/</span>
-          <Link href="/tournament" className="hover:text-[#e8e8f0] transition-colors">Turnering</Link>
-          <span>/</span>
-          <span className="text-[#e8e8f0]">Estimater</span>
-        </div>
+      <header className="px-4 sm:px-6 py-4 border-b border-white/[0.08] sticky top-12 bg-[#0f0f13] z-20">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
             Estimater

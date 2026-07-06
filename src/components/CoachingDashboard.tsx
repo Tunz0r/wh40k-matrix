@@ -124,18 +124,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
   return (
     <>
       {!embedded && (
-        <header className="px-4 sm:px-6 py-4 border-b border-white/[0.08] sticky top-0 bg-[#0f0f13] z-20">
-          <div className="flex items-center gap-2 text-xs text-[#8888a0] mb-1">
-            <Link href="/" className="hover:text-[#e8e8f0] transition-colors">
-              Matrix
-            </Link>
-            <span>/</span>
-            <Link href="/tournament" className="hover:text-[#e8e8f0] transition-colors">
-              Turnering
-            </Link>
-            <span>/</span>
-            <span className="text-[#e8e8f0]">Coaching</span>
-          </div>
+        <header className="px-4 sm:px-6 py-4 border-b border-white/[0.08] sticky top-12 bg-[#0f0f13] z-20">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-base font-semibold text-[#e8e8f0]">
               {session.teamAName} vs {session.teamBName}
@@ -197,7 +186,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
       )}
 
       {/* Scoreboard */}
-      <div className={embedded ? "mb-4" : "px-4 sm:px-6 sticky top-0 bg-[#0f0f13] z-10"}>
+      <div className={embedded ? "mb-4" : "px-4 sm:px-6 sticky top-12 bg-[#0f0f13] z-10"}>
         <div className={`flex items-center gap-4 bg-[#1a1a22] rounded-lg p-3 border border-white/[0.08] ${!embedded ? "mt-3" : ""}`}>
           <div className={`flex-1 text-center ${result === "A" ? "" : "opacity-60"}`}>
             <div className="text-[10px] text-[#4ade80] uppercase tracking-wider font-semibold">
