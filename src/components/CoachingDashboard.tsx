@@ -259,7 +259,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
             <button
               onClick={() => {
                 if (!confirm(`Afslut runde ${roundNumber}? Alle kampe er færdige.`)) return;
-                updateRoundStatus(teamSlug, roundNumber, "completed").then(() => {
+                updateRoundStatus(teamSlug, roundNumber, "completed", { us: teamABP, them: teamBBP }).then(() => {
                   onRoundCompleted?.();
                 }).catch(() => {});
               }}

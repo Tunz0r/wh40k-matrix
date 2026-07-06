@@ -319,21 +319,33 @@ function EstimateMatrix({
   oppName,
   ourArmies,
   theirArmies,
+  hiddenOur,
+  hiddenTheir,
 }: {
   opponents: OpponentMap;
   oppName: string | null | undefined;
   ourArmies: RosterArmy[];
   theirArmies: RosterArmy[];
+  hiddenOur?: Set<number>;
+  hiddenTheir?: Set<number>;
 }) {
   const short = (s: string) => (s.length > 13 ? s.slice(0, 12) + "…" : s);
-  const values = ourArmies.map((_, i) =>
-    theirArmies.map((list) => lookupEstimate(opponents, oppName, i, list))
-  );
-  const hasAny = values.some((row) => row.some((v) => v !== null));
+  const ourIdxs = ourArmies.map((_, i) => i).filter((i) => !hiddenOur?.has(i));
+  const theirIdxs = theirArmies.map((_, j) => j).filter((j) => !hiddenTheir?.has(j));
+  const hiddenCount = ourArmies.length - ourIdxs.length + (theirArmies.length - theirIdxs.length);
+  const values = new Map<string, number | null>();
+  for (const i of ourIdxs)
+    for (const j of theirIdxs)
+      values.set(`${i}_${j}`, lookupEstimate(opponents, oppName, i, theirArmies[j]));
+  const hasAny = [...values.values()].some((v) => v !== null);
+  if (ourIdxs.length === 0 || theirIdxs.length === 0) return null;
   return (
     <details open className="rounded-xl border border-white/[0.08] mb-4 bg-[#131318]">
       <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold text-[#a855f7] select-none">
         Estimat-matrix
+        {hiddenCount > 0 && (
+          <span className="text-[#8888a0] font-normal ml-2">— parrede hære er skjult</span>
+        )}
         {!hasAny && (
           <span className="text-[#8888a0] font-normal ml-2">
             — ingen estimater fundet. Udfyld dem under{" "}
@@ -348,28 +360,28 @@ function EstimateMatrix({
               <th className="text-left text-[9px] text-[#8888a0] font-semibold pr-2">
                 Vores \ Deres
               </th>
-              {theirArmies.map((list, j) => (
+              {theirIdxs.map((j) => (
                 <th
                   key={j}
                   className="text-[9px] text-[#8888a0] font-semibold w-12 max-w-12 truncate px-0.5"
-                  title={`${list.faction} — ${(list.detachments || []).join(", ")}`}
+                  title={`${theirArmies[j].faction} — ${(theirArmies[j].detachments || []).join(", ")}`}
                 >
-                  {j + 1}. {short(list.faction)}
+                  {j + 1}. {short(theirArmies[j].faction)}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {ourArmies.map((army, i) => (
+            {ourIdxs.map((i) => (
               <tr key={i}>
                 <th
                   className="text-left text-[10px] text-[#e8e8f0] font-medium pr-2 whitespace-nowrap"
-                  title={`${army.faction} — ${(army.detachments || []).join(", ")}`}
+                  title={`${ourArmies[i].faction} — ${(ourArmies[i].detachments || []).join(", ")}`}
                 >
-                  {i + 1}. {short(army.faction)}
+                  {i + 1}. {short(ourArmies[i].faction)}
                 </th>
-                {theirArmies.map((_, j) => {
-                  const v = values[i][j];
+                {theirIdxs.map((j) => {
+                  const v = values.get(`${i}_${j}`) ?? null;
                   const s = v !== null ? estimateStyle(v) : null;
                   return (
                     <td key={j}>
@@ -493,13 +505,14 @@ export default function TournamentPage() {
   // Rounds to display: union of localStorage rounds (rich data) and Firebase rounds
   // (covers rounds started from another device or test sessions)
   const displayRounds = useMemo(() => {
-    const map = new Map<number, { number: number; opponentName: string; sessionUrl: string | null; status: string }>();
+    const map = new Map<number, { number: number; opponentName: string; sessionUrl: string | null; status: string; score?: { us: number; them: number } }>();
     for (const r of fbRounds) {
       map.set(r.number, {
         number: r.number,
         opponentName: r.opponentName,
         sessionUrl: r.sessionId ? `/coaching/${r.sessionId}` : null,
         status: r.status,
+        score: r.score,
       });
     }
     for (const r of tournament.rounds) {
@@ -509,17 +522,18 @@ export default function TournamentPage() {
         opponentName: r.opponentName || existing?.opponentName || "",
         sessionUrl: r.sessionUrl ?? existing?.sessionUrl ?? null,
         status: existing?.status ?? "completed",
+        score: existing?.score,
       });
     }
     return [...map.values()].sort((a, b) => a.number - b.number);
   }, [fbRounds, tournament.rounds]);
 
   const pairedA = useMemo(
-    () => new Set(matchups.map((m) => tournament.roster?.armies.indexOf(m.a)).filter((i) => i !== undefined && i >= 0)),
+    () => new Set(matchups.map((m) => tournament.roster?.armies.indexOf(m.a)).filter((i): i is number => i !== undefined && i >= 0)),
     [matchups, tournament.roster]
   );
   const pairedB = useMemo(
-    () => new Set(matchups.map((m) => opponentRoster?.armies.indexOf(m.b)).filter((i) => i !== undefined && i >= 0)),
+    () => new Set(matchups.map((m) => opponentRoster?.armies.indexOf(m.b)).filter((i): i is number => i !== undefined && i >= 0)),
     [matchups, opponentRoster]
   );
 
@@ -1047,6 +1061,11 @@ export default function TournamentPage() {
                       <span className="text-[12px] text-[#e8e8f0] flex-1 min-w-0 truncate">
                         vs {r.opponentName || "?"}
                       </span>
+                      {r.score && (
+                        <span className={`text-[11px] font-bold shrink-0 ${r.score.us > r.score.them ? "text-[#4ade80]" : r.score.us < r.score.them ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+                          {r.score.us}–{r.score.them}
+                        </span>
+                      )}
                       {r.status === "live" && (
                         <span className="text-[9px] font-semibold text-[#4ade80] bg-[rgba(34,197,94,0.1)] px-2 py-0.5 rounded-full animate-pulse shrink-0">
                           LIVE
@@ -1256,6 +1275,8 @@ export default function TournamentPage() {
               oppName={opponentRoster.name}
               ourArmies={tournament.roster.armies}
               theirArmies={opponentRoster.armies}
+              hiddenOur={pairedA}
+              hiddenTheir={pairedB}
             />
 
             {/* Defender selection */}

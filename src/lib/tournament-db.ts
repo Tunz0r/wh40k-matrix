@@ -9,6 +9,8 @@ export interface TournamentRound {
   opponentName: string;
   sessionId: string | null;
   status: RoundStatus;
+  // Final team BP score, recorded when the round is completed from coaching
+  score?: { us: number; them: number };
 }
 
 export interface SeedingTier {
@@ -85,7 +87,8 @@ export async function setActiveSession(
 export async function updateRoundStatus(
   slug: string,
   roundNumber: number,
-  status: RoundStatus
+  status: RoundStatus,
+  score?: { us: number; them: number }
 ): Promise<void> {
   const tournamentRef = ref(getDb(), `tournaments/${slug}`);
   const snapshot = await get(tournamentRef);
@@ -95,9 +98,9 @@ export async function updateRoundStatus(
   const rounds = (doc.rounds || []).slice();
   const existing = rounds.findIndex((r) => r.number === roundNumber);
   if (existing >= 0) {
-    rounds[existing] = { ...rounds[existing], status };
+    rounds[existing] = { ...rounds[existing], status, ...(score ? { score } : {}) };
   } else {
-    rounds.push({ number: roundNumber, opponentName: "", sessionId: null, status });
+    rounds.push({ number: roundNumber, opponentName: "", sessionId: null, status, ...(score ? { score } : {}) });
   }
 
   const updates: Partial<TournamentDoc> = { rounds };

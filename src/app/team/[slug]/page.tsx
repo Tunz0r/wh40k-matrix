@@ -175,6 +175,11 @@ export default function TeamRoomPage() {
                     <span className="text-[12px] text-[#e8e8f0]">
                       vs {r.opponentName}
                     </span>
+                    {r.score && (
+                      <span className={`text-[11px] font-bold ${r.score.us > r.score.them ? "text-[#4ade80]" : r.score.us < r.score.them ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+                        {r.score.us}–{r.score.them}
+                      </span>
+                    )}
                     {r.sessionId && (
                       <Link
                         href={`/coaching/${r.sessionId}`}

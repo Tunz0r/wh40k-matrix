@@ -10,10 +10,16 @@ export interface EstimateCell {
   auto?: boolean;
 }
 
+// An opponent list: faction/detachments/disposition metadata, optionally with
+// parsed list content (unit names, duplicates allowed) once WTC lists drop.
+export interface OpponentList extends RosterArmy {
+  units?: string[];
+}
+
 export interface OpponentTeam {
   name: string;
   tier: string;
-  armies: RosterArmy[];
+  armies: OpponentList[];
   // key `${ourIdx}_${theirIdx}` → cell
   estimates?: Record<string, EstimateCell>;
 }
@@ -22,9 +28,12 @@ export type OpponentMap = Record<string, OpponentTeam>;
 
 const BASE = `estimates/${TEAM_SLUG}`;
 
+// "Team Sweden" and "Sweden" must map to the same slug — round opponent names
+// come from imported rosters while estimate teams use seeding country names.
 export function slugifyTeam(name: string): string {
   return name
     .toLowerCase()
+    .replace(/^team\s+/i, "")
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
@@ -64,22 +73,55 @@ export async function writeEstimateCells(
 }
 
 // --- List similarity ---
-// Lists only carry faction + detachments + disposition, so similarity is:
-// same faction 40, detachment overlap up to 40 (Jaccard), same disposition 20.
-// 80+ ⇒ "same list" for estimate purposes (e.g. same faction+detachments
-// with a different disposition scores exactly 80).
+// Two modes, both gated on same faction:
+//
+// With parsed list content (units) on both sides, what's IN the lists matters
+// far more than the disposition: faction 30 + unit overlap up to 50
+// (Sørensen–Dice on unit names, duplicates counted) + detachment overlap 15 +
+// same disposition 5.
+//
+// Metadata-only fallback (no unit data yet): faction 40 + detachment overlap
+// up to 40 + same disposition 20 — same faction+detachments with a different
+// disposition scores exactly 80.
+//
+// 80+ ⇒ "same list" for estimate purposes.
 export const SIMILARITY_THRESHOLD = 80;
 
-export function listSimilarity(a: RosterArmy, b: RosterArmy): number {
+function unitOverlap(a: string[], b: string[]): number {
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const pool = new Map<string, number>();
+  for (const u of a) {
+    const k = norm(u);
+    pool.set(k, (pool.get(k) || 0) + 1);
+  }
+  let inter = 0;
+  for (const u of b) {
+    const k = norm(u);
+    const c = pool.get(k) || 0;
+    if (c > 0) {
+      inter++;
+      pool.set(k, c - 1);
+    }
+  }
+  return (2 * inter) / (a.length + b.length);
+}
+
+export function listSimilarity(a: OpponentList, b: OpponentList): number {
   if (a.faction !== b.faction) return 0;
-  let score = 40;
+
   const aDets = a.detachments || [];
-  const bDets = new Set(b.detachments || []);
-  const unionSize = new Set([...aDets, ...bDets]).size;
-  const inter = aDets.filter((d) => bDets.has(d)).length;
-  score += unionSize ? (40 * inter) / unionSize : 40;
-  if ((a.disposition ?? null) === (b.disposition ?? null)) score += 20;
-  return score;
+  const bDetSet = new Set(b.detachments || []);
+  const detUnion = new Set([...aDets, ...bDetSet]).size;
+  const detInter = aDets.filter((d) => bDetSet.has(d)).length;
+  const detScore = detUnion ? detInter / detUnion : 1;
+  const sameDisp = (a.disposition ?? null) === (b.disposition ?? null);
+
+  const aUnits = a.units || [];
+  const bUnits = b.units || [];
+  if (aUnits.length > 0 && bUnits.length > 0) {
+    return 30 + 50 * unitOverlap(aUnits, bUnits) + 15 * detScore + (sameDisp ? 5 : 0);
+  }
+  return 40 + 40 * detScore + (sameDisp ? 20 : 0);
 }
 
 // Look up the best estimate for one of our armies vs an arbitrary opponent list.
@@ -89,7 +131,7 @@ export function lookupEstimate(
   opponents: OpponentMap,
   opponentName: string | null | undefined,
   ourIdx: number,
-  theirList: RosterArmy
+  theirList: OpponentList
 ): number | null {
   const preferredSlug = opponentName ? slugifyTeam(opponentName) : null;
   let best: { sim: number; v: number; preferred: boolean } | null = null;

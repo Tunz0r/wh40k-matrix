@@ -28,9 +28,11 @@ function shortFaction(name: string): string {
 function EstimateInput({
   cell,
   onChange,
+  locked,
 }: {
   cell: EstimateCell | undefined;
   onChange: (v: number | null) => void;
+  locked?: boolean;
 }) {
   const style = cell ? estimateStyle(cell.v) : null;
   return (
@@ -40,17 +42,18 @@ function EstimateInput({
         min={0}
         max={20}
         value={cell?.v ?? ""}
+        disabled={locked}
         onChange={(e) => {
           if (e.target.value === "") { onChange(null); return; }
           onChange(Math.max(0, Math.min(20, Number(e.target.value) || 0)));
         }}
-        className={`w-11 h-9 text-center text-[13px] font-bold rounded border outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${cell?.auto ? "opacity-70" : ""}`}
+        className={`w-11 h-9 text-center text-[13px] font-bold rounded border outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${cell?.auto ? "opacity-70" : ""} ${locked ? "cursor-not-allowed opacity-60" : ""}`}
         style={
           style
             ? { background: style.bg, color: style.fg, borderColor: style.border }
             : { background: "#1a1a22", color: "#e8e8f0", borderColor: "rgba(255,255,255,0.14)" }
         }
-        title={cell?.auto ? "Auto-udfyldt fra lignende liste — skriv for at overstyre" : undefined}
+        title={locked ? "Låst — holdet er allerede spillet" : cell?.auto ? "Auto-udfyldt fra lignende liste — skriv for at overstyre" : undefined}
       />
       {cell?.auto && (
         <span className="absolute top-0.5 right-1 text-[8px] text-[#8888a0] pointer-events-none">a</span>
@@ -79,6 +82,19 @@ export default function EstimatesPage() {
     () => fbDoc?.roster?.armies || [],
     [fbDoc]
   );
+
+  // Opponents we've already played (round live or completed) are locked:
+  // their estimates are the historical record and can't be changed.
+  const playedRounds = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of fbDoc?.rounds || []) {
+      if ((r.status === "live" || r.status === "completed") && r.opponentName) {
+        const slug = slugifyTeam(r.opponentName);
+        if (!map.has(slug)) map.set(slug, r.number);
+      }
+    }
+    return map;
+  }, [fbDoc]);
 
   // Seeding tiers drive the grouping; stored teams not in seeding go under "Andre hold".
   const tiers = useMemo(() => {
@@ -136,10 +152,11 @@ export default function EstimatesPage() {
 
   function confirmImport() {
     if (!importFor) return;
+    const slug = slugifyTeam(importFor.name);
+    if (playedRounds.has(slug)) { alert("Holdet er allerede spillet — lists og estimater er låst."); return; }
     const roster = deserializeRoster(importText.trim());
     if (!roster) { alert("Ugyldigt roster format"); return; }
     if (roster.armies.length !== 8) { alert(`Roster skal have 8 hære (fandt ${roster.armies.length})`); return; }
-    const slug = slugifyTeam(importFor.name);
     const team: OpponentTeam = {
       name: importFor.name,
       tier: importFor.tier,
@@ -154,13 +171,16 @@ export default function EstimatesPage() {
 
   // Manual estimate + propagation: every list ≥80% similar (whole field) gets the
   // same value for the same one of our armies, unless it was set manually.
+  // Played opponents are never written to — their estimates are locked history.
   function setEstimate(teamSlug: string, ourIdx: number, theirIdx: number, value: number | null) {
+    if (playedRounds.has(teamSlug)) return;
     const updates: Record<string, EstimateCell | null> = {};
     updates[`${teamSlug}/${ourIdx}_${theirIdx}`] = value === null ? null : { v: value };
     if (value !== null) {
       const srcList = opponents[teamSlug]?.armies?.[theirIdx];
       if (srcList) {
         for (const [slug, team] of Object.entries(opponents)) {
+          if (playedRounds.has(slug)) continue;
           (team.armies || []).forEach((list, j) => {
             if (slug === teamSlug && j === theirIdx) return;
             if (listSimilarity(srcList, list) < SIMILARITY_THRESHOLD) return;
@@ -244,10 +264,17 @@ export default function EstimatesPage() {
                 const cellCount = Object.keys(team?.estimates || {}).length;
                 const totalCells = hasLists ? ourArmies.length * team.armies.length : 0;
                 const isOpen = expanded === slug;
+                const playedRound = playedRounds.get(slug);
+                const locked = playedRound !== undefined;
                 return (
                   <div key={slug} className="rounded-lg border border-white/[0.08]">
                     <div className="flex items-center gap-3 p-3">
                       <span className="text-[12px] font-semibold text-[#e8e8f0]">{teamName}</span>
+                      {locked && (
+                        <span className="text-[9px] font-semibold text-[#8888a0] bg-[#22222e] px-1.5 py-0.5 rounded" title="Estimater er låst — holdet er allerede spillet">
+                          🔒 Spillet · Runde {playedRound}
+                        </span>
+                      )}
                       {hasLists ? (
                         <>
                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${cellCount >= totalCells ? "bg-[rgba(34,197,94,0.12)] text-[#4ade80]" : "bg-[#22222e] text-[#8888a0]"}`}>
@@ -259,18 +286,22 @@ export default function EstimatesPage() {
                           >
                             {isOpen ? "Luk matrix" : "Åbn matrix"}
                           </button>
-                          <button
-                            onClick={() => setImportFor({ name: teamName, tier: tier.name })}
-                            className="text-[10px] text-[#8888a0] hover:text-[#e8e8f0] transition-colors"
-                          >
-                            Opdater lists
-                          </button>
-                          <button
-                            onClick={() => removeTeam(slug, teamName)}
-                            className="text-[10px] text-red-400 hover:text-red-300 transition-colors"
-                          >
-                            Slet
-                          </button>
+                          {!locked && (
+                            <>
+                              <button
+                                onClick={() => setImportFor({ name: teamName, tier: tier.name })}
+                                className="text-[10px] text-[#8888a0] hover:text-[#e8e8f0] transition-colors"
+                              >
+                                Opdater lists
+                              </button>
+                              <button
+                                onClick={() => removeTeam(slug, teamName)}
+                                className="text-[10px] text-red-400 hover:text-red-300 transition-colors"
+                              >
+                                Slet
+                              </button>
+                            </>
+                          )}
                         </>
                       ) : (
                         <button
@@ -340,6 +371,7 @@ export default function EstimatesPage() {
                                     <EstimateInput
                                       cell={team.estimates?.[`${i}_${j}`]}
                                       onChange={(v) => setEstimate(slug, i, j, v)}
+                                      locked={locked}
                                     />
                                   </td>
                                 ))}
