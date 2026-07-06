@@ -23,6 +23,12 @@ import {
   type TournamentDoc,
 } from "@/lib/tournament-db";
 import { TEAM_SLUG, TEAM_NAME, TOTAL_ROUNDS } from "@/lib/team";
+import {
+  type OpponentMap,
+  subscribeToOpponents,
+  lookupEstimate,
+  estimateStyle,
+} from "@/lib/estimates-db";
 
 // --- Types ---
 
@@ -308,6 +314,88 @@ const PHASE_LABELS: Record<PairingPhase, string> = {
   "main-choice": "Main Engagement — Vælg matchup",
 };
 
+function EstimateMatrix({
+  opponents,
+  oppName,
+  ourArmies,
+  theirArmies,
+}: {
+  opponents: OpponentMap;
+  oppName: string | null | undefined;
+  ourArmies: RosterArmy[];
+  theirArmies: RosterArmy[];
+}) {
+  const short = (s: string) => (s.length > 13 ? s.slice(0, 12) + "…" : s);
+  const values = ourArmies.map((_, i) =>
+    theirArmies.map((list) => lookupEstimate(opponents, oppName, i, list))
+  );
+  const hasAny = values.some((row) => row.some((v) => v !== null));
+  return (
+    <details open className="rounded-xl border border-white/[0.08] mb-4 bg-[#131318]">
+      <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold text-[#a855f7] select-none">
+        Estimat-matrix
+        {!hasAny && (
+          <span className="text-[#8888a0] font-normal ml-2">
+            — ingen estimater fundet. Udfyld dem under{" "}
+            <Link href="/estimates" className="underline">Estimater</Link>.
+          </span>
+        )}
+      </summary>
+      <div className="px-3 pb-3 overflow-x-auto">
+        <table className="border-separate border-spacing-1">
+          <thead>
+            <tr>
+              <th className="text-left text-[9px] text-[#8888a0] font-semibold pr-2">
+                Vores \ Deres
+              </th>
+              {theirArmies.map((list, j) => (
+                <th
+                  key={j}
+                  className="text-[9px] text-[#8888a0] font-semibold w-12 max-w-12 truncate px-0.5"
+                  title={`${list.faction} — ${(list.detachments || []).join(", ")}`}
+                >
+                  {j + 1}. {short(list.faction)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {ourArmies.map((army, i) => (
+              <tr key={i}>
+                <th
+                  className="text-left text-[10px] text-[#e8e8f0] font-medium pr-2 whitespace-nowrap"
+                  title={`${army.faction} — ${(army.detachments || []).join(", ")}`}
+                >
+                  {i + 1}. {short(army.faction)}
+                </th>
+                {theirArmies.map((_, j) => {
+                  const v = values[i][j];
+                  const s = v !== null ? estimateStyle(v) : null;
+                  return (
+                    <td key={j}>
+                      <div
+                        className="w-12 h-8 rounded border flex items-center justify-center text-[12px] font-bold"
+                        style={
+                          s
+                            ? { background: s.bg, color: s.fg, borderColor: s.border }
+                            : { background: "#1a1a22", color: "#44445a", borderColor: "rgba(255,255,255,0.06)" }
+                        }
+                        title={s ? `${v} — ${s.label}` : "Intet estimat"}
+                      >
+                        {v !== null ? v : "—"}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
 // --- Main Component ---
 
 export default function TournamentPage() {
@@ -358,6 +446,14 @@ export default function TournamentPage() {
   useEffect(() => {
     try {
       return subscribeToTournament(TEAM_SLUG, setFbDoc);
+    } catch {}
+  }, []);
+
+  // Estimates database (opponent teams + 8×8 estimates) for the pairing matrix
+  const [opponents, setOpponents] = useState<OpponentMap>({});
+  useEffect(() => {
+    try {
+      return subscribeToOpponents(setOpponents);
     } catch {}
   }, []);
 
@@ -554,6 +650,8 @@ export default function TournamentPage() {
     const armiesA = tournament.roster.armies;
     const armiesB = opponentRoster.armies;
     const moduleName = currentModuleName();
+    const prefill = (ourIdx: number, theirIdx: number) =>
+      lookupEstimate(opponents, opponentRoster.name, ourIdx, armiesB[theirIdx]) ?? 0;
 
     const m1: Matchup = {
       a: armiesA[defenderA!],
@@ -561,7 +659,7 @@ export default function TournamentPage() {
       module: moduleName,
       aIsDefender: true,
       layoutPage: getLayoutPage(armiesA[defenderA!].disposition, armiesB[choiceA!].disposition, layoutChoiceA),
-      estimate: 0,
+      estimate: prefill(defenderA!, choiceA!),
     };
     const m2: Matchup = {
       a: armiesA[choiceB!],
@@ -569,7 +667,7 @@ export default function TournamentPage() {
       module: moduleName,
       aIsDefender: false,
       layoutPage: getLayoutPage(armiesA[choiceB!].disposition, armiesB[defenderB!].disposition, layoutChoiceB),
-      estimate: 0,
+      estimate: prefill(choiceB!, defenderB!),
     };
 
     const newMatchups = [...matchups, m1, m2];
@@ -583,7 +681,7 @@ export default function TournamentPage() {
         module: "Main Engagement (Refused)",
         aIsDefender: false,
         layoutPage: getLayoutPage(armiesA[refusedA].disposition, armiesB[refusedB].disposition, roundLayout),
-        estimate: 0,
+        estimate: prefill(refusedA, refusedB),
       };
       newMatchups.push(m3);
     }
@@ -598,16 +696,16 @@ export default function TournamentPage() {
     } else if (pairingPhase.startsWith("main")) {
       const usedA = new Set(newMatchups.map((m) => armiesA.indexOf(m.a)));
       const usedB = new Set(newMatchups.map((m) => armiesB.indexOf(m.b)));
-      const champA = armiesA.find((_, i) => !usedA.has(i));
-      const champB = armiesB.find((_, i) => !usedB.has(i));
-      if (champA && champB) {
+      const champAIdx = armiesA.findIndex((_, i) => !usedA.has(i));
+      const champBIdx = armiesB.findIndex((_, i) => !usedB.has(i));
+      if (champAIdx >= 0 && champBIdx >= 0) {
         newMatchups.push({
-          a: champA,
-          b: champB,
+          a: armiesA[champAIdx],
+          b: armiesB[champBIdx],
           module: "Champion",
           aIsDefender: false,
-          layoutPage: getLayoutPage(champA.disposition, champB.disposition, roundLayout),
-          estimate: 0,
+          layoutPage: getLayoutPage(armiesA[champAIdx].disposition, armiesB[champBIdx].disposition, roundLayout),
+          estimate: prefill(champAIdx, champBIdx),
         });
         setMatchups(newMatchups);
       }
@@ -702,13 +800,13 @@ export default function TournamentPage() {
       name: "Team Sweden",
       armies: [
         { faction: "World Eaters", detachments: ["Berzerker Warband"], disposition: "Purge the Foe" },
-        { faction: "Death Guard", detachments: ["Plague Company"], disposition: "Take and Hold" },
-        { faction: "Thousand Sons", detachments: ["Cult of Magic"], disposition: "Reconnaissance" },
+        { faction: "Death Guard", detachments: ["Virulent Vectorium"], disposition: "Take and Hold" },
+        { faction: "Thousand Sons", detachments: ["Changehost of Deceit"], disposition: "Reconnaissance" },
         { faction: "Drukhari", detachments: ["Realspace Raiders"], disposition: "Disruption" },
-        { faction: "Leagues of Votann", detachments: ["Oathband"], disposition: "Priority Assets" },
-        { faction: "Adepta Sororitas", detachments: ["Hallowed Martyrs"], disposition: "Purge the Foe" },
-        { faction: "Chaos Knights", detachments: ["War Dog Lance"], disposition: "Take and Hold" },
-        { faction: "Imperial Knights", detachments: ["Noble Lance"], disposition: "Priority Assets" },
+        { faction: "Leagues of Votann", detachments: ["Brandfast Oathband"], disposition: "Priority Assets" },
+        { faction: "Adepta Sororitas", detachments: ["Army of Faith"], disposition: "Purge the Foe" },
+        { faction: "Chaos Knights", detachments: ["Helhunt Lance"], disposition: "Take and Hold" },
+        { faction: "Imperial Knights", detachments: ["Freeblade Company"], disposition: "Priority Assets" },
       ],
     };
   }
@@ -853,12 +951,18 @@ export default function TournamentPage() {
             <div className="rounded-xl border border-white/[0.08] p-4">
               <div className="flex items-center gap-2 mb-3">
                 <h2 className="text-sm font-semibold text-[#e8e8f0]">Seeding</h2>
+                <Link
+                  href="/estimates"
+                  className="text-[10px] text-[#a855f7] hover:text-[#c084fc] ml-auto transition-colors"
+                >
+                  Estimater →
+                </Link>
                 <button
                   onClick={() => {
                     setSeedingText(seedingToText(tournament.seedingTiers));
                     setEditingSeeding(true);
                   }}
-                  className="text-[10px] text-[#a855f7] hover:text-[#c084fc] ml-auto transition-colors"
+                  className="text-[10px] text-[#a855f7] hover:text-[#c084fc] transition-colors"
                 >
                   {tournament.seedingTiers.length > 0 ? "Redigér" : "Tilføj seeding"}
                 </button>
@@ -1146,6 +1250,13 @@ export default function TournamentPage() {
                 {matchups.length}/8 matchups færdige
               </span>
             </div>
+
+            <EstimateMatrix
+              opponents={opponents}
+              oppName={opponentRoster.name}
+              ourArmies={tournament.roster.armies}
+              theirArmies={opponentRoster.armies}
+            />
 
             {/* Defender selection */}
             {pairingPhase.endsWith("-defender") && (
