@@ -37,6 +37,8 @@ export default function SiteNav() {
   const pathname = usePathname() || "/";
   const [open, setOpen] = useState(false);
 
+  if (pathname === "/login") return null;
+
   return (
     <nav className="sticky top-0 z-50 bg-[#0f0f13]/95 backdrop-blur border-b border-white/[0.08]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
