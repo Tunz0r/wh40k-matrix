@@ -1,5 +1,5 @@
 import { ref, set, get, onValue, off, update } from "firebase/database";
-import { getDb } from "./firebase";
+import { getDb, authReady } from "./firebase";
 import type { RosterExport } from "./roster";
 
 export type RoundStatus = "pairing" | "live" | "completed";
@@ -32,6 +32,7 @@ export async function createTournament(
   teamName: string,
   roster?: RosterExport
 ): Promise<void> {
+  await authReady();
   const tournamentRef = ref(getDb(), `tournaments/${slug}`);
   await set(tournamentRef, {
     teamName,
@@ -47,6 +48,7 @@ export async function saveTeamSetup(
   slug: string,
   data: Partial<Pick<TournamentDoc, "teamName" | "roster" | "seedingTiers">>
 ): Promise<void> {
+  await authReady();
   await update(ref(getDb(), `tournaments/${slug}`), data);
 }
 
@@ -56,6 +58,7 @@ export async function setActiveSession(
   roundNumber: number,
   opponentName: string
 ): Promise<void> {
+  await authReady();
   const tournamentRef = ref(getDb(), `tournaments/${slug}`);
   const snapshot = await get(tournamentRef);
   const doc: TournamentDoc = snapshot.val() || {
@@ -90,6 +93,7 @@ export async function updateRoundStatus(
   status: RoundStatus,
   score?: { us: number; them: number }
 ): Promise<void> {
+  await authReady();
   const tournamentRef = ref(getDb(), `tournaments/${slug}`);
   const snapshot = await get(tournamentRef);
   const doc: TournamentDoc = snapshot.val();
@@ -115,6 +119,7 @@ export async function updateRoundStatus(
 }
 
 export async function resetTournamentDoc(slug: string): Promise<void> {
+  await authReady();
   const tournamentRef = ref(getDb(), `tournaments/${slug}`);
   const snapshot = await get(tournamentRef);
   const doc: TournamentDoc | null = snapshot.val();
@@ -132,9 +137,18 @@ export function subscribeToTournament(
   slug: string,
   callback: (data: TournamentDoc | null) => void
 ): () => void {
-  const tournamentRef = ref(getDb(), `tournaments/${slug}`);
-  onValue(tournamentRef, (snapshot) => {
-    callback(snapshot.val());
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const tournamentRef = ref(getDb(), `tournaments/${slug}`);
+    onValue(tournamentRef, (snapshot) => {
+      callback(snapshot.val());
+    });
+    cleanup = () => off(tournamentRef);
   });
-  return () => off(tournamentRef);
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
 }

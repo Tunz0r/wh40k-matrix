@@ -1,5 +1,5 @@
 import { ref, set, remove, onValue, off, update } from "firebase/database";
-import { getDb } from "./firebase";
+import { getDb, authReady } from "./firebase";
 import { TEAM_SLUG } from "./team";
 import type { RosterArmy } from "./roster";
 
@@ -43,19 +43,30 @@ export function slugifyTeam(name: string): string {
 export function subscribeToOpponents(
   callback: (teams: OpponentMap) => void
 ): () => void {
-  const r = ref(getDb(), BASE);
-  onValue(r, (snap) => callback(snap.val() || {}));
-  return () => off(r);
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const r = ref(getDb(), BASE);
+    onValue(r, (snap) => callback(snap.val() || {}));
+    cleanup = () => off(r);
+  });
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
 }
 
 export async function saveOpponentTeam(
   slug: string,
   team: OpponentTeam
 ): Promise<void> {
+  await authReady();
   await set(ref(getDb(), `${BASE}/${slug}`), team);
 }
 
 export async function deleteOpponentTeam(slug: string): Promise<void> {
+  await authReady();
   await remove(ref(getDb(), `${BASE}/${slug}`));
 }
 
@@ -64,6 +75,7 @@ export async function deleteOpponentTeam(slug: string): Promise<void> {
 export async function writeEstimateCells(
   cells: Record<string, EstimateCell | null>
 ): Promise<void> {
+  await authReady();
   const updates: Record<string, EstimateCell | null> = {};
   for (const [key, value] of Object.entries(cells)) {
     const [teamSlug, cellKey] = key.split("/");

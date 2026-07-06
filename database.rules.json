@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "sessions": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "tournaments": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "estimates": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

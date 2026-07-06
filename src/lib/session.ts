@@ -1,5 +1,5 @@
 import { ref, set, onValue, off, push } from "firebase/database";
-import { getDb } from "./firebase";
+import { getDb, authReady } from "./firebase";
 import type { Disposition } from "./data";
 
 export interface MatchupData {
@@ -11,7 +11,7 @@ export interface MatchupData {
   bDisposition: Disposition | null;
   module: string;
   layoutPage: number | null;
-  estimate: number; // deprecated, kept for compat
+  estimate: number; // pairing estimate (0-20 WTC scale), set when the matchup is created
   aVP: number; // Team A victory points
   bVP: number; // Team B victory points
   round: number; // current game round (1-5)
@@ -27,6 +27,7 @@ export interface SessionData {
 }
 
 export async function createSession(data: SessionData): Promise<string> {
+  await authReady();
   const sessionsRef = ref(getDb(), "sessions");
   const newRef = push(sessionsRef);
   await set(newRef, data);
@@ -37,23 +38,20 @@ export function subscribeToSession(
   sessionId: string,
   callback: (data: SessionData | null) => void
 ): () => void {
-  const sessionRef = ref(getDb(), `sessions/${sessionId}`);
-  const unsub = onValue(sessionRef, (snapshot) => {
-    callback(snapshot.val());
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const sessionRef = ref(getDb(), `sessions/${sessionId}`);
+    onValue(sessionRef, (snapshot) => {
+      callback(snapshot.val());
+    });
+    cleanup = () => off(sessionRef);
   });
-  return () => off(sessionRef);
-}
-
-export async function updateMatchupEstimate(
-  sessionId: string,
-  matchupIndex: number,
-  estimate: number
-): Promise<void> {
-  const matchupRef = ref(
-    getDb(),
-    `sessions/${sessionId}/matchups/${matchupIndex}/estimate`
-  );
-  await set(matchupRef, estimate);
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
 }
 
 export async function updateMatchupRound(
@@ -61,6 +59,7 @@ export async function updateMatchupRound(
   matchupIndex: number,
   round: number
 ): Promise<void> {
+  await authReady();
   const matchupRef = ref(
     getDb(),
     `sessions/${sessionId}/matchups/${matchupIndex}/round`
@@ -73,6 +72,7 @@ export async function updateMatchupNotes(
   matchupIndex: number,
   notes: string
 ): Promise<void> {
+  await authReady();
   const matchupRef = ref(
     getDb(),
     `sessions/${sessionId}/matchups/${matchupIndex}/notes`
@@ -86,11 +86,11 @@ export async function updateMatchupVP(
   aVP: number,
   bVP: number
 ): Promise<void> {
+  await authReady();
   const base = `sessions/${sessionId}/matchups/${matchupIndex}`;
   await Promise.all([
     set(ref(getDb(), `${base}/aVP`), aVP),
     set(ref(getDb(), `${base}/bVP`), bVP),
-    set(ref(getDb(), `${base}/estimate`), aVP - bVP),
   ]);
 }
 
@@ -99,6 +99,7 @@ export async function updateMatchupFinal(
   matchupIndex: number,
   final: boolean
 ): Promise<void> {
+  await authReady();
   const matchupRef = ref(
     getDb(),
     `sessions/${sessionId}/matchups/${matchupIndex}/final`

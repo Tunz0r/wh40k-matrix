@@ -1,5 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getDatabase, type Database } from "firebase/database";
+import { getAuth, signInAnonymously } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -26,4 +27,21 @@ export function getDb(): Database {
     _db = getDatabase(getApp());
   }
   return _db;
+}
+
+let _authReady: Promise<void> | null = null;
+
+// Resolves once anonymous sign-in has completed. Database rules require
+// auth != null, so every db operation awaits this first. If the Anonymous
+// provider isn't enabled (yet), we swallow the error — open rules still work.
+export function authReady(): Promise<void> {
+  if (!_authReady) {
+    _authReady = (async () => {
+      try {
+        const auth = getAuth(getApp());
+        if (!auth.currentUser) await signInAnonymously(auth);
+      } catch {}
+    })();
+  }
+  return _authReady;
 }
