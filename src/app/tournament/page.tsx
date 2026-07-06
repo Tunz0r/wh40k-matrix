@@ -14,6 +14,7 @@ import {
 } from "@/lib/roster";
 import { getLayouts, getLayoutImage } from "@/lib/layouts";
 import { createSession, type MatchupData } from "@/lib/session";
+import ArmyEditor from "@/components/ArmyEditor";
 import {
   saveTeamSetup,
   setActiveSession,
@@ -443,6 +444,7 @@ export default function TournamentPage() {
   // Roster edit state
   const [editingRoster, setEditingRoster] = useState(false);
   const [rosterImportText, setRosterImportText] = useState("");
+  const [editingArmyIdx, setEditingArmyIdx] = useState<number | null>(null);
 
   // Initialize from localStorage
   useEffect(() => {
@@ -603,6 +605,17 @@ export default function TournamentPage() {
     saveTeamSetup(TEAM_SLUG, { teamName: TEAM_NAME, roster }).catch(() => {});
     setEditingRoster(false);
     setRosterImportText("");
+  }
+
+  // Edit a single one of our armies in place — estimates rows keep their position.
+  function saveArmyEdit(idx: number, army: RosterArmy) {
+    if (!tournament.roster) return;
+    const armies = tournament.roster.armies.slice();
+    armies[idx] = army;
+    const roster = { ...tournament.roster, armies };
+    updateTournament({ roster });
+    saveTeamSetup(TEAM_SLUG, { roster }).catch(() => {});
+    setEditingArmyIdx(null);
   }
 
   function parseSeedingText(text: string): SeedingTier[] {
@@ -1000,9 +1013,29 @@ export default function TournamentPage() {
 
               {tournament.roster ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {tournament.roster.armies.map((army, i) => (
-                    <ArmyCard key={i} army={army} index={i} highlight />
-                  ))}
+                  {tournament.roster.armies.map((army, i) =>
+                    editingArmyIdx === i ? (
+                      <ArmyEditor
+                        key={i}
+                        initial={army}
+                        onSave={(a) => saveArmyEdit(i, a)}
+                        onCancel={() => setEditingArmyIdx(null)}
+                      />
+                    ) : (
+                      <div key={i} className="flex items-stretch gap-1.5">
+                        <div className="flex-1 min-w-0">
+                          <ArmyCard army={army} index={i} highlight />
+                        </div>
+                        <button
+                          onClick={() => setEditingArmyIdx(i)}
+                          title={`Redigér ${army.faction}`}
+                          className="w-7 shrink-0 rounded-lg border border-dashed border-white/[0.08] text-[#8888a0] hover:text-[#a855f7] hover:border-[rgba(168,85,247,0.3)] text-[11px] transition-colors"
+                        >
+                          ✎
+                        </button>
+                      </div>
+                    )
+                  )}
                 </div>
               ) : (
                 <p className="text-[11px] text-[#8888a0]">

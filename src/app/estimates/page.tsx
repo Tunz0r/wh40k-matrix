@@ -5,14 +5,18 @@ import Link from "next/link";
 import { deserializeRoster, type RosterArmy } from "@/lib/roster";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
 import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
+import { DISP_STYLES } from "@/lib/data";
+import ArmyEditor from "@/components/ArmyEditor";
 import {
   type OpponentMap,
   type OpponentTeam,
+  type OpponentList,
   type EstimateCell,
   slugifyTeam,
   subscribeToOpponents,
   saveOpponentTeam,
   deleteOpponentTeam,
+  updateOpponentList,
   writeEstimateCells,
   listSimilarity,
   SIMILARITY_THRESHOLD,
@@ -69,6 +73,7 @@ export default function EstimatesPage() {
   const [importFor, setImportFor] = useState<{ name: string; tier: string } | null>(null);
   const [importText, setImportText] = useState("");
   const [newTeamName, setNewTeamName] = useState("");
+  const [editingList, setEditingList] = useState<{ slug: string; idx: number } | null>(null);
 
   useEffect(() => {
     try {
@@ -192,6 +197,43 @@ export default function EstimatesPage() {
       }
     }
     writeEstimateCells(updates).catch(() => {});
+  }
+
+  // Edit a single list in place. Manual estimates in that column are kept
+  // (captain's judgment); auto cells are re-derived against the edited list.
+  function saveListEdit(slug: string, idx: number, army: RosterArmy) {
+    const old = opponents[slug]?.armies?.[idx];
+    const list: OpponentList = {
+      faction: army.faction,
+      detachments: army.detachments,
+      disposition: army.disposition ?? null,
+    };
+    if (old?.units && old.faction === army.faction) list.units = old.units;
+    updateOpponentList(slug, idx, list)
+      .then(() => {
+        const updates: Record<string, EstimateCell | null> = {};
+        for (let i = 0; i < ourArmies.length; i++) {
+          const key = `${i}_${idx}`;
+          const existing = opponents[slug]?.estimates?.[key];
+          if (existing && !existing.auto) continue;
+          let best: { sim: number; v: number } | null = null;
+          for (const [oslug, team] of Object.entries(opponents)) {
+            (team.armies || []).forEach((other, k) => {
+              if (oslug === slug && k === idx) return;
+              const cell = team.estimates?.[`${i}_${k}`];
+              if (!cell || cell.auto) return;
+              const sim = listSimilarity(list, other);
+              if (sim < SIMILARITY_THRESHOLD) return;
+              if (!best || sim > best.sim) best = { sim, v: cell.v };
+            });
+          }
+          const next = best ? { v: (best as { v: number }).v, auto: true } : null;
+          if (JSON.stringify(next) !== JSON.stringify(existing ?? null)) updates[`${slug}/${key}`] = next;
+        }
+        if (Object.keys(updates).length) writeEstimateCells(updates).catch(() => {});
+      })
+      .catch(() => alert("Kunne ikke gemme listen — tjek Firebase"));
+    setEditingList(null);
   }
 
   function removeTeam(slug: string, name: string) {
@@ -339,7 +381,8 @@ export default function EstimatesPage() {
                     )}
 
                     {isOpen && hasLists && ourArmies.length > 0 && (
-                      <div className="px-3 pb-3 overflow-x-auto">
+                      <div className="px-3 pb-3">
+                        <div className="overflow-x-auto">
                         <table className="border-separate border-spacing-1">
                           <thead>
                             <tr>
@@ -379,6 +422,54 @@ export default function EstimatesPage() {
                             ))}
                           </tbody>
                         </table>
+                        </div>
+
+                        {/* Per-list editing */}
+                        <div className="mt-3 space-y-1.5">
+                          <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">
+                            Lists
+                          </div>
+                          {team.armies.map((list, j) =>
+                            editingList?.slug === slug && editingList.idx === j ? (
+                              <ArmyEditor
+                                key={j}
+                                initial={list}
+                                onSave={(a) => saveListEdit(slug, j, a)}
+                                onCancel={() => setEditingList(null)}
+                              />
+                            ) : (
+                              <div
+                                key={j}
+                                className="flex items-center gap-2 text-[11px] rounded-md border border-white/[0.06] px-2 py-1.5"
+                              >
+                                <span className="text-[#8888a0] w-4 shrink-0">{j + 1}.</span>
+                                <span className="text-[#e8e8f0] font-medium shrink-0">{list.faction}</span>
+                                <span className="text-[#8888a0] truncate flex-1">
+                                  {(list.detachments || []).join(", ")}
+                                </span>
+                                {list.disposition && (
+                                  <span
+                                    className="text-[8px] font-semibold px-1 py-0.5 rounded whitespace-nowrap shrink-0"
+                                    style={{
+                                      background: DISP_STYLES[list.disposition].bg,
+                                      color: DISP_STYLES[list.disposition].color,
+                                    }}
+                                  >
+                                    {list.disposition}
+                                  </span>
+                                )}
+                                {!locked && (
+                                  <button
+                                    onClick={() => setEditingList({ slug, idx: j })}
+                                    className="text-[10px] text-[#a855f7] hover:text-[#c084fc] transition-colors shrink-0"
+                                  >
+                                    Redigér
+                                  </button>
+                                )}
+                              </div>
+                            )
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

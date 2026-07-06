@@ -70,6 +70,16 @@ export async function deleteOpponentTeam(slug: string): Promise<void> {
   await remove(ref(getDb(), `${BASE}/${slug}`));
 }
 
+// Replace a single list on a team without touching the other seven or the estimates.
+export async function updateOpponentList(
+  slug: string,
+  idx: number,
+  list: OpponentList
+): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `${BASE}/${slug}/armies/${idx}`), list);
+}
+
 // Multi-path write of estimate cells. Keys are `${teamSlug}/${ourIdx}_${theirIdx}`;
 // null deletes the cell.
 export async function writeEstimateCells(
