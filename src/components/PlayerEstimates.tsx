@@ -63,37 +63,61 @@ export default function PlayerEstimates({
     });
   }, [opponents, ourArmies]);
 
-  // Clusters annotated for the selected army, unfilled first, tier 1 first,
-  // biggest clusters first.
+  // Clusters annotated for the selected army — values update live, but the
+  // ORDER is frozen in state so cards don't jump away while you're typing.
   const annotated = useMemo(() => {
     if (myIdx === null) return [];
-    return clusters
-      .map((cluster) => {
-        const repCell = cellFor(cluster.rep, myIdx);
-        const manualCell = cluster.members
-          .map((m) => cellFor(m, myIdx))
-          .find((c) => c && !c.auto);
-        const anyCell = cluster.members.map((m) => cellFor(m, myIdx)).find(Boolean);
-        const displayCell = (repCell && !repCell.auto ? repCell : manualCell) ?? repCell ?? anyCell;
-        const unlockedMembers = cluster.members.filter((m) => !playedRounds.has(m.teamSlug));
-        // Anchor for writes: the representative unless it's locked
-        const anchor = !playedRounds.has(cluster.rep.teamSlug)
-          ? cluster.rep
-          : unlockedMembers[0] ?? null;
-        const bestTier = Math.min(...cluster.members.map((m) => tierRank(m.tier)));
-        const filledCount = cluster.members.filter((m) => cellFor(m, myIdx)).length;
-        return { cluster, displayCell, anchor, bestTier, filledCount };
-      })
+    return clusters.map((cluster) => {
+      const repCell = cellFor(cluster.rep, myIdx);
+      const manualCell = cluster.members
+        .map((m) => cellFor(m, myIdx))
+        .find((c) => c && !c.auto);
+      const anyCell = cluster.members.map((m) => cellFor(m, myIdx)).find(Boolean);
+      const displayCell = (repCell && !repCell.auto ? repCell : manualCell) ?? repCell ?? anyCell;
+      const unlockedMembers = cluster.members.filter((m) => !playedRounds.has(m.teamSlug));
+      // Anchor for writes: the representative unless it's locked
+      const anchor = !playedRounds.has(cluster.rep.teamSlug)
+        ? cluster.rep
+        : unlockedMembers[0] ?? null;
+      const bestTier = Math.min(...cluster.members.map((m) => tierRank(m.tier)));
+      const filledCount = cluster.members.filter((m) => cellFor(m, myIdx)).length;
+      return { cluster, displayCell, anchor, bestTier, filledCount };
+    });
+  }, [clusters, myIdx, opponents, playedRounds]);
+
+  const clusterKey = (c: ListCluster) => `${c.rep.teamSlug}_${c.rep.listIdx}`;
+
+  // Unfilled first, tier 1 first, biggest clusters first — recomputed only
+  // when the army/field changes or focus leaves the list, never mid-typing.
+  const sortedKeys = (list: typeof annotated) =>
+    [...list]
       .sort((a, b) => {
         const aEmpty = a.filledCount === 0 ? 0 : 1;
         const bEmpty = b.filledCount === 0 ? 0 : 1;
         if (aEmpty !== bEmpty) return aEmpty - bEmpty;
         if (a.bestTier !== b.bestTier) return a.bestTier - b.bestTier;
         return b.cluster.members.length - a.cluster.members.length;
-      });
-  }, [clusters, myIdx, opponents, playedRounds]);
+      })
+      .map((a) => clusterKey(a.cluster));
 
-  const clusterKey = (c: ListCluster) => `${c.rep.teamSlug}_${c.rep.listIdx}`;
+  const [order, setOrder] = useState<string[]>([]);
+
+  useEffect(() => {
+    setOrder(sortedKeys(annotated));
+    // Only re-sort when the selected army or the field itself changes —
+    // not on every estimate keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myIdx, annotated.length]);
+
+  const displayList = useMemo(() => {
+    const pos = new Map(order.map((k, i) => [k, i]));
+    return [...annotated].sort(
+      (a, b) =>
+        (pos.get(clusterKey(a.cluster)) ?? Number.MAX_SAFE_INTEGER) -
+        (pos.get(clusterKey(b.cluster)) ?? Number.MAX_SAFE_INTEGER)
+    );
+  }, [annotated, order]);
+
   const myProgress = myIdx !== null ? progress[myIdx] : null;
   const clustersDone = annotated.filter((a) => a.filledCount === a.cluster.members.length).length;
 
@@ -160,8 +184,17 @@ export default function PlayerEstimates({
             <span className="ml-auto">Uudfyldte arketyper vises først — ét estimat dækker alle lignende lister</span>
           </div>
 
-          <div className="space-y-1.5">
-            {annotated.map(({ cluster, displayCell, anchor, filledCount }) => {
+          <div
+            className="space-y-1.5"
+            onBlur={(e) => {
+              // Re-sort once focus leaves the whole list — not while tabbing
+              // between inputs inside it.
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                setOrder(sortedKeys(annotated));
+              }
+            }}
+          >
+            {displayList.map(({ cluster, displayCell, anchor, filledCount }) => {
               const key = clusterKey(cluster);
               const isOpen = expanded === key;
               const disp = cluster.rep.list.disposition;
