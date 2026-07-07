@@ -1,4 +1,4 @@
-import { ref, set, onValue, off, push } from "firebase/database";
+import { ref, set, get, onValue, off, push } from "firebase/database";
 import { getDb, authReady } from "./firebase";
 import type { Disposition } from "./data";
 
@@ -32,6 +32,12 @@ export async function createSession(data: SessionData): Promise<string> {
   const newRef = push(sessionsRef);
   await set(newRef, data);
   return newRef.key!;
+}
+
+export async function fetchSession(sessionId: string): Promise<SessionData | null> {
+  await authReady();
+  const snapshot = await get(ref(getDb(), `sessions/${sessionId}`));
+  return snapshot.val();
 }
 
 export function subscribeToSession(

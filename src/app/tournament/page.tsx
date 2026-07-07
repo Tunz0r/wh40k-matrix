@@ -1143,7 +1143,15 @@ export default function TournamentPage() {
 
             {/* Rounds */}
             <div className="rounded-xl border border-white/[0.08] p-4">
-              <h2 className="text-sm font-semibold text-[#e8e8f0] mb-3">Runder</h2>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-sm font-semibold text-[#e8e8f0]">Runder</h2>
+                <Link
+                  href="/calibration"
+                  className="text-[10px] text-[#a855f7] hover:text-[#c084fc] ml-auto transition-colors"
+                >
+                  Kalibrering →
+                </Link>
+              </div>
 
               {displayRounds.length > 0 ? (
                 <div className="space-y-2 mb-4">
