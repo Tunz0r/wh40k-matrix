@@ -9,6 +9,7 @@ import { DISP_STYLES } from "@/lib/data";
 import ArmyEditor from "@/components/ArmyEditor";
 import EstimateInput from "@/components/EstimateInput";
 import PlayerEstimates from "@/components/PlayerEstimates";
+import { parseArmyList, formatUnits } from "@/lib/list-parser";
 import {
   type OpponentMap,
   type OpponentTeam,
@@ -40,6 +41,9 @@ export default function EstimatesPage() {
   const [importText, setImportText] = useState("");
   const [newTeamName, setNewTeamName] = useState("");
   const [editingList, setEditingList] = useState<{ slug: string; idx: number } | null>(null);
+  const [pasteFor, setPasteFor] = useState<{ slug: string; idx: number } | null>(null);
+  const [pasteText, setPasteText] = useState("");
+  const [unitsShown, setUnitsShown] = useState<string | null>(null);
   const [mode, setMode] = useState<"country" | "player">("country");
 
   useEffect(() => {
@@ -176,17 +180,9 @@ export default function EstimatesPage() {
     writeEstimateCells(updates).catch(() => {});
   }
 
-  // Edit a single list in place. Manual estimates in that column are kept
-  // (captain's judgment); auto cells are re-derived against the edited list.
-  function saveListEdit(slug: string, idx: number, army: RosterArmy) {
-    const old = opponents[slug]?.armies?.[idx];
-    const list: OpponentList = {
-      faction: army.faction,
-      detachments: army.detachments,
-      disposition: army.disposition ?? null,
-      ...(army.player ? { player: army.player } : {}),
-    };
-    if (old?.units && old.faction === army.faction) list.units = old.units;
+  // Persist a changed list and re-derive the auto estimates in its column
+  // against the new content. Manual estimates are kept (captain's judgment).
+  function persistListChange(slug: string, idx: number, list: OpponentList) {
     updateOpponentList(slug, idx, list)
       .then(() => {
         const updates: Record<string, EstimateCell | null> = {};
@@ -211,7 +207,42 @@ export default function EstimatesPage() {
         if (Object.keys(updates).length) writeEstimateCells(updates).catch(() => {});
       })
       .catch(() => alert("Kunne ikke gemme listen — tjek Firebase"));
+  }
+
+  // Edit a single list's metadata in place.
+  function saveListEdit(slug: string, idx: number, army: RosterArmy) {
+    const old = opponents[slug]?.armies?.[idx];
+    const list: OpponentList = {
+      faction: army.faction,
+      detachments: army.detachments,
+      disposition: army.disposition ?? null,
+      ...(army.player ? { player: army.player } : {}),
+    };
+    if (old?.units && old.faction === army.faction) list.units = old.units;
+    persistListChange(slug, idx, list);
     setEditingList(null);
+  }
+
+  // Paste a raw army list export → parsed to a compact unit summary and stored
+  // on the list; content-based similarity kicks in for this column.
+  function saveUnits(slug: string, idx: number, rawText: string) {
+    const old = opponents[slug]?.armies?.[idx];
+    if (!old) return;
+    const units = parseArmyList(rawText);
+    if (units.length === 0) {
+      alert("Kunne ikke finde enheder i teksten — indsæt et komplet liste-export (GW-app, WTC eller NewRecruit format).");
+      return;
+    }
+    const list: OpponentList = {
+      faction: old.faction,
+      detachments: old.detachments || [],
+      disposition: old.disposition ?? null,
+      ...(old.player ? { player: old.player } : {}),
+      units,
+    };
+    persistListChange(slug, idx, list);
+    setPasteFor(null);
+    setPasteText("");
   }
 
   function removeTeam(slug: string, name: string) {
@@ -431,46 +462,100 @@ export default function EstimatesPage() {
                           <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">
                             Lists
                           </div>
-                          {team.armies.map((list, j) =>
-                            editingList?.slug === slug && editingList.idx === j ? (
-                              <ArmyEditor
-                                key={j}
-                                initial={list}
-                                onSave={(a) => saveListEdit(slug, j, a)}
-                                onCancel={() => setEditingList(null)}
-                              />
-                            ) : (
-                              <div
-                                key={j}
-                                className="flex items-center gap-2 text-[11px] rounded-md border border-white/[0.06] px-2 py-1.5"
-                              >
-                                <span className="text-[#8888a0] w-4 shrink-0">{j + 1}.</span>
-                                <span className="text-[#e8e8f0] font-medium shrink-0">{list.faction}</span>
-                                <span className="text-[#8888a0] truncate flex-1">
-                                  {(list.detachments || []).join(", ")}
-                                </span>
-                                {list.disposition && (
-                                  <span
-                                    className="text-[8px] font-semibold px-1 py-0.5 rounded whitespace-nowrap shrink-0"
-                                    style={{
-                                      background: DISP_STYLES[list.disposition].bg,
-                                      color: DISP_STYLES[list.disposition].color,
-                                    }}
-                                  >
-                                    {list.disposition}
+                          {team.armies.map((list, j) => {
+                            if (editingList?.slug === slug && editingList.idx === j) {
+                              return (
+                                <ArmyEditor
+                                  key={j}
+                                  initial={list}
+                                  onSave={(a) => saveListEdit(slug, j, a)}
+                                  onCancel={() => setEditingList(null)}
+                                />
+                              );
+                            }
+                            const rowKey = `${slug}_${j}`;
+                            const hasUnits = !!list.units?.length;
+                            const showingUnits = unitsShown === rowKey;
+                            const pasting = pasteFor?.slug === slug && pasteFor.idx === j;
+                            return (
+                              <div key={j} className="rounded-md border border-white/[0.06]">
+                                <div className="flex items-center gap-2 text-[11px] px-2 py-1.5">
+                                  <span className="text-[#8888a0] w-4 shrink-0">{j + 1}.</span>
+                                  <span className="text-[#e8e8f0] font-medium shrink-0">{list.faction}</span>
+                                  <span className="text-[#8888a0] truncate flex-1">
+                                    {(list.detachments || []).join(", ")}
                                   </span>
+                                  {list.disposition && (
+                                    <span
+                                      className="text-[8px] font-semibold px-1 py-0.5 rounded whitespace-nowrap shrink-0"
+                                      style={{
+                                        background: DISP_STYLES[list.disposition].bg,
+                                        color: DISP_STYLES[list.disposition].color,
+                                      }}
+                                    >
+                                      {list.disposition}
+                                    </span>
+                                  )}
+                                  {hasUnits && (
+                                    <button
+                                      onClick={() => setUnitsShown(showingUnits ? null : rowKey)}
+                                      className="text-[10px] text-[#a855f7] hover:text-[#c084fc] transition-colors shrink-0"
+                                    >
+                                      Liste {showingUnits ? "▴" : "▾"}
+                                    </button>
+                                  )}
+                                  {!locked && (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          setPasteFor(pasting ? null : { slug, idx: j });
+                                          setPasteText("");
+                                        }}
+                                        className="text-[10px] text-[#8888a0] hover:text-[#e8e8f0] transition-colors shrink-0"
+                                      >
+                                        {hasUnits ? "Ny liste" : "+ Liste"}
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingList({ slug, idx: j })}
+                                        className="text-[10px] text-[#a855f7] hover:text-[#c084fc] transition-colors shrink-0"
+                                      >
+                                        Redigér
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                                {showingUnits && hasUnits && (
+                                  <p className="px-2 pb-1.5 text-[10px] leading-[1.6] text-[#8888a0] break-words">
+                                    {formatUnits(list.units!)}
+                                  </p>
                                 )}
-                                {!locked && (
-                                  <button
-                                    onClick={() => setEditingList({ slug, idx: j })}
-                                    className="text-[10px] text-[#a855f7] hover:text-[#c084fc] transition-colors shrink-0"
-                                  >
-                                    Redigér
-                                  </button>
+                                {pasting && (
+                                  <div className="px-2 pb-2 space-y-1.5">
+                                    <textarea
+                                      value={pasteText}
+                                      onChange={(e) => setPasteText(e.target.value)}
+                                      placeholder="Indsæt hele liste-exporten her (GW-app, WTC eller NewRecruit) — spillernavne, våben og punkter fjernes automatisk..."
+                                      className="w-full h-24 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-2 text-[10px] text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
+                                    />
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => saveUnits(slug, j, pasteText)}
+                                        className="text-[10px] font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] px-2.5 py-1 rounded-md transition-colors"
+                                      >
+                                        Gem liste
+                                      </button>
+                                      <button
+                                        onClick={() => { setPasteFor(null); setPasteText(""); }}
+                                        className="text-[10px] text-[#8888a0] hover:text-[#e8e8f0] px-2 py-1 transition-colors"
+                                      >
+                                        Annullér
+                                      </button>
+                                    </div>
+                                  </div>
                                 )}
                               </div>
-                            )
-                          )}
+                            );
+                          })}
                         </div>
                       </div>
                     )}

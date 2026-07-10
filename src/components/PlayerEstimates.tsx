@@ -10,6 +10,7 @@ import {
   type ClusterMember,
   clusterLists,
 } from "@/lib/estimates-db";
+import { formatUnits } from "@/lib/list-parser";
 import EstimateInput from "./EstimateInput";
 
 const MY_ARMY_KEY = "wtc-my-army";
@@ -199,6 +200,12 @@ export default function PlayerEstimates({
               const isOpen = expanded === key;
               const disp = cluster.rep.list.disposition;
               const countries = cluster.members.map((m) => m.teamName);
+              // Show the representative's list content — or the first member's
+              // if the rep hasn't had its list pasted yet
+              const cardUnits =
+                cluster.rep.list.units?.length
+                  ? cluster.rep.list.units
+                  : cluster.members.find((m) => m.list.units?.length)?.list.units ?? null;
               return (
                 <div
                   key={key}
@@ -222,6 +229,11 @@ export default function PlayerEstimates({
                           </span>
                         )}
                       </div>
+                      {cardUnits && (
+                        <p className="text-[10px] leading-[1.6] text-[#8888a0] break-words mt-0.5">
+                          {formatUnits(cardUnits)}
+                        </p>
+                      )}
                       <button
                         onClick={() => setExpanded(isOpen ? null : key)}
                         className="text-[10px] text-[#8888a0] hover:text-[#a855f7] transition-colors mt-0.5"
@@ -247,24 +259,38 @@ export default function PlayerEstimates({
                     <div className="px-2.5 pb-2.5 space-y-1">
                       {cluster.members.map((m) => {
                         const locked = playedRounds.has(m.teamSlug);
+                        // Only repeat the list content when it differs from
+                        // what the card already shows
+                        const ownUnits =
+                          m.list.units?.length &&
+                          JSON.stringify(m.list.units) !== JSON.stringify(cardUnits)
+                            ? m.list.units
+                            : null;
                         return (
                           <div
                             key={`${m.teamSlug}_${m.listIdx}`}
-                            className="flex items-center gap-2 rounded-md border border-white/[0.05] px-2 py-1"
+                            className="rounded-md border border-white/[0.05]"
                           >
-                            <span className="text-[11px] text-[#e8e8f0] flex-1 truncate">
-                              {m.teamName}
-                              {locked && <span className="text-[#8888a0] ml-1.5">🔒</span>}
-                            </span>
-                            <span className="text-[10px] text-[#8888a0] truncate max-w-[40%]">
-                              {(m.list.detachments || []).join(", ")}
-                              {m.list.disposition ? ` · ${m.list.disposition}` : ""}
-                            </span>
-                            <EstimateInput
-                              cell={cellFor(m, myIdx)}
-                              locked={locked}
-                              onChange={(v) => onSet(m.teamSlug, myIdx, m.listIdx, v)}
-                            />
+                            <div className="flex items-center gap-2 px-2 py-1">
+                              <span className="text-[11px] text-[#e8e8f0] flex-1 truncate">
+                                {m.teamName}
+                                {locked && <span className="text-[#8888a0] ml-1.5">🔒</span>}
+                              </span>
+                              <span className="text-[10px] text-[#8888a0] truncate max-w-[40%]">
+                                {(m.list.detachments || []).join(", ")}
+                                {m.list.disposition ? ` · ${m.list.disposition}` : ""}
+                              </span>
+                              <EstimateInput
+                                cell={cellFor(m, myIdx)}
+                                locked={locked}
+                                onChange={(v) => onSet(m.teamSlug, myIdx, m.listIdx, v)}
+                              />
+                            </div>
+                            {ownUnits && (
+                              <p className="px-2 pb-1 text-[10px] leading-[1.6] text-[#8888a0] break-words">
+                                {formatUnits(ownUnits)}
+                              </p>
+                            )}
                           </div>
                         );
                       })}
