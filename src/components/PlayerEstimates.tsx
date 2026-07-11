@@ -82,17 +82,21 @@ export default function PlayerEstimates({
         : unlockedMembers[0] ?? null;
       const bestTier = Math.min(...cluster.members.map((m) => tierRank(m.tier)));
       const filledCount = cluster.members.filter((m) => cellFor(m, myIdx)).length;
-      return { cluster, displayCell, anchor, bestTier, filledCount };
+      // Clusters where a real army list has been pasted (unit content) are the
+      // useful ones to estimate; synthetic placeholders sink to the bottom.
+      const hasUnits = cluster.members.some((m) => m.list.units?.length);
+      return { cluster, displayCell, anchor, bestTier, filledCount, hasUnits };
     });
   }, [clusters, myIdx, opponents, playedRounds]);
 
   const clusterKey = (c: ListCluster) => `${c.rep.teamSlug}_${c.rep.listIdx}`;
 
-  // Unfilled first, tier 1 first, biggest clusters first — recomputed only
-  // when the army/field changes or focus leaves the list, never mid-typing.
+  // Real lists first, then unfilled first, tier 1 first, biggest clusters first.
+  // Recomputed only when the army/field changes or focus leaves the list.
   const sortedKeys = (list: typeof annotated) =>
     [...list]
       .sort((a, b) => {
+        if (a.hasUnits !== b.hasUnits) return a.hasUnits ? -1 : 1;
         const aEmpty = a.filledCount === 0 ? 0 : 1;
         const bEmpty = b.filledCount === 0 ? 0 : 1;
         if (aEmpty !== bEmpty) return aEmpty - bEmpty;
