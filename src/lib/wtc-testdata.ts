@@ -1,6 +1,6 @@
 import { FACTIONS, type Disposition } from "./data";
-import type { RosterArmy } from "./roster";
 import type { SeedingTier } from "./tournament-db";
+import type { OpponentList } from "./estimates-db";
 
 // Official WTC team ranking (wtc-belgium.com/team-tier-overview, "Current Team
 // Ranking used to determine Seeding") split into four seeding tiers by rank.
@@ -92,15 +92,135 @@ const META_POOL_RAW: { faction: string; det: string }[] = [
   { faction: "Black Templars", det: "Godhammer Assault Force" },
 ];
 
+// Representative unit content for the top archetypes, transcribed from
+// publicly published tournament-winning lists (Goonhammer Competitive
+// Innovations, listhammer GT data). Keyed by `faction|detachment`.
+// Model counts are kept so content-based similarity (unit overlap) activates
+// on the test data — all of this is deleted once real WTC lists are imported.
+const META_UNITS: Record<string, string[]> = {
+  "World Eaters|Berzerker Warband": [
+    "Angron", "Khorne Lord of Skulls", "10x Jakhals", "10x Jakhals",
+    "6x Exalted Eightbound", "6x Exalted Eightbound", "3x Eightbound", "8x Khorne Berzerkers",
+  ],
+  "Orks|Green Tide": [
+    "Ghazghkull Thraka", "Beastboss", "Warboss", "20x Boyz", "20x Boyz",
+    "10x Gretchin", "5x Meganobz", "Gorkanaut", "3x Deffkoptas",
+  ],
+  "Orks|Bully Boyz": [
+    "Ghazghkull Thraka", "Zodgrod Wortsnag", "10x Beast Snagga Boyz", "6x Nobz",
+    "5x Meganobz", "5x Meganobz", "3x Squighog Boyz", "Battlewagon",
+  ],
+  "Aeldari|Warhost": [
+    "Avatar of Khaine", "Farseer Skyrunner", "Autarch", "10x Guardian Defenders",
+    "10x Guardian Defenders", "5x Rangers", "5x Wraithguard", "3x Fire Prisms", "Wraithknight",
+  ],
+  "Aeldari|Aspect Host": [
+    "Yvraine", "Autarch Wayleaper", "10x Dire Avengers", "10x Howling Banshees",
+    "5x Fire Dragons", "5x Warp Spiders", "3x Shining Spears", "Wave Serpent",
+  ],
+  "Necrons|Awakened Dynasty": [
+    "Overlord", "Technomancer", "Orikan the Diviner", "20x Warriors", "10x Warriors",
+    "5x Lokhust Heavy Destroyers", "3x Canoptek Doomstalkers", "6x Canoptek Wraiths",
+  ],
+  "Necrons|Hypercrypt Legion": [
+    "Imotekh the Stormlord", "Technomancer", "10x Immortals", "10x Immortals",
+    "20x Warriors", "Monolith", "3x Canoptek Doomstalkers", "6x Canoptek Scarab Swarms",
+  ],
+  "Space Marines|Gladius Task Force": [
+    "Captain in Terminator Armour", "Lieutenant with Combi-weapon", "Apothecary Biologis",
+    "5x Terminators", "10x Intercessors", "5x Infernus Squad", "2x Ballistus Dreadnought",
+    "3x Eradicators", "Repulsor",
+  ],
+  "Space Marines|Ironstorm Spearhead": [
+    "Captain on Bike", "Techmarine", "2x Ballistus Dreadnought", "2x Gladiator Lancer",
+    "Repulsor Executioner", "5x Scouts", "10x Infernus Squad", "Land Raider",
+  ],
+  "Adeptus Custodes|Shield Host": [
+    "Trajann Valoris", "Blade Champion", "Shield-Captain", "5x Custodian Guard",
+    "5x Custodian Guard", "6x Prosecutors", "3x Allarus Custodians", "Caladius Grav-tank",
+  ],
+  "T'au Empire|Kauyon": [
+    "Commander Farsight", "Commander in Enforcer Battlesuit", "3x Crisis Fireknife Battlesuits",
+    "3x Crisis Fireknife Battlesuits", "10x Fire Warriors", "Riptide Battlesuit",
+    "2x Broadside Battlesuits", "10x Kroot Carnivores",
+  ],
+  "T'au Empire|Mont'ka": [
+    "Commander in Coldstar Battlesuit", "Darkstrider", "3x Crisis Sunforge Battlesuits",
+    "3x Crisis Sunforge Battlesuits", "10x Fire Warriors", "2x Hammerhead Gunship", "Riptide Battlesuit",
+  ],
+  "Death Guard|Virulent Vectorium": [
+    "Mortarion", "Lord of Virulence", "Biologus Putrifier", "10x Plague Marines",
+    "10x Plague Marines", "3x Deathshroud Terminators", "5x Blightlord Terminators", "Plagueburst Crawler",
+  ],
+  "Tyranids|Invasion Fleet": [
+    "Hive Tyrant", "Neurotyrant", "Winged Tyranid Prime", "20x Termagants",
+    "20x Gargoyles", "3x Von Ryan's Leapers", "Norn Emissary", "6x Tyranid Warriors",
+  ],
+  "Chaos Space Marines|Pactbound Zealots": [
+    "Chaos Lord", "Master of Possession", "10x Legionaries", "10x Cultists",
+    "10x Cultists", "Forgefiend", "2x Vindicator", "5x Chosen", "Chaos Land Raider",
+  ],
+  "Grey Knights|Warpbane Task Force": [
+    "Grand Master Voldus", "Brotherhood Chaplain", "10x Strike Squad", "5x Terminators",
+    "5x Paladins", "3x Nemesis Dreadknight", "5x Purgation Squad",
+  ],
+  "Adepta Sororitas|Hallowed Martyrs": [
+    "Morvenn Vahl", "Canoness", "Palatine", "10x Battle Sisters", "10x Battle Sisters",
+    "5x Zephyrim", "2x Castigator", "5x Paragon Warsuits",
+  ],
+  "Drukhari|Skysplinter Assault": [
+    "Archon", "Haemonculus", "10x Kabalite Warriors", "10x Kabalite Warriors",
+    "2x Raider", "3x Ravager", "5x Incubi", "10x Wracks",
+  ],
+  "Thousand Sons|Hexwarp Thrallband": [
+    "Magnus the Red", "Infernal Master", "10x Rubric Marines", "10x Rubric Marines",
+    "10x Tzaangors", "Mutalith Vortex Beast", "5x Scarab Occult Terminators",
+  ],
+  "Chaos Daemons|Blood Legion": [
+    "Bloodthirster", "Skulltaker", "Karanak", "10x Bloodletters", "10x Bloodletters",
+    "10x Flesh Hounds", "3x Bloodcrushers", "Skull Cannon",
+  ],
+  "Genestealer Cults|Outlander Claw": [
+    "Patriarch", "Primus", "Kelermorph", "10x Acolyte Hybrids", "10x Neophyte Hybrids",
+    "5x Aberrants", "3x Atalan Jackals", "2x Achilles Ridgerunner",
+  ],
+  "Leagues of Votann|Hearthband": [
+    "Kahl", "Einhyr Champion", "Grimnyr", "20x Hearthkyn Warriors", "10x Hearthkyn Warriors",
+    "5x Einhyr Hearthguard", "3x Hernkyn Pioneers", "Sagitaur",
+  ],
+  "Imperial Knights|Freeblade Company": [
+    "Knight Preceptor", "Knight Paladin", "Knight Errant", "3x Armiger Warglaives", "2x Armiger Helverins",
+  ],
+  "Chaos Knights|Traitoris Lance": [
+    "Knight Desecrator", "Knight Rampager", "War Dog Karnivore", "War Dog Karnivore",
+    "3x War Dog Stalkers", "2x War Dog Executioners",
+  ],
+  "Adeptus Custodes|Auric Champions": [
+    "Valerian", "Aleya", "5x Custodian Wardens", "4x Custodian Guard",
+    "5x Prosecutors", "2x Venerable Land Raider",
+  ],
+  "Dark Angels|Inner Circle Task Force": [
+    "Azrael", "Lieutenant with Combi-weapon", "5x Deathwing Knights", "5x Deathwing Knights",
+    "10x Intercessors", "3x Eradicators", "Land Raider", "5x Infernus Squad",
+  ],
+  "Aeldari|Armoured Warhost": [
+    "Farseer Skyrunner", "Autarch", "10x Guardian Defenders", "3x Fire Prisms",
+    "3x Vypers", "5x Rangers", "Wave Serpent", "Falcon",
+  ],
+};
+
 interface MetaEntry {
   faction: string;
   det: string;
   disposition: Disposition;
+  units?: string[];
 }
 
 const META_POOL: MetaEntry[] = META_POOL_RAW.flatMap(({ faction, det }) => {
   const found = FACTIONS[faction]?.find((d) => d.n === det);
-  return found ? [{ faction, det, disposition: found.d }] : [];
+  if (!found) return [];
+  const units = META_UNITS[`${faction}|${det}`];
+  return [{ faction, det, disposition: found.d, ...(units ? { units } : {}) }];
 });
 
 const ALL_DISPOSITIONS: Disposition[] = [
@@ -135,7 +255,7 @@ function mulberry32(seed: number): () => number {
 
 // Legal WTC composition: 8 lists, unique factions, one of each of the five
 // dispositions plus three repeats, never more than two of the same.
-export function generateComposition(country: string): RosterArmy[] {
+export function generateComposition(country: string): OpponentList[] {
   const rand = mulberry32(hashString(country));
   const pool = [...META_POOL];
   for (let i = pool.length - 1; i > 0; i--) {
@@ -143,7 +263,7 @@ export function generateComposition(country: string): RosterArmy[] {
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
 
-  const armies: RosterArmy[] = [];
+  const armies: OpponentList[] = [];
   const usedFactions = new Set<string>();
   const dispCount = new Map<Disposition, number>();
 
@@ -152,6 +272,7 @@ export function generateComposition(country: string): RosterArmy[] {
       faction: entry.faction,
       detachments: [entry.det],
       disposition: entry.disposition,
+      ...(entry.units ? { units: entry.units } : {}),
     });
     usedFactions.add(entry.faction);
     dispCount.set(entry.disposition, (dispCount.get(entry.disposition) || 0) + 1);

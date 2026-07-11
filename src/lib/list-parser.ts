@@ -3,6 +3,8 @@
 // kept ("10x Jakhals"), everything else (player names, wargear, points,
 // enhancements) stripped.
 
+import { FACTIONS } from "./data";
+
 // Unit lines carry a points cost: "(415 points)", "(70 pts)" or "[70 pts]"
 const POINTS_RE = /[([]\s*(\d+)\s*(?:points|pts?)\s*[)\]]/i;
 
@@ -48,4 +50,117 @@ export function formatUnits(units: string[]): string {
   return [...counts.entries()]
     .map(([u, n]) => (n > 1 ? `${u} (x${n})` : u))
     .join(" · ");
+}
+
+// --- Bulk team parsing: one document → up to 8 lists ---
+
+export interface ParsedList {
+  faction: string | null;
+  detachment: string | null;
+  units: string[];
+}
+
+const FACTION_NAMES = Object.keys(FACTIONS);
+
+// "Chaos - World Eaters", "Xenos - Aeldari", "Adepta Sororitas" → our faction key
+function matchFaction(raw: string): string | null {
+  const cleaned = raw.replace(/^.*:/, "").trim();
+  // Exact match on the part after a leading "Grand Alliance - " prefix, or whole
+  const candidates = [cleaned, cleaned.split(/\s[-–]\s/).pop()?.trim() || cleaned];
+  for (const c of candidates) {
+    const hit = FACTION_NAMES.find((f) => f.toLowerCase() === c.toLowerCase());
+    if (hit) return hit;
+  }
+  // Substring fallback (longest faction name first to avoid "Chaos" clashes)
+  const byLen = [...FACTION_NAMES].sort((a, b) => b.length - a.length);
+  return byLen.find((f) => cleaned.toLowerCase().includes(f.toLowerCase())) || null;
+}
+
+function matchDetachment(faction: string | null, raw: string): string | null {
+  const cleaned = raw.replace(/^.*:/, "").trim();
+  const search = (dets: { n: string }[]) =>
+    dets.find((d) => d.n.toLowerCase() === cleaned.toLowerCase())?.n || null;
+  if (faction && FACTIONS[faction]) {
+    const hit = search(FACTIONS[faction]);
+    if (hit) return hit;
+  }
+  // Search every faction's detachments (handles detachment line before faction)
+  for (const dets of Object.values(FACTIONS)) {
+    const hit = search(dets);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// Detect faction and detachment anywhere within one list's text.
+function detectMeta(chunk: string): { faction: string | null; detachment: string | null } {
+  const lines = chunk.split(/\r?\n/).map((l) => l.trim());
+  let faction: string | null = null;
+  let detachment: string | null = null;
+
+  for (const line of lines) {
+    if (!faction && /faction\s*keyword/i.test(line)) faction = matchFaction(line);
+    if (!detachment && /detachment/i.test(line)) detachment = matchDetachment(faction, line);
+  }
+  // GW-app style: faction / detachment appear as bare lines near the top
+  if (!faction) {
+    for (const line of lines.slice(0, 12)) {
+      const f = FACTION_NAMES.find((n) => n.toLowerCase() === line.toLowerCase());
+      if (f) { faction = f; break; }
+    }
+  }
+  if (!detachment) {
+    for (const line of lines.slice(0, 15)) {
+      const d = matchDetachment(faction, line);
+      if (d) { detachment = d; break; }
+    }
+  }
+  return { faction, detachment };
+}
+
+// Split a multi-list document into per-list chunks, then parse each.
+// Handles WTC combined submissions (+ PLAYER / + FACTION KEYWORD headers) and
+// GW-app exports concatenated back to back.
+export function parseTeamLists(text: string): ParsedList[] {
+  const lines = text.split(/\r?\n/);
+
+  // Boundary markers: a new list starts at a WTC header or a GW-app army total.
+  const boundaries: number[] = [];
+  const isWtcHeader = (l: string) => /^\s*\+\s*(player|faction\s*keyword)\b/i.test(l);
+  const isArmyTotal = (l: string) => {
+    const m = l.match(POINTS_RE);
+    return !!m && Number(m[1]) >= 1500;
+  };
+  const usesWtc = lines.some(isWtcHeader);
+
+  lines.forEach((l, i) => {
+    if (usesWtc) {
+      // One boundary per FACTION KEYWORD line (or PLAYER when no keyword nearby)
+      if (/^\s*\+\s*faction\s*keyword\b/i.test(l)) boundaries.push(i);
+    } else if (isArmyTotal(l)) {
+      boundaries.push(i);
+    }
+  });
+
+  // Fall back to treating the whole thing as one list
+  if (boundaries.length === 0) {
+    const units = parseArmyList(text);
+    const { faction, detachment } = detectMeta(text);
+    return units.length ? [{ faction, detachment, units }] : [];
+  }
+
+  const results: ParsedList[] = [];
+  for (let b = 0; b < boundaries.length; b++) {
+    // Include a couple of lines before the boundary for GW-app (army name/faction
+    // sit just above the total) — but not past the previous chunk's end.
+    const rawStart = boundaries[b];
+    const start = usesWtc ? rawStart : Math.max(b === 0 ? 0 : boundaries[b - 1] + 1, rawStart - 3);
+    const end = b + 1 < boundaries.length ? boundaries[b + 1] : lines.length;
+    const chunk = lines.slice(start, end).join("\n");
+    const units = parseArmyList(chunk);
+    if (!units.length) continue;
+    const { faction, detachment } = detectMeta(chunk);
+    results.push({ faction, detachment, units });
+  }
+  return results;
 }

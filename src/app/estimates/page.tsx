@@ -5,11 +5,11 @@ import Link from "next/link";
 import { deserializeRoster, type RosterArmy } from "@/lib/roster";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
 import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
-import { DISP_STYLES } from "@/lib/data";
+import { DISP_STYLES, FACTIONS } from "@/lib/data";
 import ArmyEditor from "@/components/ArmyEditor";
 import EstimateInput from "@/components/EstimateInput";
 import PlayerEstimates from "@/components/PlayerEstimates";
-import { parseArmyList, formatUnits } from "@/lib/list-parser";
+import { parseArmyList, parseTeamLists, formatUnits } from "@/lib/list-parser";
 import {
   type OpponentMap,
   type OpponentTeam,
@@ -136,18 +136,51 @@ export default function EstimatesPage() {
     return result;
   }
 
+  function dispositionForDet(faction: string | null, det: string | null) {
+    if (!faction || !det || !FACTIONS[faction]) return null;
+    return FACTIONS[faction].find((d) => d.n === det)?.d ?? null;
+  }
+
   function confirmImport() {
     if (!importFor) return;
     const slug = slugifyTeam(importFor.name);
     if (playedRounds.has(slug)) { alert("Holdet er allerede spillet — lists og estimater er låst."); return; }
-    const roster = deserializeRoster(importText.trim());
-    if (!roster) { alert("Ugyldigt roster format"); return; }
-    if (roster.armies.length !== 8) { alert(`Roster skal have 8 hære (fandt ${roster.armies.length})`); return; }
+    const text = importText.trim();
+
+    // Auto-detect: a raw team-list paste (with unit content) vs a base64 roster-code.
+    const parsed = parseTeamLists(text);
+    const looksRaw = parsed.some((p) => p.units.length >= 3);
+    let armies: OpponentList[] | null = null;
+
+    if (looksRaw) {
+      armies = parsed.map((p) => ({
+        faction: p.faction || "",
+        detachments: p.detachment ? [p.detachment] : [],
+        disposition: dispositionForDet(p.faction, p.detachment),
+        units: p.units,
+      }));
+      const unresolved = armies.filter((a) => !a.faction || !a.detachments.length).length;
+      if (unresolved > 0 &&
+        !confirm(`${unresolved} af ${armies.length} lists mangler faction/detachment (ret dem bagefter med Redigér). Gem alligevel?`)) {
+        return;
+      }
+    } else {
+      const roster = deserializeRoster(text);
+      if (!roster) { alert("Kunne ikke læse — indsæt enten fulde liste-exports eller en roster-kode."); return; }
+      armies = roster.armies;
+    }
+
+    if (!armies.length) { alert("Ingen lists fundet i teksten."); return; }
+    if (armies.length !== 8 &&
+      !confirm(`Fandt ${armies.length} lists (forventede 8). Gem alligevel?`)) {
+      return;
+    }
+
     const team: OpponentTeam = {
       name: importFor.name,
       tier: importFor.tier,
-      armies: roster.armies,
-      estimates: buildAutoEstimates(roster.armies),
+      armies,
+      estimates: buildAutoEstimates(armies),
     };
     saveOpponentTeam(slug, team).catch(() => alert("Kunne ikke gemme — tjek Firebase"));
     setImportFor(null);
@@ -393,8 +426,8 @@ export default function EstimatesPage() {
                         <textarea
                           value={importText}
                           onChange={(e) => setImportText(e.target.value)}
-                          placeholder={`Indsæt roster-kode for ${teamName} (8 lister fra Roster Builder)...`}
-                          className="w-full h-16 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-2.5 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
+                          placeholder={`Indsæt hele holdets 8 liste-exports for ${teamName} (WTC eller GW-app format) — eller en roster-kode. Faction, detachment og enheder findes automatisk.`}
+                          className="w-full h-28 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-2.5 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
                         />
                         <div className="flex gap-2">
                           <button
@@ -525,7 +558,10 @@ export default function EstimatesPage() {
                                   )}
                                 </div>
                                 {showingUnits && hasUnits && (
-                                  <p className="px-2 pb-1.5 text-[10px] leading-[1.6] text-[#8888a0] break-words">
+                                  <p
+                                    title={formatUnits(list.units!)}
+                                    className="px-2 pb-1.5 text-[10px] leading-[1.6] text-[#8888a0] break-words"
+                                  >
                                     {formatUnits(list.units!)}
                                   </p>
                                 )}
@@ -603,8 +639,8 @@ export default function EstimatesPage() {
               <textarea
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
-                placeholder={`Indsæt roster-kode for ${importFor.name}...`}
-                className="w-full h-16 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-2.5 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
+                placeholder={`Indsæt hele holdets 8 liste-exports for ${importFor.name} — eller en roster-kode.`}
+                className="w-full h-28 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-2.5 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
               />
               <div className="flex gap-2">
                 <button
