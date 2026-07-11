@@ -70,6 +70,19 @@ export async function deleteOpponentTeam(slug: string): Promise<void> {
   await remove(ref(getDb(), `${BASE}/${slug}`));
 }
 
+// Restore teams from a backup by writing each team individually. Teams present
+// in the backup are overwritten; teams NOT in the backup are left untouched
+// (never a blanket wipe), so restoring an old backup can't delete newer teams.
+export async function restoreOpponents(map: OpponentMap): Promise<number> {
+  await authReady();
+  const updates: Record<string, OpponentTeam> = {};
+  for (const [slug, team] of Object.entries(map)) {
+    if (team && team.name) updates[`${BASE}/${slug}`] = team;
+  }
+  if (Object.keys(updates).length) await update(ref(getDb()), updates);
+  return Object.keys(updates).length;
+}
+
 // Replace a single list on a team without touching the other seven or the estimates.
 export async function updateOpponentList(
   slug: string,

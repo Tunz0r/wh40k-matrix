@@ -206,9 +206,19 @@ export default function PlayerEstimates({
                 cluster.rep.list.units?.length
                   ? cluster.rep.list.units
                   : cluster.members.find((m) => m.list.units?.length)?.list.units ?? null;
+              // Full hover tooltip for the whole card: "Blood Angels Liberator
+              // Assault Group · Take and Hold" plus the list content if present
+              const headline = [
+                cluster.rep.list.faction,
+                (cluster.rep.list.detachments || []).join(", "),
+              ].filter(Boolean).join(" ");
+              const cardTitle =
+                [headline, disp].filter(Boolean).join(" · ") +
+                (cardUnits ? `\n${formatUnits(cardUnits)}` : "");
               return (
                 <div
                   key={key}
+                  title={cardTitle}
                   className={`rounded-lg border ${filledCount === 0 ? "border-[rgba(168,85,247,0.25)]" : "border-white/[0.08]"}`}
                 >
                   <div className="flex items-center gap-2.5 p-2.5">

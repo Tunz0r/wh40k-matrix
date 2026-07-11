@@ -28,12 +28,10 @@ import {
   type OpponentMap,
   type OpponentTeam,
   subscribeToOpponents,
-  saveOpponentTeam,
   lookupEstimate,
   estimateStyle,
   slugifyTeam,
 } from "@/lib/estimates-db";
-import { WTC_TIERS, generateComposition } from "@/lib/wtc-testdata";
 
 // --- Types ---
 
@@ -890,36 +888,6 @@ export default function TournamentPage() {
     };
   }
 
-  // Populate the estimates database with the full WTC field: official seeding
-  // tiers and a legal, meta-based 8-list composition per country.
-  async function loadTestData() {
-    const countryCount = WTC_TIERS.reduce((n, t) => n + t.teams.length, 0) - 1; // minus us
-    if (!confirm(`Opretter ${countryCount} WTC-lande med genererede lists i 4 seeding-tiers. Eksisterende hold i estimat-databasen overskrives. Fortsæt?`)) return;
-    updateTournament({ seedingTiers: WTC_TIERS });
-    try {
-      await saveTeamSetup(TEAM_SLUG, { seedingTiers: WTC_TIERS });
-      const jobs: Promise<void>[] = [];
-      for (const tier of WTC_TIERS) {
-        for (const country of tier.teams) {
-          if (TEAM_NAME.toLowerCase().includes(country.toLowerCase())) continue;
-          jobs.push(
-            saveOpponentTeam(slugifyTeam(country), {
-              name: country,
-              tier: tier.name,
-              armies: generateComposition(country),
-              estimates: {},
-            })
-          );
-        }
-      }
-      await Promise.all(jobs);
-      alert(`${jobs.length} lande oprettet med lists — se dem under Estimater.`);
-    } catch (e) {
-      console.error("Failed to load WTC test data:", e);
-      alert("Kunne ikke gemme testdata — tjek Firebase.");
-    }
-  }
-
   async function testCoaching() {
     if (!tournament.roster) { alert("Intet roster fundet — opdater roster først."); return; }
     const dk = tournament.roster;
@@ -1272,12 +1240,6 @@ export default function TournamentPage() {
 
             {/* Test tools */}
             <div className="text-center flex justify-center gap-2">
-              <button
-                onClick={loadTestData}
-                className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
-              >
-                Indlæs testdata
-              </button>
               <button
                 onClick={testCoaching}
                 className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { deserializeRoster, type RosterArmy } from "@/lib/roster";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
@@ -20,6 +20,7 @@ import {
   saveOpponentTeam,
   deleteOpponentTeam,
   updateOpponentList,
+  restoreOpponents,
   writeEstimateCells,
   listSimilarity,
   SIMILARITY_THRESHOLD,
@@ -54,6 +55,46 @@ export default function EstimatesPage() {
   function switchMode(m: "country" | "player") {
     setMode(m);
     localStorage.setItem("wtc-est-mode", m);
+  }
+
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Download a JSON backup of the estimates + team seeding/roster.
+  function exportBackup() {
+    const backup = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      team: TEAM_NAME,
+      opponents,
+      seedingTiers: fbDoc?.seedingTiers || [],
+      roster: fbDoc?.roster || null,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+    a.download = `wtc-estimater-${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importBackup(file: File) {
+    try {
+      const data = JSON.parse(await file.text());
+      const map = data?.opponents as OpponentMap | undefined;
+      if (!map || typeof map !== "object") { alert("Filen ser ikke ud som en gyldig estimat-backup."); return; }
+      const teamCount = Object.keys(map).length;
+      const cellCount = Object.values(map).reduce(
+        (n, t) => n + Object.keys(t.estimates || {}).length, 0);
+      if (!confirm(
+        `Gendan ${teamCount} hold (${cellCount} estimat-celler) fra ${data.exportedAt || "backup"}?\n\n` +
+        `Hold i backuppen overskrives. Hold der IKKE er i backuppen røres ikke.`)) return;
+      const n = await restoreOpponents(map);
+      alert(`${n} hold gendannet.`);
+    } catch {
+      alert("Kunne ikke læse filen — er det en JSON-backup?");
+    }
   }
 
   useEffect(() => {
@@ -317,6 +358,33 @@ export default function EstimatesPage() {
           <span className="text-[11px] text-[#8888a0] hidden sm:inline">
             {totals.teams} hold · {totals.manual} manuelle · {totals.auto} auto
           </span>
+          <div className="flex items-center gap-1 w-full sm:w-auto">
+            <button
+              onClick={exportBackup}
+              title="Download en JSON-backup af alle estimater og lists"
+              className="text-[11px] text-[#8888a0] hover:text-[#4ade80] border border-white/[0.1] hover:border-[rgba(74,222,128,0.3)] px-2.5 py-1 rounded-md transition-colors"
+            >
+              ↓ Backup
+            </button>
+            <button
+              onClick={() => fileRef.current?.click()}
+              title="Gendan estimater fra en tidligere backup-fil"
+              className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.1] px-2.5 py-1 rounded-md transition-colors"
+            >
+              ↑ Gendan
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) importBackup(f);
+                e.target.value = "";
+              }}
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2 mt-2 flex-wrap text-[10px]">
           {[
