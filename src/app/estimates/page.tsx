@@ -134,12 +134,18 @@ export default function EstimatesPage() {
     const seededSlugs = new Set(
       seedingTiers.flatMap((t) => t.teams.map((team) => slugifyTeam(team)))
     );
-    const others = Object.entries(opponents)
-      .filter(([slug]) => !seededSlugs.has(slug))
-      .map(([, team]) => team.name);
-    return [...seedingTiers, { name: OTHER_TIER, teams: others }].filter(
-      (t) => t.teams.length > 0 || t.name !== OTHER_TIER
-    );
+    // Teams not in seeding are grouped by their own tier label (e.g. the ATC
+    // "Meta" reference teams get their own section); tier-less ones fall back
+    // to "Andre hold".
+    const extraSections = new Map<string, string[]>();
+    for (const [slug, team] of Object.entries(opponents)) {
+      if (seededSlugs.has(slug)) continue;
+      const section = team.tier && !/^tier/i.test(team.tier) ? team.tier : OTHER_TIER;
+      if (!extraSections.has(section)) extraSections.set(section, []);
+      extraSections.get(section)!.push(team.name);
+    }
+    const extras = [...extraSections.entries()].map(([name, teams]) => ({ name, teams }));
+    return [...seedingTiers, ...extras].filter((t) => t.teams.length > 0);
   }, [fbDoc, opponents]);
 
   const totals = useMemo(() => {

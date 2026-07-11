@@ -549,8 +549,10 @@ export default function TournamentPage() {
       ),
     }));
     const seeded = new Set(tiers.flatMap((t) => t.teams.map((x) => slugifyTeam(x))));
+    // Meta/reference teams (e.g. ATC baselines) aren't real WTC opponents —
+    // keep them out of the round picker.
     const others = Object.values(opponents)
-      .filter((t) => !seeded.has(slugifyTeam(t.name)))
+      .filter((t) => !seeded.has(slugifyTeam(t.name)) && !/^meta/i.test(t.tier || ""))
       .map((t) => t.name);
     return [...tiers, { name: "Andre hold", teams: others }]
       .map((g) => ({
