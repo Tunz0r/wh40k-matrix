@@ -42,14 +42,22 @@ export function parseArmyList(text: string): string[] {
   return units;
 }
 
-// Aggregate duplicate units for display: ["10x Jakhals","10x Jakhals","Angron"]
-// → "10x Jakhals (x2) · Angron"
-export function formatUnits(units: string[]): string {
+// Aggregate duplicate units: ["10x Jakhals","10x Jakhals","Angron"]
+// → ["10x Jakhals (x2)", "Angron"]
+function aggregateUnits(units: string[]): string[] {
   const counts = new Map<string, number>();
   for (const u of units) counts.set(u, (counts.get(u) || 0) + 1);
-  return [...counts.entries()]
-    .map(([u, n]) => (n > 1 ? `${u} (x${n})` : u))
-    .join(" · ");
+  return [...counts.entries()].map(([u, n]) => (n > 1 ? `${u} (x${n})` : u));
+}
+
+// Compact single-line summary: "10x Jakhals (x2) · Angron"
+export function formatUnits(units: string[]): string {
+  return aggregateUnits(units).join(" · ");
+}
+
+// One unit per line — for hover tooltips where readability matters.
+export function formatUnitsLines(units: string[]): string {
+  return aggregateUnits(units).join("\n");
 }
 
 // --- Bulk team parsing: one document → up to 8 lists ---

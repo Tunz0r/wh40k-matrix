@@ -10,7 +10,7 @@ import {
   type ClusterMember,
   clusterLists,
 } from "@/lib/estimates-db";
-import { formatUnits } from "@/lib/list-parser";
+import { formatUnits, formatUnitsLines } from "@/lib/list-parser";
 import EstimateInput from "./EstimateInput";
 
 const MY_ARMY_KEY = "wtc-my-army";
@@ -218,7 +218,7 @@ export default function PlayerEstimates({
               ].filter(Boolean).join(" ");
               const cardTitle =
                 [headline, disp].filter(Boolean).join(" · ") +
-                (cardUnits ? `\n${formatUnits(cardUnits)}` : "");
+                (cardUnits ? `\n\n${formatUnitsLines(cardUnits)}` : "");
               return (
                 <div
                   key={key}
