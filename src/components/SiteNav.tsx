@@ -19,12 +19,17 @@ const LINKS: { href: string; label: string; match: (path: string) => boolean }[]
   {
     href: "/tournament",
     label: "Turnering",
-    match: (p) => p.startsWith("/tournament") || p.startsWith("/coaching"),
+    match: (p) => p.startsWith("/tournament") || p.startsWith("/coaching") || p.startsWith("/calibration"),
   },
   {
     href: "/estimates",
     label: "Estimater",
     match: (p) => p.startsWith("/estimates"),
+  },
+  {
+    href: "/player",
+    label: "Min side",
+    match: (p) => p.startsWith("/player"),
   },
   {
     href: `/team/${TEAM_SLUG}`,

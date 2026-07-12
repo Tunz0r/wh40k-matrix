@@ -14,6 +14,7 @@ export interface EstimateCell {
 // parsed list content (unit names, duplicates allowed) once WTC lists drop.
 export interface OpponentList extends RosterArmy {
   units?: string[];
+  notes?: string; // scouting intel about this specific list
 }
 
 export interface OpponentTeam {
@@ -22,6 +23,7 @@ export interface OpponentTeam {
   armies: OpponentList[];
   // key `${ourIdx}_${theirIdx}` → cell
   estimates?: Record<string, EstimateCell>;
+  notes?: string; // scouting intel about the team / captain / pairing habits
 }
 
 export type OpponentMap = Record<string, OpponentTeam>;
@@ -81,6 +83,18 @@ export async function restoreOpponents(map: OpponentMap): Promise<number> {
   }
   if (Object.keys(updates).length) await update(ref(getDb()), updates);
   return Object.keys(updates).length;
+}
+
+// Save scouting note for a whole team (patch, doesn't touch lists/estimates).
+export async function saveTeamNote(slug: string, note: string): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `${BASE}/${slug}/notes`), note || null);
+}
+
+// Save scouting note for a single list.
+export async function saveListNote(slug: string, idx: number, note: string): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `${BASE}/${slug}/armies/${idx}/notes`), note || null);
 }
 
 // Replace a single list on a team without touching the other seven or the estimates.

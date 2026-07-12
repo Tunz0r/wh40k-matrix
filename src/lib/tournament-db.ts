@@ -25,6 +25,16 @@ export interface TournamentDoc {
   rounds: TournamentRound[];
   roster?: RosterExport | null;
   seedingTiers?: SeedingTier[];
+  eventDate?: string | null; // ISO date of the tournament, for the readiness countdown
+}
+
+// Patch tournament-level settings (event date etc.) without touching rounds.
+export async function saveTournamentSettings(
+  slug: string,
+  data: Partial<Pick<TournamentDoc, "eventDate">>
+): Promise<void> {
+  await authReady();
+  await update(ref(getDb(), `tournaments/${slug}`), data);
 }
 
 export async function createTournament(

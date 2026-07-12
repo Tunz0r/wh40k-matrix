@@ -20,6 +20,8 @@ import {
   saveOpponentTeam,
   deleteOpponentTeam,
   updateOpponentList,
+  saveTeamNote,
+  saveListNote,
   restoreOpponents,
   writeEstimateCells,
   listSimilarity,
@@ -31,6 +33,56 @@ const OTHER_TIER = "Andre hold";
 
 function shortFaction(name: string): string {
   return name.length > 14 ? name.slice(0, 13) + "…" : name;
+}
+
+// Inline scouting-note field: shows the saved note (or an "add" affordance),
+// expands to a textarea on click, saves on blur.
+function ScoutNote({
+  note,
+  editing,
+  onEdit,
+  onSave,
+  placeholder,
+  compact,
+}: {
+  note?: string;
+  editing: { text: string } | null;
+  onEdit: (text: string | null) => void;
+  onSave: (text: string) => void;
+  placeholder: string;
+  compact?: boolean;
+}) {
+  if (editing) {
+    return (
+      <textarea
+        autoFocus
+        value={editing.text}
+        onChange={(e) => onEdit(e.target.value)}
+        onBlur={() => onSave(editing.text)}
+        placeholder={placeholder}
+        className={`w-full ${compact ? "h-12" : "h-16"} bg-[#1a1a22] border border-[rgba(250,204,21,0.35)] rounded-md p-2 text-[11px] text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none focus:border-[#facc15]`}
+      />
+    );
+  }
+  if (note) {
+    return (
+      <button
+        onClick={() => onEdit(note)}
+        className="w-full text-left text-[11px] text-[#facc15] bg-[rgba(250,204,21,0.06)] border border-[rgba(250,204,21,0.15)] rounded-md px-2 py-1 hover:border-[rgba(250,204,21,0.35)] transition-colors whitespace-pre-wrap"
+        title="Klik for at redigere scouting-note"
+      >
+        🔍 {note}
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={() => onEdit("")}
+      className="text-[10px] text-[#8888a0] hover:text-[#facc15] transition-colors"
+    >
+      + Scouting-note
+    </button>
+  );
 }
 
 
@@ -45,6 +97,7 @@ export default function EstimatesPage() {
   const [pasteFor, setPasteFor] = useState<{ slug: string; idx: number } | null>(null);
   const [pasteText, setPasteText] = useState("");
   const [unitsShown, setUnitsShown] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState<{ key: string; text: string } | null>(null);
   const [mode, setMode] = useState<"country" | "player">("country");
 
   useEffect(() => {
@@ -522,6 +575,16 @@ export default function EstimatesPage() {
 
                     {isOpen && hasLists && ourArmies.length > 0 && (
                       <div className="px-3 pb-3">
+                        {/* Team-level scouting note */}
+                        <div className="mb-2">
+                          <ScoutNote
+                            note={team.notes}
+                            editing={noteDraft?.key === `team:${slug}` ? { text: noteDraft.text } : null}
+                            onEdit={(t) => setNoteDraft(t === null ? null : { key: `team:${slug}`, text: t })}
+                            onSave={(t) => { saveTeamNote(slug, t.trim()).catch(() => {}); setNoteDraft(null); }}
+                            placeholder={`Intel om ${teamName} — kaptajnens vaner, pairing-tendenser...`}
+                          />
+                        </div>
                         <div className="overflow-x-auto">
                         <table className="border-separate border-spacing-1">
                           <thead>
@@ -639,6 +702,16 @@ export default function EstimatesPage() {
                                     {formatUnits(list.units!)}
                                   </p>
                                 )}
+                                <div className="px-2 pb-1.5">
+                                  <ScoutNote
+                                    compact
+                                    note={list.notes}
+                                    editing={noteDraft?.key === `list:${rowKey}` ? { text: noteDraft.text } : null}
+                                    onEdit={(t) => setNoteDraft(t === null ? null : { key: `list:${rowKey}`, text: t })}
+                                    onSave={(t) => { saveListNote(slug, j, t.trim()).catch(() => {}); setNoteDraft(null); }}
+                                    placeholder={`Intel om denne ${list.faction}-liste...`}
+                                  />
+                                </div>
                                 {pasting && (
                                   <div className="px-2 pb-2 space-y-1.5">
                                     <textarea

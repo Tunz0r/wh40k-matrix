@@ -17,6 +17,7 @@ import { createSession, type MatchupData } from "@/lib/session";
 import ArmyEditor from "@/components/ArmyEditor";
 import {
   saveTeamSetup,
+  saveTournamentSettings,
   setActiveSession,
   updateRoundStatus,
   resetTournamentDoc,
@@ -32,6 +33,7 @@ import {
   estimateStyle,
   slugifyTeam,
 } from "@/lib/estimates-db";
+import { computeStandings } from "@/lib/standings";
 
 // --- Types ---
 
@@ -532,6 +534,36 @@ export default function TournamentPage() {
     return [...map.values()].sort((a, b) => a.number - b.number);
   }, [fbRounds, tournament.rounds]);
 
+  const standings = useMemo(() => computeStandings(displayRounds), [displayRounds]);
+
+  // Per-army readiness: player assigned + estimate completeness across the field.
+  const readiness = useMemo(() => {
+    const armies = tournament.roster?.armies || [];
+    return armies.map((army, i) => {
+      let filled = 0, total = 0;
+      for (const team of Object.values(opponents)) {
+        (team.armies || []).forEach((_, j) => {
+          total++;
+          if (team.estimates?.[`${i}_${j}`]) filled++;
+        });
+      }
+      return {
+        faction: army.faction,
+        player: army.player || null,
+        pct: total ? Math.round((100 * filled) / total) : 0,
+      };
+    });
+  }, [tournament.roster, opponents]);
+
+  const eventDate = fbDoc?.eventDate || null;
+  const daysToEvent = eventDate
+    ? Math.ceil((new Date(eventDate).getTime() - Date.now()) / 86400000)
+    : null;
+  const playersAssigned = readiness.filter((r) => r.player).length;
+  const estimatesDone = readiness.length
+    ? Math.round(readiness.reduce((s, r) => s + r.pct, 0) / readiness.length)
+    : 0;
+
   // Country picker for new rounds: seeding tiers + estimate teams outside seeding.
   // Countries without stored lists or already played are disabled.
   const opponentChoices = useMemo(() => {
@@ -960,6 +992,95 @@ export default function TournamentPage() {
         {/* ===== OVERVIEW ===== */}
         {view === "overview" && (
           <div className="space-y-6">
+            {/* Standings & projection — only once a round has a result */}
+            {standings.played > 0 && (
+              <div className="rounded-xl border border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.04)] p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <h2 className="text-sm font-semibold text-[#e8e8f0]">Stilling</h2>
+                  <span className="text-[10px] text-[#8888a0]">efter {standings.played}/{TOTAL_ROUNDS} runder</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="text-center">
+                    <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">Rekord</div>
+                    <div className="text-lg font-bold text-[#e8e8f0]">
+                      <span className="text-[#4ade80]">{standings.wins}</span>-
+                      <span className="text-[#8888a0]">{standings.draws}</span>-
+                      <span className="text-[#f87171]">{standings.losses}</span>
+                    </div>
+                    <div className="text-[9px] text-[#8888a0]">W-D-L</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">BP</div>
+                    <div className="text-lg font-bold text-[#e8e8f0]">
+                      {standings.bpFor}<span className="text-[#8888a0] text-sm">–{standings.bpAgainst}</span>
+                    </div>
+                    <div className={`text-[9px] font-semibold ${standings.bpDiff > 0 ? "text-[#4ade80]" : standings.bpDiff < 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+                      {standings.bpDiff > 0 ? "+" : ""}{standings.bpDiff} diff
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">Snit/runde</div>
+                    <div className="text-lg font-bold text-[#e8e8f0]">{standings.avgFor.toFixed(1)}</div>
+                    <div className="text-[9px] text-[#8888a0]">af 100 BP</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">Projektion</div>
+                    <div className="text-lg font-bold text-[#a855f7]">{standings.projectedFinal}</div>
+                    <div className="text-[9px] text-[#8888a0]">{standings.roundsLeft > 0 ? `ved nuv. tempo` : "slut"}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Team readiness — prep checklist */}
+            <div className="rounded-xl border border-white/[0.08] p-4">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <h2 className="text-sm font-semibold text-[#e8e8f0]">Hold-parathed</h2>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${playersAssigned === 8 ? "bg-[rgba(34,197,94,0.12)] text-[#4ade80]" : "bg-[#22222e] text-[#8888a0]"}`}>
+                  {playersAssigned}/8 spillere
+                </span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${estimatesDone >= 100 ? "bg-[rgba(34,197,94,0.12)] text-[#4ade80]" : "bg-[#22222e] text-[#8888a0]"}`}>
+                  {estimatesDone}% estimater
+                </span>
+                <div className="ml-auto flex items-center gap-2">
+                  {daysToEvent !== null && (
+                    <span className={`text-[10px] font-semibold ${daysToEvent <= 7 ? "text-[#facc15]" : "text-[#8888a0]"}`}>
+                      {daysToEvent > 0 ? `${daysToEvent} dage til WTC` : daysToEvent === 0 ? "WTC i dag!" : "WTC overstået"}
+                    </span>
+                  )}
+                  <input
+                    type="date"
+                    value={eventDate ? eventDate.slice(0, 10) : ""}
+                    onChange={(e) => saveTournamentSettings(TEAM_SLUG, { eventDate: e.target.value || null }).catch(() => {})}
+                    className="bg-[#1a1a22] border border-white/[0.14] rounded px-1.5 py-0.5 text-[10px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+                  />
+                </div>
+              </div>
+              {tournament.roster ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {readiness.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg border border-white/[0.06] px-2.5 py-1.5">
+                      <span className="text-[11px] text-[#8888a0] w-4">{i + 1}.</span>
+                      <span className="text-[12px] text-[#e8e8f0] font-medium truncate flex-1">
+                        {r.player ? `${r.player} — ` : <span className="text-[#facc15]">Ingen spiller · </span>}
+                        {r.faction}
+                      </span>
+                      <div className="w-16 h-1.5 rounded-full bg-white/[0.06] overflow-hidden shrink-0">
+                        <div className={`h-full rounded-full ${r.pct >= 100 ? "bg-[#4ade80]" : "bg-[#a855f7]"}`} style={{ width: `${r.pct}%` }} />
+                      </div>
+                      <span className={`text-[10px] font-bold w-8 text-right ${r.pct >= 100 ? "text-[#4ade80]" : "text-[#8888a0]"}`}>{r.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-[#8888a0]">Intet roster endnu.</p>
+              )}
+              <p className="text-[10px] text-[#8888a0] mt-2">
+                Tildel spillere via ✎ på hærene · estimater udfyldes under{" "}
+                <Link href="/estimates" className="text-[#a855f7] hover:text-[#c084fc]">Estimater → Min hær</Link>
+              </p>
+            </div>
+
             {/* Our roster */}
             <div className="rounded-xl border border-[rgba(74,222,128,0.2)] bg-[rgba(74,222,128,0.03)] p-4">
               <div className="flex items-center gap-2 mb-3">
