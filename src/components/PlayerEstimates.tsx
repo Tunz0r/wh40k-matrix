@@ -16,8 +16,17 @@ import EstimateInput from "./EstimateInput";
 const MY_ARMY_KEY = "wtc-my-army";
 
 function tierRank(tier: string): number {
-  const m = tier.match(/\d+/);
+  const m = /^tier/i.test(tier) ? tier.match(/\d+/) : null;
   return m ? Number(m[0]) : 99;
+}
+
+// Priority weight per seeding tier — estimating against stronger fields matters
+// more (but prevalence still dominates, since the cluster score SUMS these over
+// every country running the archetype). Meta reference copies count 0.
+// To emphasise Tier 1 more, use { 1: 5, 2: 3, 3: 2, 4: 1 }.
+const TIER_WEIGHT: Record<number, number> = { 1: 4, 2: 3, 3: 2, 4: 1 };
+function tierWeight(tier: string): number {
+  return /^tier/i.test(tier) ? TIER_WEIGHT[tierRank(tier)] ?? 0 : 0;
 }
 
 export default function PlayerEstimates({
@@ -80,18 +89,21 @@ export default function PlayerEstimates({
       const anchor = !playedRounds.has(cluster.rep.teamSlug)
         ? cluster.rep
         : unlockedMembers[0] ?? null;
-      const bestTier = Math.min(...cluster.members.map((m) => tierRank(m.tier)));
       const filledCount = cluster.members.filter((m) => cellFor(m, myIdx)).length;
+      // Priority = sum of seeding-tier weights over the countries running this
+      // archetype (meta reference copies count 0). Blends prevalence with
+      // opponent strength.
+      const weight = cluster.members.reduce((s, m) => s + tierWeight(m.tier), 0);
       // Clusters where a real army list has been pasted (unit content) are the
       // useful ones to estimate; synthetic placeholders sink to the bottom.
       const hasUnits = cluster.members.some((m) => m.list.units?.length);
-      return { cluster, displayCell, anchor, bestTier, filledCount, hasUnits };
+      return { cluster, displayCell, anchor, weight, filledCount, hasUnits };
     });
   }, [clusters, myIdx, opponents, playedRounds]);
 
   const clusterKey = (c: ListCluster) => `${c.rep.teamSlug}_${c.rep.listIdx}`;
 
-  // Real lists first, then unfilled first, tier 1 first, biggest clusters first.
+  // Real lists first, then unfilled first, then highest tier-weighted priority.
   // Recomputed only when the army/field changes or focus leaves the list.
   const sortedKeys = (list: typeof annotated) =>
     [...list]
@@ -100,7 +112,7 @@ export default function PlayerEstimates({
         const aEmpty = a.filledCount === 0 ? 0 : 1;
         const bEmpty = b.filledCount === 0 ? 0 : 1;
         if (aEmpty !== bEmpty) return aEmpty - bEmpty;
-        if (a.bestTier !== b.bestTier) return a.bestTier - b.bestTier;
+        if (b.weight !== a.weight) return b.weight - a.weight;
         return b.cluster.members.length - a.cluster.members.length;
       })
       .map((a) => clusterKey(a.cluster));
@@ -199,7 +211,7 @@ export default function PlayerEstimates({
               }
             }}
           >
-            {displayList.map(({ cluster, displayCell, anchor, filledCount }) => {
+            {displayList.map(({ cluster, displayCell, anchor, filledCount, weight }) => {
               const key = clusterKey(cluster);
               const isOpen = expanded === key;
               const disp = cluster.rep.list.disposition;
@@ -262,6 +274,12 @@ export default function PlayerEstimates({
                         {isOpen ? "▴" : "▾"}
                       </button>
                     </div>
+                    <span
+                      className="text-[9px] font-semibold text-[#a855f7] bg-[rgba(168,85,247,0.1)] px-1.5 py-0.5 rounded shrink-0"
+                      title="Prioritet: sum af seeding-vægte (Tier 1=4, 2=3, 3=2, 4=1) for landene med denne arketype"
+                    >
+                      prio {weight}
+                    </span>
                     <span className="text-[9px] text-[#8888a0] shrink-0">
                       {filledCount}/{cluster.members.length}
                     </span>
