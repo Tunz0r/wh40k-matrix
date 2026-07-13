@@ -133,8 +133,12 @@ export async function writeEstimateCells(
 // up to 40 + same disposition 20 — same faction+detachments with a different
 // disposition scores exactly 80.
 //
-// 80+ ⇒ "same list" for estimate purposes.
-export const SIMILARITY_THRESHOLD = 80;
+// 75+ ⇒ "same list" for estimate purposes. Lowered from 80: on the real meta
+// pool every 75-79% pair is the same faction+detachment with a different unit
+// mix (Necrons Awakened, Salamanders Librarius, TSons Hexwarp variants) — true
+// same-archetype merges, no cross-archetype false merges. Keeps a margin above
+// 70 as the list pool grows.
+export const SIMILARITY_THRESHOLD = 75;
 
 function unitOverlap(a: string[], b: string[]): number {
   const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
