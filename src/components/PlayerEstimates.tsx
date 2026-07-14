@@ -85,10 +85,15 @@ export default function PlayerEstimates({
       const anyCell = cluster.members.map((m) => cellFor(m, myIdx)).find(Boolean);
       const displayCell = (repCell && !repCell.auto ? repCell : manualCell) ?? repCell ?? anyCell;
       const unlockedMembers = cluster.members.filter((m) => !playedRounds.has(m.teamSlug));
-      // Anchor for writes: the representative unless it's locked
-      const anchor = !playedRounds.has(cluster.rep.teamSlug)
-        ? cluster.rep
-        : unlockedMembers[0] ?? null;
+      // Anchor for the MANUAL write: prefer a permanent meta-reference member
+      // (ATC/PtG/Listhammer, tier "Meta …") so the manual estimate lives in the
+      // library that never gets rebuilt. Nations are disposable and only ever
+      // hold auto-inherited copies, so estimating an archetype survives any
+      // later country rebuild (incl. loading the real WTC lists). Falls back to
+      // the rep/first unlocked list for archetypes not yet in the library.
+      const anchor =
+        unlockedMembers.find((m) => /^meta/i.test(m.tier)) ??
+        (!playedRounds.has(cluster.rep.teamSlug) ? cluster.rep : unlockedMembers[0] ?? null);
       const filledCount = cluster.members.filter((m) => cellFor(m, myIdx)).length;
       // Priority = sum of seeding-tier weights over the countries running this
       // archetype (meta reference copies count 0). Blends prevalence with
