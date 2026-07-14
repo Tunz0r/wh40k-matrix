@@ -12,6 +12,7 @@ export interface MatchupData {
   module: string;
   layoutPage: number | null;
   estimate: number; // pairing estimate (0-20 WTC scale), set when the matchup is created
+  tableAdj?: number; // live per-game adjustment once the defender's table is known; effective = estimate + tableAdj
   aVP: number; // Team A victory points
   bVP: number; // Team B victory points
   round: number; // current game round (1-5)
@@ -111,4 +112,17 @@ export async function updateMatchupFinal(
     `sessions/${sessionId}/matchups/${matchupIndex}/final`
   );
   await set(matchupRef, final);
+}
+
+export async function updateMatchupTableAdj(
+  sessionId: string,
+  matchupIndex: number,
+  tableAdj: number
+): Promise<void> {
+  await authReady();
+  const matchupRef = ref(
+    getDb(),
+    `sessions/${sessionId}/matchups/${matchupIndex}/tableAdj`
+  );
+  await set(matchupRef, tableAdj);
 }

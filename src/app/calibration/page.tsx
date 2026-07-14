@@ -90,7 +90,9 @@ export default function CalibrationPage() {
         const bp = vpToBP(vpDiff);
         const actual = vpDiff >= 0 ? bp.winner : bp.loser;
         const rosterArmy = doc?.roster?.armies?.find((a) => a.faction === m.aFaction);
-        const estimate = m.estimate && m.estimate > 0 ? m.estimate : null;
+        // Compare the table-adjusted estimate (what we actually expected on the
+        // chosen table) against the result.
+        const estimate = m.estimate && m.estimate > 0 ? m.estimate + (m.tableAdj ?? 0) : null;
         rows.push({
           roundNumber: round.number,
           opponentName: round.opponentName || session.teamBName,

@@ -13,6 +13,7 @@ import {
   updateMatchupRound,
   updateMatchupNotes,
   updateMatchupFinal,
+  updateMatchupTableAdj,
 } from "@/lib/session";
 import { updateRoundStatus } from "@/lib/tournament-db";
 
@@ -81,6 +82,13 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
   const handleNotes = useCallback(
     (idx: number, notes: string) => {
       updateMatchupNotes(sessionId, idx, notes);
+    },
+    [sessionId]
+  );
+
+  const handleTableAdj = useCallback(
+    (idx: number, adj: number) => {
+      updateMatchupTableAdj(sessionId, idx, adj);
     },
     [sessionId]
   );
@@ -239,6 +247,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
               onRound={handleRound}
               onNotes={handleNotes}
               onFinal={handleFinal}
+              onTableAdj={handleTableAdj}
             />
           ))}
         </div>
@@ -276,6 +285,7 @@ function MatchupCard({
   onRound,
   onNotes,
   onFinal,
+  onTableAdj,
 }: {
   idx: number;
   matchup: MatchupData;
@@ -288,9 +298,12 @@ function MatchupCard({
   onRound: (idx: number, r: number) => void;
   onNotes: (idx: number, n: string) => void;
   onFinal: (idx: number, f: boolean) => void;
+  onTableAdj: (idx: number, adj: number) => void;
 }) {
   const aVP = matchup.aVP ?? 0;
   const bVP = matchup.bVP ?? 0;
+  const tableAdj = matchup.tableAdj ?? 0;
+  const effEstimate = matchup.estimate + tableAdj; // table-adjusted estimate
   const vpDiff = aVP - bVP;
   const bp = vpToBP(vpDiff);
   const aAhead = vpDiff >= 0;
@@ -332,8 +345,9 @@ function MatchupCard({
               {aAhead ? bp.winner : bp.loser} BP
             </span>
             {matchup.estimate != null && matchup.estimate > 0 && (
-              <span className={`text-[9px] ${matchup.estimate >= 11 ? "text-[#4ade80]" : matchup.estimate <= 9 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
-                Est {matchup.estimate}
+              <span className={`text-[9px] ${effEstimate >= 11 ? "text-[#4ade80]" : effEstimate <= 9 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+                Est {effEstimate}
+                {tableAdj !== 0 && <span className="text-[#facc15]"> ({tableAdj > 0 ? "+" : ""}{tableAdj})</span>}
               </span>
             )}
             <div className="flex items-center gap-1">
@@ -380,8 +394,9 @@ function MatchupCard({
             {aAhead ? bp.winner : bp.loser} BP
           </span>
           {matchup.estimate != null && matchup.estimate > 0 && (
-            <span className={`text-[9px] shrink-0 ${matchup.estimate >= 11 ? "text-[#4ade80]" : matchup.estimate <= 9 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
-              Est {matchup.estimate}
+            <span className={`text-[9px] shrink-0 ${effEstimate >= 11 ? "text-[#4ade80]" : effEstimate <= 9 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+              Est {effEstimate}
+              {tableAdj !== 0 && <span className="text-[#facc15]"> ({tableAdj > 0 ? "+" : ""}{tableAdj})</span>}
             </span>
           )}
           <div className="flex items-center gap-1 shrink-0 ml-1">
@@ -418,6 +433,51 @@ function MatchupCard({
               {matchup.aDetachments.join(", ")} vs {matchup.bDetachments.join(", ")}
             </span>
           </div>
+
+          {/* Estimate + table adjustment */}
+          {matchup.estimate != null && matchup.estimate > 0 && (
+            <div className="flex items-center gap-2.5 rounded-lg bg-[#1a1a22] border border-white/[0.08] p-2.5">
+              <div className="text-center">
+                <div className="text-[9px] text-[#8888a0] uppercase tracking-wider font-semibold">Estimat</div>
+                <div className="text-[13px] font-bold text-[#8888a0]">{matchup.estimate}</div>
+              </div>
+              <span className="text-[#8888a0] text-sm">+</span>
+              <div className="text-center">
+                <div className="text-[9px] text-[#facc15] uppercase tracking-wider font-semibold" title="Justering for det bord modstanderens defender valgte">Bord</div>
+                <div className="flex items-center gap-1">
+                  {isCoach && (
+                    <button
+                      onClick={() => onTableAdj(idx, Math.max(-10, tableAdj - 1))}
+                      className="w-6 h-6 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-xs font-bold"
+                    >
+                      −
+                    </button>
+                  )}
+                  <span className={`text-[13px] font-bold w-8 ${tableAdj > 0 ? "text-[#4ade80]" : tableAdj < 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+                    {tableAdj > 0 ? "+" : ""}{tableAdj}
+                  </span>
+                  {isCoach && (
+                    <button
+                      onClick={() => onTableAdj(idx, Math.min(10, tableAdj + 1))}
+                      className="w-6 h-6 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-xs font-bold"
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
+              </div>
+              <span className="text-[#8888a0] text-sm">=</span>
+              <div className="text-center">
+                <div className="text-[9px] text-[#8888a0] uppercase tracking-wider font-semibold">Justeret</div>
+                <div className={`text-[15px] font-bold ${effEstimate >= 11 ? "text-[#4ade80]" : effEstimate <= 9 ? "text-[#f87171]" : "text-[#e8e8f0]"}`}>
+                  {effEstimate}
+                </div>
+              </div>
+              <span className="text-[9px] text-[#8888a0] ml-auto max-w-[45%]">
+                Skru på bord-justeringen når defenderens bordvalg er kendt
+              </span>
+            </div>
+          )}
 
           {/* Round tracker */}
           <div>

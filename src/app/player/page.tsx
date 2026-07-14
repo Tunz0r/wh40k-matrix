@@ -107,7 +107,7 @@ export default function PlayerPage() {
       const diff = (m.aVP ?? 0) - (m.bVP ?? 0);
       const bp = vpToBP(diff);
       const actual = diff >= 0 ? bp.winner : bp.loser;
-      const estimate = m.estimate && m.estimate > 0 ? m.estimate : null;
+      const estimate = m.estimate && m.estimate > 0 ? m.estimate + (m.tableAdj ?? 0) : null;
       rows.push({
         round: r.number,
         opponent: r.opponentName,
@@ -211,7 +211,12 @@ export default function PlayerPage() {
                     <span className="bg-[#22222e] px-1.5 py-0.5 rounded">{liveMatchup.module}</span>
                     {liveMatchup.aDetachments?.length ? <span>{liveMatchup.aDetachments.join(", ")}</span> : null}
                     {liveMatchup.estimate > 0 && (
-                      <span className="flex items-center gap-1">Estimat: <BPChip v={liveMatchup.estimate} /></span>
+                      <span className="flex items-center gap-1">
+                        Estimat: <BPChip v={liveMatchup.estimate + (liveMatchup.tableAdj ?? 0)} />
+                        {(liveMatchup.tableAdj ?? 0) !== 0 && (
+                          <span className="text-[9px] text-[#facc15]">(bord {liveMatchup.tableAdj! > 0 ? "+" : ""}{liveMatchup.tableAdj})</span>
+                        )}
+                      </span>
                     )}
                     <span className="flex items-center gap-1.5">
                       Live: <span className="text-[#e8e8f0] font-bold">{liveMatchup.aVP ?? 0}</span>–<span className="text-[#e8e8f0] font-bold">{liveMatchup.bVP ?? 0}</span> VP
