@@ -34,6 +34,7 @@ import {
   slugifyTeam,
 } from "@/lib/estimates-db";
 import { computeStandings } from "@/lib/standings";
+import { formatUnitsLines } from "@/lib/list-parser";
 
 // --- Types ---
 
@@ -61,6 +62,7 @@ interface Matchup {
   aIsDefender: boolean;
   layoutPage: number | null;
   estimate: number;
+  tableAdj: number; // table/layout adjustment, set during pairing when the layout is chosen
 }
 
 interface CompletedRound {
@@ -334,7 +336,7 @@ function EstimateMatrix({
   hiddenOur?: Set<number>;
   hiddenTheir?: Set<number>;
 }) {
-  const short = (s: string) => (s.length > 13 ? s.slice(0, 12) + "…" : s);
+  const short = (s: string) => (s.length > 15 ? s.slice(0, 14) + "…" : s);
   const ourIdxs = ourArmies.map((_, i) => i).filter((i) => !hiddenOur?.has(i));
   const theirIdxs = theirArmies.map((_, j) => j).filter((j) => !hiddenTheir?.has(j));
   const hiddenCount = ourArmies.length - ourIdxs.length + (theirArmies.length - theirIdxs.length);
@@ -344,13 +346,24 @@ function EstimateMatrix({
       values.set(`${i}_${j}`, lookupEstimate(opponents, oppName, i, theirArmies[j]));
   const hasAny = [...values.values()].some((v) => v !== null);
   if (ourIdxs.length === 0 || theirIdxs.length === 0) return null;
+
+  // Opponent lists (with parsed units) for the hover tooltip, matched by team + order
+  const oppTeam = oppName ? opponents[slugifyTeam(oppName)] : undefined;
+  const theirTooltip = (j: number) => {
+    const a = theirArmies[j];
+    const head = `${a.faction} — ${(a.detachments || []).join(", ")}${a.disposition ? ` · ${a.disposition}` : ""}`;
+    const units = oppTeam?.armies?.[j]?.units;
+    return units?.length ? `${head}\n\n${formatUnitsLines(units)}` : head;
+  };
+
   return (
     <details open className="rounded-xl border border-white/[0.08] mb-4 bg-[#131318]">
-      <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold text-[#a855f7] select-none">
+      <summary className="cursor-pointer px-3 py-2 text-[12px] font-semibold text-[#a855f7] select-none">
         Estimat-matrix
         {hiddenCount > 0 && (
           <span className="text-[#8888a0] font-normal ml-2">— parrede hære er skjult</span>
         )}
+        <span className="text-[#8888a0] font-normal ml-2">· hold musen over en modstander for at se listen</span>
         {!hasAny && (
           <span className="text-[#8888a0] font-normal ml-2">
             — ingen estimater fundet. Udfyld dem under{" "}
@@ -359,17 +372,17 @@ function EstimateMatrix({
         )}
       </summary>
       <div className="px-3 pb-3 overflow-x-auto">
-        <table className="border-separate border-spacing-1">
+        <table className="border-separate border-spacing-1.5">
           <thead>
             <tr>
-              <th className="text-left text-[9px] text-[#8888a0] font-semibold pr-2">
+              <th className="text-left text-[10px] text-[#8888a0] font-semibold pr-2">
                 Vores \ Deres
               </th>
               {theirIdxs.map((j) => (
                 <th
                   key={j}
-                  className="text-[9px] text-[#8888a0] font-semibold w-12 max-w-12 truncate px-0.5"
-                  title={`${theirArmies[j].faction} — ${(theirArmies[j].detachments || []).join(", ")}`}
+                  className="text-[10px] text-[#c084fc] font-semibold w-16 max-w-16 truncate px-0.5 cursor-help underline decoration-dotted decoration-[#8888a0]/40 underline-offset-2"
+                  title={theirTooltip(j)}
                 >
                   {j + 1}. {short(theirArmies[j].faction)}
                 </th>
@@ -380,7 +393,7 @@ function EstimateMatrix({
             {ourIdxs.map((i) => (
               <tr key={i}>
                 <th
-                  className="text-left text-[10px] text-[#e8e8f0] font-medium pr-2 whitespace-nowrap"
+                  className="text-left text-[11px] text-[#e8e8f0] font-medium pr-2 whitespace-nowrap"
                   title={`${ourArmies[i].faction} — ${(ourArmies[i].detachments || []).join(", ")}`}
                 >
                   {i + 1}. {short(ourArmies[i].faction)}
@@ -391,13 +404,13 @@ function EstimateMatrix({
                   return (
                     <td key={j}>
                       <div
-                        className="w-12 h-8 rounded border flex items-center justify-center text-[12px] font-bold"
+                        className="w-16 h-11 rounded-md border flex items-center justify-center text-[17px] font-bold"
                         style={
                           s
                             ? { background: s.bg, color: s.fg, borderColor: s.border }
                             : { background: "#1a1a22", color: "#44445a", borderColor: "rgba(255,255,255,0.06)" }
                         }
-                        title={s ? `${v} — ${s.label}` : "Intet estimat"}
+                        title={s ? `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s.label}` : "Intet estimat"}
                       >
                         {v !== null ? v : "—"}
                       </div>
@@ -410,6 +423,39 @@ function EstimateMatrix({
         </table>
       </div>
     </details>
+  );
+}
+
+// Table/layout adjustment stepper shown next to a layout pick during pairing.
+function TableAdjRow({
+  value,
+  onChange,
+  note,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  note: string;
+}) {
+  return (
+    <div className="mt-2 flex items-center gap-2 rounded-lg bg-[#1a1a22] border border-white/[0.08] px-2.5 py-1.5">
+      <span className="text-[10px] text-[#facc15] font-semibold uppercase tracking-wider shrink-0">Bord-just.</span>
+      <button
+        onClick={() => onChange(Math.max(-10, value - 1))}
+        className="w-6 h-6 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-xs font-bold"
+      >
+        −
+      </button>
+      <span className={`text-[13px] font-bold w-7 text-center ${value > 0 ? "text-[#4ade80]" : value < 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+        {value > 0 ? "+" : ""}{value}
+      </span>
+      <button
+        onClick={() => onChange(Math.min(10, value + 1))}
+        className="w-6 h-6 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-xs font-bold"
+      >
+        +
+      </button>
+      <span className="text-[9px] text-[#8888a0] leading-tight">{note}</span>
+    </div>
   );
 }
 
@@ -437,6 +483,8 @@ export default function TournamentPage() {
   const [choiceB, setChoiceB] = useState<number | null>(null);
   const [layoutChoiceA, setLayoutChoiceA] = useState<"A" | "B" | "C" | null>(null);
   const [layoutChoiceB, setLayoutChoiceB] = useState<"A" | "B" | "C" | null>(null);
+  const [tableAdjA, setTableAdjA] = useState(0);
+  const [tableAdjB, setTableAdjB] = useState(0);
   const [revealStep, setRevealStep] = useState(0);
 
   // Seeding edit state
@@ -713,6 +761,8 @@ export default function TournamentPage() {
     setChoiceB(null);
     setLayoutChoiceA(null);
     setLayoutChoiceB(null);
+    setTableAdjA(0);
+    setTableAdjB(0);
     setRevealStep(0);
   }
 
@@ -771,6 +821,7 @@ export default function TournamentPage() {
       aIsDefender: true,
       layoutPage: getLayoutPage(armiesA[defenderA!].disposition, armiesB[choiceA!].disposition, layoutChoiceA),
       estimate: prefill(defenderA!, choiceA!),
+      tableAdj: tableAdjA,
     };
     const m2: Matchup = {
       a: armiesA[choiceB!],
@@ -779,6 +830,7 @@ export default function TournamentPage() {
       aIsDefender: false,
       layoutPage: getLayoutPage(armiesA[choiceB!].disposition, armiesB[defenderB!].disposition, layoutChoiceB),
       estimate: prefill(choiceB!, defenderB!),
+      tableAdj: tableAdjB,
     };
 
     const newMatchups = [...matchups, m1, m2];
@@ -793,6 +845,7 @@ export default function TournamentPage() {
         aIsDefender: false,
         layoutPage: getLayoutPage(armiesA[refusedA].disposition, armiesB[refusedB].disposition, roundLayout),
         estimate: prefill(refusedA, refusedB),
+        tableAdj: 0,
       };
       newMatchups.push(m3);
     }
@@ -817,6 +870,7 @@ export default function TournamentPage() {
           aIsDefender: false,
           layoutPage: getLayoutPage(armiesA[champAIdx].disposition, armiesB[champBIdx].disposition, roundLayout),
           estimate: prefill(champAIdx, champBIdx),
+          tableAdj: 0,
         });
         setMatchups(newMatchups);
       }
@@ -850,6 +904,7 @@ export default function TournamentPage() {
         module: m.module,
         layoutPage: m.layoutPage,
         estimate: m.estimate,
+        tableAdj: m.tableAdj ?? 0,
         aVP: 0,
         bVP: 0,
         round: 1,
@@ -1762,20 +1817,26 @@ export default function TournamentPage() {
                         Defenders vælger layout
                       </h4>
                       <div className="grid md:grid-cols-2 gap-6">
-                        <LayoutPicker
-                          label={`${tournament.teamName} Defender — ${tournament.roster!.armies[defenderA!].faction}`}
-                          dispA={tournament.roster!.armies[defenderA!].disposition}
-                          dispB={opponentRoster.armies[choiceA!].disposition}
-                          selected={layoutChoiceA}
-                          onSelect={setLayoutChoiceA}
-                        />
-                        <LayoutPicker
-                          label={`${opponentRoster.name || "Modstander"} Defender — ${opponentRoster.armies[defenderB!].faction}`}
-                          dispA={tournament.roster!.armies[choiceB!].disposition}
-                          dispB={opponentRoster.armies[defenderB!].disposition}
-                          selected={layoutChoiceB}
-                          onSelect={setLayoutChoiceB}
-                        />
+                        <div>
+                          <LayoutPicker
+                            label={`${tournament.teamName} Defender — ${tournament.roster!.armies[defenderA!].faction}`}
+                            dispA={tournament.roster!.armies[defenderA!].disposition}
+                            dispB={opponentRoster.armies[choiceA!].disposition}
+                            selected={layoutChoiceA}
+                            onSelect={setLayoutChoiceA}
+                          />
+                          <TableAdjRow value={tableAdjA} onChange={setTableAdjA} note="Vi forsvarer — vi vælger bordet" />
+                        </div>
+                        <div>
+                          <LayoutPicker
+                            label={`${opponentRoster.name || "Modstander"} Defender — ${opponentRoster.armies[defenderB!].faction}`}
+                            dispA={tournament.roster!.armies[choiceB!].disposition}
+                            dispB={opponentRoster.armies[defenderB!].disposition}
+                            selected={layoutChoiceB}
+                            onSelect={setLayoutChoiceB}
+                          />
+                          <TableAdjRow value={tableAdjB} onChange={setTableAdjB} note="Modstander forsvarer — de vælger bordet" />
+                        </div>
                       </div>
                     </div>
 
@@ -1856,7 +1917,10 @@ export default function TournamentPage() {
                       <DispBadge d={m.b.disposition} />
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 mt-3 p-2 rounded-lg bg-[#1a1a22] border border-white/[0.08]">
+                  {(() => {
+                    const eff = m.estimate + (m.tableAdj ?? 0);
+                    return (
+                  <div className="flex items-center gap-3 mt-3 p-2 rounded-lg bg-[#1a1a22] border border-white/[0.08] flex-wrap">
                     <span className="text-[11px] text-[#8888a0] font-semibold uppercase tracking-wider">Estimat</span>
                     <input
                       type="number"
@@ -1869,10 +1933,17 @@ export default function TournamentPage() {
                       }}
                       className="w-16 text-center text-lg font-bold bg-[#0f0f13] border border-white/[0.14] rounded-md px-2 py-1 text-[#e8e8f0] outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <span className={`text-sm font-bold ${m.estimate >= 11 ? "text-[#4ade80]" : m.estimate <= 9 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
-                      {m.estimate >= 11 ? "Favorit" : m.estimate <= 9 ? "Underdog" : "Lige"}
+                    {(m.tableAdj ?? 0) !== 0 && (
+                      <span className="text-[12px] text-[#facc15] font-semibold">
+                        bord {m.tableAdj! > 0 ? "+" : ""}{m.tableAdj} = <span className="text-[#e8e8f0]">{eff}</span>
+                      </span>
+                    )}
+                    <span className={`text-sm font-bold ${eff >= 11 ? "text-[#4ade80]" : eff <= 9 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+                      {eff >= 11 ? "Favorit" : eff <= 9 ? "Underdog" : "Lige"}
                     </span>
                   </div>
+                    );
+                  })()}
                   {m.a.disposition && m.b.disposition && (
                     <MissionInfo a={m.a.disposition} b={m.b.disposition} />
                   )}
