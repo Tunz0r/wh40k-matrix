@@ -21,6 +21,7 @@ import {
   setActiveSession,
   updateRoundStatus,
   resetTournamentDoc,
+  resetRound,
   subscribeToTournament,
   type TournamentDoc,
 } from "@/lib/tournament-db";
@@ -951,6 +952,20 @@ export default function TournamentPage() {
     setSessionUrl(null);
   }
 
+  // Reset just one round — the rest of the history is untouched, so a mistake
+  // in round 2 or 3 doesn't cost the earlier rounds' record.
+  function resetSingleRound(n: number) {
+    if (!confirm(`Nulstil runde ${n}? Kun denne runde slettes — alle andre runder og historik bevares.`)) return;
+    resetRound(TEAM_SLUG, n).catch(() => {});
+    updateTournament({ rounds: tournament.rounds.filter((r) => r.number !== n) });
+    if (n === currentRoundNumber) {
+      setView("overview");
+      setOpponentRoster(null);
+      setMatchups([]);
+      setSessionUrl(null);
+    }
+  }
+
   function backToOverview() {
     setView("overview");
     setOpponentRoster(null);
@@ -1335,6 +1350,13 @@ export default function TournamentPage() {
                           Coaching →
                         </Link>
                       )}
+                      <button
+                        onClick={() => resetSingleRound(r.number)}
+                        title="Nulstil kun denne runde — alle andre runders historik bevares"
+                        className="text-[10px] text-red-400/70 hover:text-red-300 shrink-0 transition-colors"
+                      >
+                        Nulstil
+                      </button>
                     </div>
                   ))}
                 </div>

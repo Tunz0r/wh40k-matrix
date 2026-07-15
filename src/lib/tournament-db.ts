@@ -1,4 +1,4 @@
-import { ref, set, get, onValue, off, update } from "firebase/database";
+import { ref, set, get, onValue, off, update, push, remove } from "firebase/database";
 import { getDb, authReady } from "./firebase";
 import type { RosterExport } from "./roster";
 
@@ -18,6 +18,21 @@ export interface SeedingTier {
   teams: string[];
 }
 
+// A logged practice game vs an archetype, for pre-WTC calibration.
+export interface WarmupGame {
+  date: string; // YYYY-MM-DD
+  faction: string;
+  detachments: string[];
+  disposition: string | null;
+  estimate: number | null; // our estimate at log time (0-20 BP scale)
+  actual: number; // actual result in BP (0-20)
+  notes?: string;
+}
+
+// Keyed "a0".."a7" per army index (prefixed so Firebase never coerces the
+// node into an array), then push-id → game.
+export type WarmupsNode = Record<string, Record<string, WarmupGame>>;
+
 export interface TournamentDoc {
   teamName: string;
   activeSessionId: string | null;
@@ -26,6 +41,7 @@ export interface TournamentDoc {
   roster?: RosterExport | null;
   seedingTiers?: SeedingTier[];
   eventDate?: string | null; // ISO date of the tournament, for the readiness countdown
+  warmups?: WarmupsNode; // prep-game history, survives tournament resets
 }
 
 // Patch tournament-level settings (event date etc.) without touching rounds.
@@ -140,7 +156,56 @@ export async function resetTournamentDoc(slug: string): Promise<void> {
     rounds: [],
     roster: doc?.roster ?? null,
     seedingTiers: doc?.seedingTiers ?? null,
+    eventDate: doc?.eventDate ?? null,
+    warmups: doc?.warmups ?? null,
   });
+}
+
+// Reset a single round: removes just that round from the doc (detaching the
+// active session if it belonged to it) — every other round's history is kept.
+// The coaching session itself is not deleted, so the record survives in
+// Firebase even after the round is redone.
+export async function resetRound(slug: string, roundNumber: number): Promise<void> {
+  await authReady();
+  const tournamentRef = ref(getDb(), `tournaments/${slug}`);
+  const snapshot = await get(tournamentRef);
+  const doc: TournamentDoc | null = snapshot.val();
+  if (!doc) return;
+  const removed = (doc.rounds || []).find((r) => r.number === roundNumber);
+  const rounds = (doc.rounds || []).filter((r) => r.number !== roundNumber);
+  const activeSessionId =
+    removed?.sessionId && doc.activeSessionId === removed.sessionId
+      ? null
+      : doc.activeSessionId ?? null;
+  await set(tournamentRef, {
+    ...doc,
+    rounds,
+    activeSessionId,
+    currentRound: rounds.reduce((m, r) => Math.max(m, r.number), 0),
+  });
+}
+
+// --- Warmup games (pre-WTC prep, per army) ---
+// Stored under the tournament doc because the DB rules only open the
+// sessions/tournaments/estimates nodes.
+
+export async function addWarmupGame(
+  slug: string,
+  armyIdx: number,
+  game: WarmupGame
+): Promise<void> {
+  await authReady();
+  const newRef = push(ref(getDb(), `tournaments/${slug}/warmups/a${armyIdx}`));
+  await set(newRef, game);
+}
+
+export async function deleteWarmupGame(
+  slug: string,
+  armyIdx: number,
+  id: string
+): Promise<void> {
+  await authReady();
+  await remove(ref(getDb(), `tournaments/${slug}/warmups/a${armyIdx}/${id}`));
 }
 
 export function subscribeToTournament(

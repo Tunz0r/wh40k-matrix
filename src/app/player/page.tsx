@@ -6,13 +6,19 @@ import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
 import { DISP_STYLES } from "@/lib/data";
 import {
   subscribeToTournament,
+  addWarmupGame,
+  deleteWarmupGame,
   type TournamentDoc,
   type TournamentRound,
+  type WarmupGame,
 } from "@/lib/tournament-db";
 import {
   subscribeToOpponents,
   estimateStyle,
+  clusterLists,
   type OpponentMap,
+  type ListCluster,
+  type ClusterMember,
 } from "@/lib/estimates-db";
 import {
   fetchSession,
@@ -130,6 +136,92 @@ export default function PlayerPage() {
     };
   }, [myResults]);
 
+  // --- Warmup games: log prep results vs archetypes and compare to estimates ---
+  const clusters = useMemo(() => clusterLists(opponents), [opponents]);
+
+  // Archetype dropdown sorted alphabetically for findability.
+  const clusterOptions = useMemo(
+    () =>
+      clusters
+        .map((c, i) => ({
+          c,
+          i,
+          label: `${c.rep.list.faction} — ${(c.rep.list.detachments || []).join(", ")}${
+            c.members.length > 1 ? ` (${c.members.length} lister)` : ""
+          }`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "da")),
+    [clusters]
+  );
+
+  // My current estimate for an archetype — same precedence as the estimates
+  // page: rep's manual value, any manual member, then any cell at all.
+  const clusterEstimate = useCallback(
+    (cluster: ListCluster, idx: number): number | null => {
+      const cellFor = (m: ClusterMember) =>
+        opponents[m.teamSlug]?.estimates?.[`${idx}_${m.listIdx}`];
+      const rep = cellFor(cluster.rep);
+      const manual = cluster.members.map(cellFor).find((c) => c && !c.auto);
+      const cell = (rep && !rep.auto ? rep : manual) ?? rep ?? cluster.members.map(cellFor).find(Boolean);
+      return cell ? cell.v : null;
+    },
+    [opponents]
+  );
+
+  const [wuCluster, setWuCluster] = useState<string>("");
+  const [wuActual, setWuActual] = useState<string>("");
+  const [wuDate, setWuDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [wuNotes, setWuNotes] = useState("");
+
+  const wuSelected = wuCluster === "" ? null : clusters[Number(wuCluster)] ?? null;
+  const wuEstimate = wuSelected && myIdx !== null ? clusterEstimate(wuSelected, myIdx) : null;
+
+  async function logWarmup() {
+    if (myIdx === null || !wuSelected) return;
+    const actual = Number(wuActual);
+    if (wuActual.trim() === "" || !Number.isFinite(actual) || actual < 0 || actual > 20) {
+      alert("Resultat skal være 0-20 BP.");
+      return;
+    }
+    const game: WarmupGame = {
+      date: wuDate,
+      faction: wuSelected.rep.list.faction,
+      detachments: wuSelected.rep.list.detachments || [],
+      disposition: wuSelected.rep.list.disposition ?? null,
+      estimate: wuEstimate,
+      actual,
+      ...(wuNotes.trim() ? { notes: wuNotes.trim() } : {}),
+    };
+    try {
+      await addWarmupGame(TEAM_SLUG, myIdx, game);
+      setWuCluster("");
+      setWuActual("");
+      setWuNotes("");
+    } catch {
+      alert("Kunne ikke gemme warmup-kampen — tjek Firebase.");
+    }
+  }
+
+  const myWarmups = useMemo(() => {
+    if (myIdx === null) return [];
+    const node = doc?.warmups?.[`a${myIdx}`] || {};
+    return Object.entries(node)
+      .map(([id, g]) => ({ id, ...g, estimate: g.estimate ?? null }))
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  }, [doc, myIdx]);
+
+  const warmupStats = useMemo(() => {
+    const deltas = myWarmups
+      .filter((g) => g.estimate !== null)
+      .map((g) => g.actual - (g.estimate as number));
+    if (!deltas.length) return null;
+    return {
+      n: deltas.length,
+      avg: deltas.reduce((a, b) => a + b, 0) / deltas.length,
+      abs: deltas.reduce((a, b) => a + Math.abs(b), 0) / deltas.length,
+    };
+  }, [myWarmups]);
+
   // My estimate progress for my army
   const myProgress = useMemo(() => {
     if (myIdx === null) return { filled: 0, total: 0 };
@@ -234,6 +326,113 @@ export default function PlayerPage() {
                 <p className="text-[12px] text-[#8888a0]">Kaptajnen laver pairings — din kamp dukker op her når den er sat.</p>
               ) : (
                 <p className="text-[12px] text-[#8888a0]">Ingen aktiv kamp lige nu.</p>
+              )}
+            </div>
+
+            {/* Warmup prep: log practice games vs archetypes, compare to estimates */}
+            <div className="rounded-xl border border-white/[0.08] p-4">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h2 className="text-sm font-semibold text-[#e8e8f0]">Warmup-kampe</h2>
+                {warmupStats && (
+                  <span className="text-[10px] text-[#8888a0]">
+                    {warmupStats.n} med estimat · snit{" "}
+                    <span className={`font-bold ${Math.abs(warmupStats.avg) <= 1 ? "text-[#4ade80]" : warmupStats.avg > 0 ? "text-[#facc15]" : "text-[#f87171]"}`}>
+                      {warmupStats.avg > 0 ? "+" : ""}{warmupStats.avg.toFixed(1)}
+                    </span>{" "}
+                    (±{warmupStats.abs.toFixed(1)})
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-[#8888a0] mb-3">
+                Log dine træningskampe mod arketyper — så ser du før WTC om dine resultater matcher dine estimater.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <select
+                  value={wuCluster}
+                  onChange={(e) => setWuCluster(e.target.value)}
+                  className="flex-1 min-w-[200px] bg-[#1a1a22] border border-white/[0.14] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+                >
+                  <option value="">Vælg arketype…</option>
+                  {clusterOptions.map(({ i, label }) => (
+                    <option key={i} value={i}>{label}</option>
+                  ))}
+                </select>
+                {wuSelected && (
+                  <span className="flex items-center gap-1 text-[11px] text-[#8888a0]">
+                    Estimat:{" "}
+                    {wuEstimate !== null ? <BPChip v={wuEstimate} /> : <span className="text-[#44445a]">—</span>}
+                  </span>
+                )}
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  value={wuActual}
+                  onChange={(e) => setWuActual(e.target.value)}
+                  placeholder="BP"
+                  className="w-16 bg-[#1a1a22] border border-white/[0.14] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e8f0] placeholder:text-[#8888a0] outline-none focus:border-[#a855f7]"
+                />
+                <input
+                  type="date"
+                  value={wuDate}
+                  onChange={(e) => setWuDate(e.target.value)}
+                  className="bg-[#1a1a22] border border-white/[0.14] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+                />
+                <button
+                  onClick={logWarmup}
+                  disabled={!wuSelected || wuActual.trim() === ""}
+                  className="text-[11px] font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md transition-colors"
+                >
+                  Log kamp
+                </button>
+              </div>
+              <input
+                type="text"
+                value={wuNotes}
+                onChange={(e) => setWuNotes(e.target.value)}
+                placeholder="Note (valgfri) — hvad gik galt/godt, terræn, missions..."
+                className="w-full bg-[#1a1a22] border border-white/[0.14] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e8f0] placeholder:text-[#8888a0] outline-none focus:border-[#a855f7] mb-3"
+              />
+              {myWarmups.length === 0 ? (
+                <p className="text-[11px] text-[#8888a0]">Ingen warmup-kampe logget endnu.</p>
+              ) : (
+                <div className="space-y-1">
+                  {myWarmups.map((g) => {
+                    const delta = g.estimate !== null ? g.actual - g.estimate : null;
+                    return (
+                      <div key={g.id} className="rounded-lg border border-white/[0.05] px-2.5 py-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-[#8888a0] shrink-0 w-16">{g.date.slice(5)}</span>
+                          <span className="text-[11px] text-[#e8e8f0] flex-1 min-w-0 truncate">
+                            vs {g.faction}
+                            <span className="text-[#8888a0]"> · {(g.detachments || []).join(", ")}</span>
+                          </span>
+                          {g.estimate !== null ? <BPChip v={g.estimate} /> : <span className="w-8 text-center text-[10px] text-[#44445a]">—</span>}
+                          <span className="text-[9px] text-[#8888a0]">→</span>
+                          <BPChip v={g.actual} big />
+                          {delta !== null && (
+                            <span className={`text-[11px] font-bold w-8 text-right ${Math.abs(delta) <= 1 ? "text-[#8888a0]" : delta > 0 ? "text-[#4ade80]" : "text-[#f87171]"}`}>
+                              {delta > 0 ? "+" : ""}{delta}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => {
+                              if (!confirm("Slet denne warmup-kamp?")) return;
+                              if (myIdx !== null) deleteWarmupGame(TEAM_SLUG, myIdx, g.id).catch(() => {});
+                            }}
+                            title="Slet warmup-kamp"
+                            className="text-[11px] text-[#8888a0] hover:text-red-400 shrink-0 transition-colors"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        {g.notes && (
+                          <p className="text-[10px] text-[#8888a0] mt-0.5 pl-[72px] break-words">{g.notes}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
