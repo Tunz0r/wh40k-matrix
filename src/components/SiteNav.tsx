@@ -19,7 +19,7 @@ const LINKS: { href: string; label: string; match: (path: string) => boolean }[]
   {
     href: "/tournament",
     label: "Turnering",
-    match: (p) => p.startsWith("/tournament") || p.startsWith("/coaching") || p.startsWith("/calibration"),
+    match: (p) => p.startsWith("/tournament") || p.startsWith("/coaching") || p.startsWith("/calibration") || p.startsWith("/warmups"),
   },
   {
     href: "/estimates",

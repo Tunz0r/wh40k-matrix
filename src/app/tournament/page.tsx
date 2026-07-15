@@ -1112,6 +1112,9 @@ export default function TournamentPage() {
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${estimatesDone >= 100 ? "bg-[rgba(34,197,94,0.12)] text-[#4ade80]" : "bg-[#22222e] text-[#8888a0]"}`}>
                   {estimatesDone}% estimater
                 </span>
+                <Link href="/warmups" className="text-[10px] text-[#a855f7] hover:text-[#c084fc] transition-colors">
+                  Warmup-kampe →
+                </Link>
                 <div className="ml-auto flex items-center gap-2">
                   {daysToEvent !== null && (
                     <span className={`text-[10px] font-semibold ${daysToEvent <= 7 ? "text-[#facc15]" : "text-[#8888a0]"}`}>

@@ -346,6 +346,9 @@ export default function PlayerPage() {
             <div className="rounded-xl border border-white/[0.08] p-4">
               <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h2 className="text-sm font-semibold text-[#e8e8f0]">Warmup-kampe</h2>
+                <Link href="/warmups" className="text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors ml-auto order-last">
+                  Hele holdet →
+                </Link>
                 {warmupStats && (
                   <span className="text-[10px] text-[#8888a0]">
                     {warmupStats.n} med estimat · snit{" "}
