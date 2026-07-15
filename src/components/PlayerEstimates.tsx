@@ -155,15 +155,18 @@ export default function PlayerEstimates({
             const p = progress[i];
             const pct = p.total ? Math.round((100 * p.filled) / p.total) : 0;
             const active = myIdx === i;
+            // 0% → red (hue 0), 100% → green (hue 120)
+            const hue = (pct / 100) * 120;
             return (
               <button
                 key={i}
                 onClick={() => pickArmy(i)}
                 className={`text-left rounded-lg border p-2.5 transition-colors ${
                   active
-                    ? "border-[#a855f7]/60 bg-[#a855f7]/10"
+                    ? "border-[#a855f7]/60"
                     : "border-white/[0.08] hover:border-white/[0.18]"
                 }`}
+                style={{ background: `hsla(${hue}, 70%, 45%, ${active ? 0.28 : 0.16})` }}
               >
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-[#8888a0]">{i + 1}.</span>
@@ -177,8 +180,8 @@ export default function PlayerEstimates({
                 </div>
                 <div className="mt-1.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
                   <div
-                    className={`h-full rounded-full ${pct >= 100 ? "bg-[#4ade80]" : "bg-[#a855f7]"}`}
-                    style={{ width: `${pct}%` }}
+                    className="h-full rounded-full"
+                    style={{ width: `${pct}%`, background: `hsl(${hue}, 70%, 50%)` }}
                   />
                 </div>
               </button>
