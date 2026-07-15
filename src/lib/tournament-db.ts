@@ -33,6 +33,20 @@ export interface WarmupGame {
 // node into an array), then push-id → game.
 export type WarmupsNode = Record<string, Record<string, WarmupGame>>;
 
+// A player's own army mapped to a field archetype ("Min profil"). The
+// archetype descriptor comes from a cluster in the estimates field, so the
+// sanity checks can find the matching cluster live; `units` is the player's
+// own pasted list when available (better similarity matching).
+export interface PlayerProfile {
+  faction: string;
+  detachments: string[];
+  disposition: string | null;
+  units?: string[];
+}
+
+// Keyed "a0".."a7" per army index.
+export type ProfilesNode = Record<string, PlayerProfile>;
+
 export interface TournamentDoc {
   teamName: string;
   activeSessionId: string | null;
@@ -42,6 +56,7 @@ export interface TournamentDoc {
   seedingTiers?: SeedingTier[];
   eventDate?: string | null; // ISO date of the tournament, for the readiness countdown
   warmups?: WarmupsNode; // prep-game history, survives tournament resets
+  profiles?: ProfilesNode; // players' own archetypes, survives tournament resets
 }
 
 // Patch tournament-level settings (event date etc.) without touching rounds.
@@ -158,6 +173,7 @@ export async function resetTournamentDoc(slug: string): Promise<void> {
     seedingTiers: doc?.seedingTiers ?? null,
     eventDate: doc?.eventDate ?? null,
     warmups: doc?.warmups ?? null,
+    profiles: doc?.profiles ?? null,
   });
 }
 
@@ -197,6 +213,16 @@ export async function addWarmupGame(
   await authReady();
   const newRef = push(ref(getDb(), `tournaments/${slug}/warmups/a${armyIdx}`));
   await set(newRef, game);
+}
+
+// Set or clear a player's own archetype profile.
+export async function savePlayerProfile(
+  slug: string,
+  armyIdx: number,
+  profile: PlayerProfile | null
+): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `tournaments/${slug}/profiles/a${armyIdx}`), profile);
 }
 
 export async function deleteWarmupGame(

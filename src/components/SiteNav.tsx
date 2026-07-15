@@ -24,7 +24,7 @@ const LINKS: { href: string; label: string; match: (path: string) => boolean }[]
   {
     href: "/estimates",
     label: "Estimater",
-    match: (p) => p.startsWith("/estimates"),
+    match: (p) => p.startsWith("/estimates") || p.startsWith("/sanity"),
   },
   {
     href: "/player",

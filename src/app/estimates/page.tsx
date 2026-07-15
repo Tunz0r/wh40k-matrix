@@ -255,8 +255,10 @@ export default function EstimatesPage() {
     if (looksRaw) {
       armies = parsed.map((p) => ({
         faction: p.faction || "",
-        detachments: p.detachment ? [p.detachment] : [],
-        disposition: dispositionForDet(p.faction, p.detachment),
+        detachments: p.detachments,
+        // WTC headers declare the disposition; GW-app exports derive it from
+        // the (first) detachment.
+        disposition: p.disposition ?? dispositionForDet(p.faction, p.detachments[0] ?? null),
         units: p.units,
       }));
       const unresolved = armies.filter((a) => !a.faction || !a.detachments.length).length;
@@ -417,6 +419,9 @@ export default function EstimatesPage() {
           <span className="text-[11px] text-[#8888a0] hidden sm:inline">
             {totals.teams} hold · {totals.manual} manuelle · {totals.auto} auto
           </span>
+          <Link href="/sanity" className="text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors">
+            Sanity-tjek →
+          </Link>
           <div className="flex items-center gap-1 w-full sm:w-auto">
             <button
               onClick={exportBackup}

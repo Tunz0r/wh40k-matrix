@@ -3,7 +3,7 @@
 // kept ("10x Jakhals"), everything else (player names, wargear, points,
 // enhancements) stripped.
 
-import { FACTIONS } from "./data";
+import { FACTIONS, DISP_STYLES, type Disposition } from "./data";
 
 // Unit lines carry a points cost: "(415 points)", "(70 pts)" or "[70 pts]"
 const POINTS_RE = /[([]\s*(\d+)\s*(?:points|pts?)\s*[)\]]/i;
@@ -64,11 +64,13 @@ export function formatUnitsLines(units: string[]): string {
 
 export interface ParsedList {
   faction: string | null;
-  detachment: string | null;
+  detachments: string[];
+  disposition: Disposition | null;
   units: string[];
 }
 
 const FACTION_NAMES = Object.keys(FACTIONS);
+const DISPOSITION_NAMES = Object.keys(DISP_STYLES) as Disposition[];
 
 // "Chaos - World Eaters", "Xenos - Aeldari", "Adepta Sororitas" → our faction key
 function matchFaction(raw: string): string | null {
@@ -81,13 +83,19 @@ function matchFaction(raw: string): string | null {
   }
   // Substring fallback (longest faction name first to avoid "Chaos" clashes)
   const byLen = [...FACTION_NAMES].sort((a, b) => b.length - a.length);
-  return byLen.find((f) => cleaned.toLowerCase().includes(f.toLowerCase())) || null;
+  const sub = byLen.find((f) => cleaned.toLowerCase().includes(f.toLowerCase()));
+  if (sub) return sub;
+  // Chapters without their own faction entry ("Imperium - Adeptus Astartes -
+  // Ultramarines") play the shared Space Marines codex.
+  if (/adeptus\s+astartes/i.test(cleaned)) {
+    return FACTION_NAMES.find((f) => f.toLowerCase() === "space marines") || null;
+  }
+  return null;
 }
 
-function matchDetachment(faction: string | null, raw: string): string | null {
-  const cleaned = raw.replace(/^.*:/, "").trim();
+function matchOneDetachment(faction: string | null, name: string): string | null {
   const search = (dets: { n: string }[]) =>
-    dets.find((d) => d.n.toLowerCase() === cleaned.toLowerCase())?.n || null;
+    dets.find((d) => d.n.toLowerCase() === name.toLowerCase())?.n || null;
   if (faction && FACTIONS[faction]) {
     const hit = search(FACTIONS[faction]);
     if (hit) return hit;
@@ -100,15 +108,39 @@ function matchDetachment(faction: string | null, raw: string): string | null {
   return null;
 }
 
-// Detect faction and detachment anywhere within one list's text.
-function detectMeta(chunk: string): { faction: string | null; detachment: string | null } {
+// Dual-detachment aware: "Cabal of Chaos, Soulforged Warpack (Empyric
+// Wellspring)" → ["Cabal of Chaos", "Soulforged Warpack"]. The parenthetical
+// is the keystone/upgrade suite, not a detachment name.
+function matchDetachments(faction: string | null, raw: string): string[] {
+  const cleaned = raw.replace(/^.*:/, "").replace(/\([^)]*\)/g, "").trim();
+  const result: string[] = [];
+  for (const part of cleaned.split(",").map((s) => s.trim()).filter(Boolean)) {
+    const hit = matchOneDetachment(faction, part);
+    if (hit && !result.includes(hit)) result.push(hit);
+  }
+  return result;
+}
+
+// Detect faction, detachments and disposition anywhere within one list's text.
+function detectMeta(chunk: string): {
+  faction: string | null;
+  detachments: string[];
+  disposition: Disposition | null;
+} {
   const lines = chunk.split(/\r?\n/).map((l) => l.trim());
   let faction: string | null = null;
-  let detachment: string | null = null;
+  let detachments: string[] = [];
+  let disposition: Disposition | null = null;
 
   for (const line of lines) {
     if (!faction && /faction\s*keyword/i.test(line)) faction = matchFaction(line);
-    if (!detachment && /detachment/i.test(line)) detachment = matchDetachment(faction, line);
+    if (!detachments.length && /detachment/i.test(line))
+      detachments = matchDetachments(faction, line);
+    if (!disposition && /force\s*disposition/i.test(line)) {
+      const c = line.replace(/^.*:/, "").trim();
+      disposition =
+        DISPOSITION_NAMES.find((d) => d.toLowerCase() === c.toLowerCase()) ?? null;
+    }
   }
   // GW-app style: faction / detachment appear as bare lines near the top
   if (!faction) {
@@ -117,13 +149,13 @@ function detectMeta(chunk: string): { faction: string | null; detachment: string
       if (f) { faction = f; break; }
     }
   }
-  if (!detachment) {
+  if (!detachments.length) {
     for (const line of lines.slice(0, 15)) {
-      const d = matchDetachment(faction, line);
-      if (d) { detachment = d; break; }
+      const d = matchDetachments(faction, line);
+      if (d.length) { detachments = d; break; }
     }
   }
-  return { faction, detachment };
+  return { faction, detachments, disposition };
 }
 
 // Split a multi-list document into per-list chunks, then parse each.
@@ -153,8 +185,7 @@ export function parseTeamLists(text: string): ParsedList[] {
   // Fall back to treating the whole thing as one list
   if (boundaries.length === 0) {
     const units = parseArmyList(text);
-    const { faction, detachment } = detectMeta(text);
-    return units.length ? [{ faction, detachment, units }] : [];
+    return units.length ? [{ ...detectMeta(text), units }] : [];
   }
 
   const results: ParsedList[] = [];
@@ -167,8 +198,7 @@ export function parseTeamLists(text: string): ParsedList[] {
     const chunk = lines.slice(start, end).join("\n");
     const units = parseArmyList(chunk);
     if (!units.length) continue;
-    const { faction, detachment } = detectMeta(chunk);
-    results.push({ faction, detachment, units });
+    results.push({ ...detectMeta(chunk), units });
   }
   return results;
 }

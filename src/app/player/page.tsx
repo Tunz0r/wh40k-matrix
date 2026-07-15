@@ -8,20 +8,25 @@ import {
   subscribeToTournament,
   addWarmupGame,
   deleteWarmupGame,
+  savePlayerProfile,
   type TournamentDoc,
   type TournamentRound,
   type WarmupGame,
+  type PlayerProfile,
 } from "@/lib/tournament-db";
 import {
   subscribeToOpponents,
   estimateStyle,
   clusterLists,
   lookupEstimate,
+  listSimilarity,
+  SIMILARITY_THRESHOLD,
   type OpponentMap,
   type ListCluster,
   type ClusterMember,
   type OpponentList,
 } from "@/lib/estimates-db";
+import { parseTeamLists } from "@/lib/list-parser";
 import {
   fetchSession,
   subscribeToSession,
@@ -170,6 +175,72 @@ export default function PlayerPage() {
     [opponents]
   );
 
+  // --- Min arketype: which archetype the player themselves runs ---
+  const myProfile: PlayerProfile | null =
+    myIdx !== null ? doc?.profiles?.[`a${myIdx}`] ?? null : null;
+
+  // The live cluster matching a profile (best similarity ≥ threshold).
+  const profileCluster = useMemo(() => {
+    if (!myProfile) return null;
+    const asList: OpponentList = {
+      faction: myProfile.faction,
+      detachments: myProfile.detachments || [],
+      disposition: (myProfile.disposition ?? null) as OpponentList["disposition"],
+      ...(myProfile.units?.length ? { units: myProfile.units } : {}),
+    };
+    let best: { c: ListCluster; sim: number } | null = null;
+    for (const c of clusters) {
+      const sim = listSimilarity(asList, c.rep.list);
+      if (sim >= SIMILARITY_THRESHOLD && (!best || sim > best.sim)) best = { c, sim };
+    }
+    return best?.c ?? null;
+  }, [myProfile, clusters]);
+
+  const [profCluster, setProfCluster] = useState<string>("");
+  const [profPaste, setProfPaste] = useState("");
+  const [profPasting, setProfPasting] = useState(false);
+
+  function saveProfileFromCluster(cluster: ListCluster, ownUnits?: string[]) {
+    if (myIdx === null) return;
+    const profile: PlayerProfile = {
+      faction: cluster.rep.list.faction,
+      detachments: cluster.rep.list.detachments || [],
+      disposition: cluster.rep.list.disposition ?? null,
+      ...(ownUnits?.length ? { units: ownUnits } : {}),
+    };
+    savePlayerProfile(TEAM_SLUG, myIdx, profile).catch(() => alert("Kunne ikke gemme — tjek Firebase."));
+    setProfCluster("");
+    setProfPaste("");
+    setProfPasting(false);
+  }
+
+  // Paste own list → parse → must land on a field archetype (≥ threshold).
+  function matchProfilePaste() {
+    const parsed = parseTeamLists(profPaste.trim())[0];
+    if (!parsed || !parsed.units.length) {
+      alert("Kunne ikke læse listen — indsæt et komplet liste-export (GW-app, WTC eller NewRecruit).");
+      return;
+    }
+    const asList: OpponentList = {
+      faction: parsed.faction || "",
+      detachments: parsed.detachments,
+      disposition: parsed.disposition,
+      units: parsed.units,
+    };
+    let best: { c: ListCluster; sim: number } | null = null;
+    for (const c of clusters) {
+      const sim = listSimilarity(asList, c.rep.list);
+      if (sim >= SIMILARITY_THRESHOLD && (!best || sim > best.sim)) best = { c, sim };
+    }
+    if (!best) {
+      alert(
+        `Ingen arketype i feltet matcher listen (≥${SIMILARITY_THRESHOLD}% lighed) — vælg den nærmeste arketype manuelt i stedet.`
+      );
+      return;
+    }
+    saveProfileFromCluster((best as { c: ListCluster }).c, parsed.units);
+  }
+
   const [wuCluster, setWuCluster] = useState<string>("");
   const [wuActual, setWuActual] = useState<string>("");
   const [wuDate, setWuDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -291,6 +362,89 @@ export default function PlayerPage() {
 
         {myIdx !== null && myArmy && (
           <>
+            {/* Min arketype: map own army to a field archetype */}
+            <div className="rounded-xl border border-white/[0.08] p-4">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h2 className="text-sm font-semibold text-[#e8e8f0]">Min arketype</h2>
+                {myProfile && (
+                  <button
+                    onClick={() => {
+                      if (!confirm("Nulstil din arketype?")) return;
+                      if (myIdx !== null) savePlayerProfile(TEAM_SLUG, myIdx, null).catch(() => {});
+                    }}
+                    className="ml-auto text-[10px] text-[#8888a0] hover:text-red-400 transition-colors"
+                  >
+                    Nulstil
+                  </button>
+                )}
+              </div>
+              {myProfile ? (
+                <div className="text-[12px] text-[#e8e8f0]">
+                  {myProfile.faction}
+                  <span className="text-[#8888a0]"> — {(myProfile.detachments || []).join(", ")}</span>
+                  {myProfile.disposition && (
+                    <span className="text-[10px] text-[#8888a0]"> · {myProfile.disposition}</span>
+                  )}
+                  <p className="text-[10px] text-[#8888a0] mt-1">
+                    {profileCluster
+                      ? `Matcher arketypen med ${profileCluster.members.length} ${profileCluster.members.length === 1 ? "liste" : "lister"} i feltet — bruges til sanity-tjek af estimater.`
+                      : "⚠ Matcher ikke længere nogen arketype i feltet — vælg en ny."}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-[10px] text-[#8888a0] mb-2">
+                    Vælg den arketype du selv spiller — eller indsæt din liste, så finder vi den. Bruges til at sanity-tjekke holdets estimater.
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select
+                      value={profCluster}
+                      onChange={(e) => setProfCluster(e.target.value)}
+                      className="flex-1 min-w-[200px] bg-[#1a1a22] border border-white/[0.14] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+                    >
+                      <option value="">Vælg arketype…</option>
+                      {clusterOptions.map(({ i, label }) => (
+                        <option key={i} value={i}>{label}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => {
+                        const c = profCluster === "" ? null : clusters[Number(profCluster)];
+                        if (c) saveProfileFromCluster(c);
+                      }}
+                      disabled={profCluster === ""}
+                      className="text-[11px] font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md transition-colors"
+                    >
+                      Gem
+                    </button>
+                    <button
+                      onClick={() => setProfPasting(!profPasting)}
+                      className="text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors"
+                    >
+                      {profPasting ? "Annullér" : "Indsæt liste i stedet"}
+                    </button>
+                  </div>
+                  {profPasting && (
+                    <div className="mt-2 space-y-1.5">
+                      <textarea
+                        value={profPaste}
+                        onChange={(e) => setProfPaste(e.target.value)}
+                        placeholder="Indsæt hele dit liste-export her (GW-app, WTC eller NewRecruit) — vi matcher den til en arketype i feltet..."
+                        className="w-full h-24 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-2 text-[10px] text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
+                      />
+                      <button
+                        onClick={matchProfilePaste}
+                        disabled={!profPaste.trim()}
+                        className="text-[11px] font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md transition-colors"
+                      >
+                        Match til arketype
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
             {/* Live game */}
             <div className="rounded-xl border border-[rgba(34,197,94,0.25)] bg-[rgba(34,197,94,0.03)] p-4">
               <div className="flex items-center gap-2 mb-3">
