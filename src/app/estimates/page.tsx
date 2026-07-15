@@ -9,7 +9,7 @@ import { DISP_STYLES, FACTIONS } from "@/lib/data";
 import ArmyEditor from "@/components/ArmyEditor";
 import EstimateInput from "@/components/EstimateInput";
 import PlayerEstimates from "@/components/PlayerEstimates";
-import { parseArmyList, parseTeamLists, formatUnits } from "@/lib/list-parser";
+import { parseArmyList, parseTeamLists, formatUnits, formatUnitsLines } from "@/lib/list-parser";
 import {
   type OpponentMap,
   type OpponentTeam,
@@ -696,7 +696,7 @@ export default function EstimatesPage() {
                                 </div>
                                 {showingUnits && hasUnits && (
                                   <p
-                                    title={formatUnits(list.units!)}
+                                    title={formatUnitsLines(list.units!)}
                                     className="px-2 pb-1.5 text-[10px] leading-[1.6] text-[#8888a0] break-words"
                                   >
                                     {formatUnits(list.units!)}

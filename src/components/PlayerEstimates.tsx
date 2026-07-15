@@ -265,7 +265,7 @@ export default function PlayerEstimates({
                       </div>
                       {cardUnits && (
                         <p
-                          title={formatUnits(cardUnits)}
+                          title={formatUnitsLines(cardUnits)}
                           className="text-[10px] leading-[1.6] text-[#8888a0] break-words mt-0.5"
                         >
                           {formatUnits(cardUnits)}
@@ -331,7 +331,7 @@ export default function PlayerEstimates({
                             </div>
                             {ownUnits && (
                               <p
-                                title={formatUnits(ownUnits)}
+                                title={formatUnitsLines(ownUnits)}
                                 className="px-2 pb-1 text-[10px] leading-[1.6] text-[#8888a0] break-words"
                               >
                                 {formatUnits(ownUnits)}
