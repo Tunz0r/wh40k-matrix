@@ -16,9 +16,11 @@ import {
   subscribeToOpponents,
   estimateStyle,
   clusterLists,
+  lookupEstimate,
   type OpponentMap,
   type ListCluster,
   type ClusterMember,
+  type OpponentList,
 } from "@/lib/estimates-db";
 import {
   fetchSession,
@@ -202,18 +204,29 @@ export default function PlayerPage() {
     }
   }
 
+  // Each logged game re-derives its CURRENT estimate live from the estimates
+  // data, so edits in the estimates menu show up here immediately. The value
+  // snapshotted at log time is only a fallback (archetype no longer matched).
   const myWarmups = useMemo(() => {
     if (myIdx === null) return [];
     const node = doc?.warmups?.[`a${myIdx}`] || {};
     return Object.entries(node)
-      .map(([id, g]) => ({ id, ...g, estimate: g.estimate ?? null }))
+      .map(([id, g]) => {
+        const snapshot = g.estimate ?? null;
+        const live = lookupEstimate(opponents, null, myIdx, {
+          faction: g.faction,
+          detachments: g.detachments || [],
+          disposition: (g.disposition ?? null) as OpponentList["disposition"],
+        });
+        return { id, ...g, estimate: snapshot, currentEstimate: live ?? snapshot };
+      })
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  }, [doc, myIdx]);
+  }, [doc, myIdx, opponents]);
 
   const warmupStats = useMemo(() => {
     const deltas = myWarmups
-      .filter((g) => g.estimate !== null)
-      .map((g) => g.actual - (g.estimate as number));
+      .filter((g) => g.currentEstimate !== null)
+      .map((g) => g.actual - (g.currentEstimate as number));
     if (!deltas.length) return null;
     return {
       n: deltas.length,
@@ -398,7 +411,7 @@ export default function PlayerPage() {
               ) : (
                 <div className="space-y-1">
                   {myWarmups.map((g) => {
-                    const delta = g.estimate !== null ? g.actual - g.estimate : null;
+                    const delta = g.currentEstimate !== null ? g.actual - g.currentEstimate : null;
                     return (
                       <div key={g.id} className="rounded-lg border border-white/[0.05] px-2.5 py-1.5">
                         <div className="flex items-center gap-2">
@@ -407,7 +420,19 @@ export default function PlayerPage() {
                             vs {g.faction}
                             <span className="text-[#8888a0]"> · {(g.detachments || []).join(", ")}</span>
                           </span>
-                          {g.estimate !== null ? <BPChip v={g.estimate} /> : <span className="w-8 text-center text-[10px] text-[#44445a]">—</span>}
+                          {g.currentEstimate !== null ? (
+                            <span
+                              title={
+                                g.estimate !== null && g.estimate !== g.currentEstimate
+                                  ? `Estimat da kampen blev logget: ${g.estimate}`
+                                  : "Nuværende estimat for arketypen"
+                              }
+                            >
+                              <BPChip v={g.currentEstimate} />
+                            </span>
+                          ) : (
+                            <span className="w-8 text-center text-[10px] text-[#44445a]">—</span>
+                          )}
                           <span className="text-[9px] text-[#8888a0]">→</span>
                           <BPChip v={g.actual} big />
                           {delta !== null && (
