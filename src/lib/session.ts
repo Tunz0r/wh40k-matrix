@@ -1,4 +1,4 @@
-import { ref, set, get, onValue, off, push } from "firebase/database";
+import { ref, set, get, onValue, off, push, update } from "firebase/database";
 import { getDb, authReady } from "./firebase";
 import type { Disposition } from "./data";
 
@@ -25,6 +25,8 @@ export interface SessionData {
   teamBName: string;
   createdAt: number;
   matchups: MatchupData[];
+  timerStartedAt?: number | null; // round clock, epoch ms (null = not started)
+  timerMinutes?: number; // round length in minutes, default 180
 }
 
 export async function createSession(data: SessionData): Promise<string> {
@@ -112,6 +114,39 @@ export async function updateMatchupFinal(
     `sessions/${sessionId}/matchups/${matchupIndex}/final`
   );
   await set(matchupRef, final);
+}
+
+// Start (startedAt = now), stop (null) or reconfigure the shared round clock.
+export async function setSessionTimer(
+  sessionId: string,
+  startedAt: number | null,
+  minutes?: number
+): Promise<void> {
+  await authReady();
+  const updates: Record<string, unknown> = {
+    [`sessions/${sessionId}/timerStartedAt`]: startedAt,
+  };
+  if (minutes !== undefined) updates[`sessions/${sessionId}/timerMinutes`] = minutes;
+  await update(ref(getDb()), updates);
+}
+
+// Firebase RTDB keeps pending writes in memory only — surface the connection
+// state so a coach on venue wifi can see whether edits are actually syncing.
+export function subscribeToConnection(
+  callback: (online: boolean) => void
+): () => void {
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const r = ref(getDb(), ".info/connected");
+    onValue(r, (snap) => callback(!!snap.val()));
+    cleanup = () => off(r);
+  });
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
 }
 
 export async function updateMatchupTableAdj(

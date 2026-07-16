@@ -40,6 +40,32 @@ export function calculateTeamBP(
   return { teamABP, teamBBP };
 }
 
+// Projected BP for one game, seen from team A: the actual result once final,
+// the (table-adjusted) estimate before any score is entered, and a
+// round-weighted blend in between — the deeper into the game, the more the
+// live score counts over the estimate.
+export function projectGame(m: {
+  aVP?: number;
+  bVP?: number;
+  final?: boolean;
+  round?: number;
+  estimate: number;
+  tableAdj?: number;
+}): { a: number; b: number } {
+  const aVP = m.aVP ?? 0;
+  const bVP = m.bVP ?? 0;
+  const diff = aVP - bVP;
+  const bp = vpToBP(diff);
+  const actualA = diff >= 0 ? bp.winner : bp.loser;
+  if (m.final) return { a: actualA, b: 20 - actualA };
+  const est =
+    m.estimate > 0 ? Math.min(20, Math.max(0, m.estimate + (m.tableAdj ?? 0))) : 10;
+  if (aVP === 0 && bVP === 0) return { a: est, b: 20 - est };
+  const w = Math.min(1, (m.round ?? 1) / 5);
+  const a = Math.round(actualA * w + est * (1 - w));
+  return { a, b: 20 - a };
+}
+
 // 8-player teams need 12 BP differential for a win
 export function teamResult(
   teamABP: number,

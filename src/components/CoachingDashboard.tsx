@@ -4,11 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { DISP_STYLES, type Disposition } from "@/lib/data";
 import { getLayoutImage } from "@/lib/layouts";
-import { vpToBP, calculateTeamBP, teamResult } from "@/lib/scoring";
+import { vpToBP, calculateTeamBP, teamResult, projectGame } from "@/lib/scoring";
 import {
   type SessionData,
   type MatchupData,
   subscribeToSession,
+  subscribeToConnection,
+  setSessionTimer,
   updateMatchupVP,
   updateMatchupRound,
   updateMatchupNotes,
@@ -16,6 +18,12 @@ import {
   updateMatchupTableAdj,
 } from "@/lib/session";
 import { updateRoundStatus } from "@/lib/tournament-db";
+
+// 78.4 min → "1:18"
+function fmtMin(min: number): string {
+  const t = Math.floor(min);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
 
 function DispDot({ d }: { d: Disposition | null }) {
   if (!d) return null;
@@ -43,6 +51,14 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
   const [error, setError] = useState<string | null>(null);
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
   const [view, setView] = useState<"captain" | "coach">("captain");
+  const [online, setOnline] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => subscribeToConnection(setOnline), []);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -128,6 +144,25 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
   const { teamABP, teamBBP } = calculateTeamBP(estimates);
   const result = teamResult(teamABP, teamBBP);
   const finishedCount = session.matchups.filter((m) => m.final).length;
+
+  // Projection: actual BP for finished games, estimates for unstarted ones,
+  // round-weighted blend for games in progress.
+  const proj = session.matchups.reduce(
+    (acc, m) => {
+      const p = projectGame(m);
+      return { a: acc.a + p.a, b: acc.b + p.b };
+    },
+    { a: 0, b: 0 }
+  );
+  const projDiff = proj.a - proj.b;
+
+  // Round clock → which game round the tables SHOULD be at right now.
+  const timerMinutes = session.timerMinutes ?? 180;
+  const timerStartedAt = session.timerStartedAt ?? null;
+  const elapsedMin = timerStartedAt !== null ? Math.max(0, (now - timerStartedAt) / 60000) : null;
+  const expectedRound =
+    elapsedMin !== null ? Math.min(5, Math.floor(elapsedMin / (timerMinutes / 5)) + 1) : null;
+  const isCoachView = view === "coach";
 
   return (
     <>
@@ -229,6 +264,76 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
             <div className="text-[10px] text-[#8888a0]">BP</div>
           </div>
         </div>
+
+        {/* Status strip: sync state · projection · round clock */}
+        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap bg-[#1a1a22] rounded-lg px-3 py-2 border border-white/[0.08] mt-1.5 text-[11px]">
+          <span
+            className={`flex items-center gap-1.5 font-semibold shrink-0 ${online ? "text-[#4ade80]" : "text-[#f87171]"}`}
+            title={online ? "Forbundet — ændringer gemmes live" : "Ingen forbindelse — ændringer gemmes IKKE før forbindelsen er tilbage"}
+          >
+            <span className={`w-2 h-2 rounded-full ${online ? "bg-[#4ade80]" : "bg-[#f87171] animate-pulse"}`} />
+            {online ? "LIVE" : "OFFLINE!"}
+          </span>
+          <span className="text-[#44445a]">·</span>
+          <span
+            className="text-[#8888a0]"
+            title="Færdige kampe tæller deres resultat, ikke-startede deres justerede estimat, og igangværende en blanding vægtet efter spilrunde"
+          >
+            Prognose{" "}
+            <span className="font-bold text-[#e8e8f0]">{proj.a}–{proj.b}</span>{" "}
+            {projDiff >= 12 ? (
+              <span className="font-semibold text-[#4ade80]">SEJR (+{projDiff})</span>
+            ) : projDiff <= -12 ? (
+              <span className="font-semibold text-[#f87171]">NEDERLAG ({projDiff})</span>
+            ) : (
+              <span className="font-semibold text-[#facc15]">
+                DRAW-bånd ({projDiff > 0 ? "+" : ""}{projDiff}) · {12 - projDiff} BP til sejr
+              </span>
+            )}
+          </span>
+          <span className="ml-auto flex items-center gap-2 shrink-0">
+            {timerStartedAt !== null ? (
+              <>
+                <span className={`font-semibold ${elapsedMin! > timerMinutes ? "text-[#f87171]" : "text-[#e8e8f0]"}`}>
+                  ⏱ {fmtMin(elapsedMin!)} / {fmtMin(timerMinutes)}
+                </span>
+                <span className="text-[#8888a0]">forventet spilrunde {expectedRound}</span>
+                {isCoachView && (
+                  <button
+                    onClick={() => {
+                      if (!confirm("Nulstil rundeuret?")) return;
+                      setSessionTimer(sessionId, null).catch(() => {});
+                    }}
+                    className="text-[10px] text-[#8888a0] hover:text-red-400 transition-colors"
+                  >
+                    Nulstil
+                  </button>
+                )}
+              </>
+            ) : isCoachView ? (
+              <>
+                <select
+                  value={timerMinutes}
+                  onChange={(e) => setSessionTimer(sessionId, null, Number(e.target.value)).catch(() => {})}
+                  title="Rundens længde"
+                  className="bg-[#22222e] border border-white/[0.14] rounded px-1 py-0.5 text-[10px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+                >
+                  {[150, 165, 180, 195, 210].map((m) => (
+                    <option key={m} value={m}>{fmtMin(m)}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setSessionTimer(sessionId, Date.now(), timerMinutes).catch(() => {})}
+                  className="text-[10px] font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] px-2 py-1 rounded transition-colors"
+                >
+                  ⏱ Start rundeur
+                </button>
+              </>
+            ) : (
+              <span className="text-[#8888a0]">⏱ rundeur ikke startet</span>
+            )}
+          </span>
+        </div>
       </div>
 
       <div className={embedded ? "" : "p-4 sm:p-6 max-w-4xl mx-auto"}>
@@ -243,6 +348,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
               expanded={expandedMatch === idx}
               onToggle={() => setExpandedMatch(expandedMatch === idx ? null : idx)}
               isCoach={view === "coach"}
+              expectedRound={expectedRound}
               onVP={handleVP}
               onRound={handleRound}
               onNotes={handleNotes}
@@ -281,6 +387,7 @@ function MatchupCard({
   expanded,
   onToggle,
   isCoach,
+  expectedRound,
   onVP,
   onRound,
   onNotes,
@@ -294,6 +401,7 @@ function MatchupCard({
   expanded: boolean;
   onToggle: () => void;
   isCoach: boolean;
+  expectedRound: number | null;
   onVP: (idx: number, aVP: number, bVP: number) => void;
   onRound: (idx: number, r: number) => void;
   onNotes: (idx: number, n: string) => void;
@@ -307,6 +415,18 @@ function MatchupCard({
   const vpDiff = aVP - bVP;
   const bp = vpToBP(vpDiff);
   const aAhead = vpDiff >= 0;
+  // Finished games are locked against stray taps — untick "færdig" to edit.
+  const canEdit = isCoach && !matchup.final;
+  // How far the live score is from the adjusted estimate — the coach's
+  // "walk over there" signal once a game is underway.
+  const started = aVP > 0 || bVP > 0;
+  const delta =
+    !matchup.final && started && matchup.estimate > 0
+      ? (aAhead ? bp.winner : bp.loser) - effEstimate
+      : null;
+  const showDelta = delta !== null && Math.abs(delta) >= 3;
+  const behindPace =
+    expectedRound !== null && !matchup.final && matchup.round < expectedRound;
 
   return (
     <div
@@ -348,6 +468,22 @@ function MatchupCard({
               <span className={`text-[9px] ${effEstimate >= 11 ? "text-[#4ade80]" : effEstimate <= 9 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
                 Est {effEstimate}
                 {tableAdj !== 0 && <span className="text-[#facc15]"> ({tableAdj > 0 ? "+" : ""}{tableAdj})</span>}
+              </span>
+            )}
+            {showDelta && (
+              <span
+                className={`text-[9px] font-bold px-1 py-0.5 rounded ${delta! > 0 ? "bg-[rgba(34,197,94,0.15)] text-[#4ade80]" : "bg-[rgba(239,68,68,0.15)] text-[#f87171]"}`}
+                title="Afvigelse fra det justerede estimat lige nu"
+              >
+                Δ{delta! > 0 ? "+" : ""}{delta}
+              </span>
+            )}
+            {behindPace && (
+              <span
+                className="text-[9px] font-bold px-1 py-0.5 rounded bg-[rgba(250,204,21,0.15)] text-[#facc15]"
+                title={`Kampen er i runde ${matchup.round}, men uret siger runde ${expectedRound}`}
+              >
+                ⏱ bagud
               </span>
             )}
             <div className="flex items-center gap-1">
@@ -399,6 +535,22 @@ function MatchupCard({
               {tableAdj !== 0 && <span className="text-[#facc15]"> ({tableAdj > 0 ? "+" : ""}{tableAdj})</span>}
             </span>
           )}
+          {showDelta && (
+            <span
+              className={`text-[9px] font-bold px-1 py-0.5 rounded shrink-0 ${delta! > 0 ? "bg-[rgba(34,197,94,0.15)] text-[#4ade80]" : "bg-[rgba(239,68,68,0.15)] text-[#f87171]"}`}
+              title="Afvigelse fra det justerede estimat lige nu"
+            >
+              Δ{delta! > 0 ? "+" : ""}{delta}
+            </span>
+          )}
+          {behindPace && (
+            <span
+              className="text-[9px] font-bold px-1 py-0.5 rounded shrink-0 bg-[rgba(250,204,21,0.15)] text-[#facc15]"
+              title={`Kampen er i runde ${matchup.round}, men uret siger runde ${expectedRound}`}
+            >
+              ⏱ bagud
+            </span>
+          )}
           <div className="flex items-center gap-1 shrink-0 ml-1">
             {[1, 2, 3, 4, 5].map((r) => (
               <span
@@ -445,7 +597,7 @@ function MatchupCard({
               <div className="text-center">
                 <div className="text-[9px] text-[#facc15] uppercase tracking-wider font-semibold" title="Justering for det bord modstanderens defender valgte">Bord</div>
                 <div className="flex items-center gap-1">
-                  {isCoach && (
+                  {canEdit && (
                     <button
                       onClick={() => onTableAdj(idx, Math.max(-10, tableAdj - 1))}
                       className="w-6 h-6 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-xs font-bold"
@@ -456,7 +608,7 @@ function MatchupCard({
                   <span className={`text-[13px] font-bold w-8 ${tableAdj > 0 ? "text-[#4ade80]" : tableAdj < 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>
                     {tableAdj > 0 ? "+" : ""}{tableAdj}
                   </span>
-                  {isCoach && (
+                  {canEdit && (
                     <button
                       onClick={() => onTableAdj(idx, Math.min(10, tableAdj + 1))}
                       className="w-6 h-6 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-xs font-bold"
@@ -488,15 +640,15 @@ function MatchupCard({
               {[1, 2, 3, 4, 5].map((r) => (
                 <button
                   key={r}
-                  onClick={() => isCoach && onRound(idx, r)}
-                  disabled={!isCoach}
+                  onClick={() => canEdit && onRound(idx, r)}
+                  disabled={!canEdit}
                   className={`w-9 h-8 rounded text-xs font-semibold transition-colors ${
                     r <= matchup.round
                       ? matchup.final
                         ? "bg-[rgba(34,197,94,0.15)] text-[#4ade80] border border-[rgba(34,197,94,0.3)]"
                         : "bg-[rgba(168,85,247,0.15)] text-[#a855f7] border border-[rgba(168,85,247,0.3)]"
                       : "bg-[#22222e] text-[#8888a0] border border-white/[0.08]"
-                  } ${isCoach ? "cursor-pointer hover:border-white/20" : "cursor-default"}`}
+                  } ${canEdit ? "cursor-pointer hover:border-white/20" : "cursor-default"}`}
                 >
                   {r}
                 </button>
@@ -517,7 +669,7 @@ function MatchupCard({
                   <span className="text-[11px] text-[#4ade80] font-medium truncate">{matchup.aFaction}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {isCoach && (
+                  {canEdit && (
                     <button
                       onClick={() => onVP(idx, Math.max(0, aVP - 1), bVP)}
                       className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
@@ -530,11 +682,11 @@ function MatchupCard({
                     min={0}
                     max={100}
                     value={aVP}
-                    onChange={(e) => isCoach && onVP(idx, Math.max(0, Number(e.target.value) || 0), bVP)}
-                    disabled={!isCoach}
+                    onChange={(e) => canEdit && onVP(idx, Math.max(0, Number(e.target.value) || 0), bVP)}
+                    disabled={!canEdit}
                     className="flex-1 text-center text-xl font-bold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-1.5 text-[#e8e8f0] outline-none focus:border-[#4ade80] disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  {isCoach && (
+                  {canEdit && (
                     <button
                       onClick={() => onVP(idx, Math.min(100, aVP + 1), bVP)}
                       className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
@@ -551,7 +703,7 @@ function MatchupCard({
                   <span className="text-[11px] text-[#8888a0] font-medium truncate">{matchup.bFaction}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {isCoach && (
+                  {canEdit && (
                     <button
                       onClick={() => onVP(idx, aVP, Math.max(0, bVP - 1))}
                       className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
@@ -564,11 +716,11 @@ function MatchupCard({
                     min={0}
                     max={100}
                     value={bVP}
-                    onChange={(e) => isCoach && onVP(idx, aVP, Math.max(0, Number(e.target.value) || 0))}
-                    disabled={!isCoach}
+                    onChange={(e) => canEdit && onVP(idx, aVP, Math.max(0, Number(e.target.value) || 0))}
+                    disabled={!canEdit}
                     className="flex-1 text-center text-xl font-bold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-1.5 text-[#e8e8f0] outline-none focus:border-[#a855f7] disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  {isCoach && (
+                  {canEdit && (
                     <button
                       onClick={() => onVP(idx, aVP, Math.min(100, bVP + 1))}
                       className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
