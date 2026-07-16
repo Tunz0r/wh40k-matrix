@@ -157,7 +157,9 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
   const projDiff = proj.a - proj.b;
 
   // Round clock → which game round the tables SHOULD be at right now.
-  const timerMinutes = session.timerMinutes ?? 180;
+  // WTC rounds are 4:30 incl. 30 min pairing — the clock tracks the 4 hours
+  // of play and is started when the games begin.
+  const timerMinutes = session.timerMinutes ?? 240;
   const timerStartedAt = session.timerStartedAt ?? null;
   const elapsedMin = timerStartedAt !== null ? Math.max(0, (now - timerStartedAt) / 60000) : null;
   const expectedRound =
@@ -318,7 +320,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
                   title="Rundens længde"
                   className="bg-[#22222e] border border-white/[0.14] rounded px-1 py-0.5 text-[10px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
                 >
-                  {[150, 165, 180, 195, 210].map((m) => (
+                  {[180, 210, 240, 270].map((m) => (
                     <option key={m} value={m}>{fmtMin(m)}</option>
                   ))}
                 </select>
