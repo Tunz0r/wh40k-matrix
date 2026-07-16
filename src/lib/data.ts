@@ -12,7 +12,8 @@ export interface DispositionInfo {
 
 export interface Detachment {
   n: string;
-  d: Disposition;
+  // null = GW hasn't published the Force Disposition yet (shown as "Ukendt")
+  d: Disposition | null;
   dp: number;
   new?: boolean;
 }
@@ -203,6 +204,8 @@ export const MISSIONS: Record<Disposition, DispositionInfo> = {
 
 export const FACTIONS: Record<string, Detachment[]> = {
   "Space Marines": [
+    // Siege of Death Mire reward — disposition not published yet (July 2026)
+    { n: "Vengeful Hosts", d: null, dp: 1, new: true },
     { n: "Fulguris Task Force", d: "Disruption", dp: 1, new: true },
     { n: "Librarius Conclave", d: "Reconnaissance", dp: 1, new: true },
     { n: "Subversion Assets", d: "Reconnaissance", dp: 1, new: true },
@@ -423,6 +426,8 @@ export const FACTIONS: Record<string, Detachment[]> = {
     { n: "Shadow Legion", d: "Purge the Foe", dp: 2 },
   ],
   Orks: [
+    // Siege of Death Mire reward — disposition not published yet (July 2026)
+    { n: "Equatorial Hordes", d: null, dp: 1, new: true },
     { n: "More Dakka!", d: "Purge the Foe", dp: 1, new: true },
     { n: "Rollin' Deff", d: "Priority Assets", dp: 1, new: true },
     { n: "Taktikal Brigade", d: "Disruption", dp: 1, new: true },

@@ -3,12 +3,23 @@
 import { useState, useRef, useEffect } from "react";
 import { type Disposition, DISP_STYLES, MISSIONS } from "@/lib/data";
 
-export function DispositionBadge({ disposition }: { disposition: Disposition }) {
+export function DispositionBadge({ disposition }: { disposition: Disposition | null }) {
   const [open, setOpen] = useState(false);
   const [flipRight, setFlipRight] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const style = DISP_STYLES[disposition];
-  const mission = MISSIONS[disposition];
+  const style = disposition ? DISP_STYLES[disposition] : null;
+  const mission = disposition ? MISSIONS[disposition] : null;
+
+  if (!disposition || !style) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded whitespace-nowrap text-[#8888a0] bg-white/[0.04] border border-dashed border-white/[0.14]"
+        title="GW har ikke offentliggjort force disposition endnu"
+      >
+        Ukendt endnu
+      </span>
+    );
+  }
 
   useEffect(() => {
     if (open && wrapRef.current) {

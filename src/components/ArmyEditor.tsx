@@ -27,10 +27,10 @@ export default function ArmyEditor({
     setDetachments([]);
   }
 
-  function toggleDet(name: string, d: Disposition) {
+  function toggleDet(name: string, d: Disposition | null) {
     setDetachments((prev) => {
       const next = prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name];
-      if (!prev.includes(name) && !disposition) setDisposition(d);
+      if (!prev.includes(name) && !disposition && d) setDisposition(d);
       return next;
     });
   }
@@ -59,7 +59,7 @@ export default function ArmyEditor({
         <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
           {factionDets.map((det) => {
             const checked = detachments.includes(det.n);
-            const s = DISP_STYLES[det.d];
+            const s = det.d ? DISP_STYLES[det.d] : null;
             return (
               <button
                 key={det.n}
@@ -76,9 +76,9 @@ export default function ArmyEditor({
                 <span className="text-[11px] text-[#e8e8f0] flex-1 truncate">{det.n}</span>
                 <span
                   className="text-[8px] font-semibold px-1 py-0.5 rounded whitespace-nowrap shrink-0"
-                  style={{ background: s.bg, color: s.color }}
+                  style={s ? { background: s.bg, color: s.color } : { color: "#8888a0" }}
                 >
-                  {det.d}
+                  {det.d ?? "Ukendt"}
                 </span>
               </button>
             );

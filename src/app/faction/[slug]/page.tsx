@@ -30,7 +30,7 @@ export default function FactionPage({
 
   const dispCounts: Record<string, number> = {};
   for (const d of detachments) {
-    dispCounts[d.d] = (dispCounts[d.d] || 0) + 1;
+    if (d.d) dispCounts[d.d] = (dispCounts[d.d] || 0) + 1;
   }
 
   return (

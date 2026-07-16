@@ -62,7 +62,7 @@ export function DetachmentTable({
         rows = rows.filter(
           (r) =>
             r.n.toLowerCase().includes(query) ||
-            r.d.toLowerCase().includes(query) ||
+            (r.d ?? "").toLowerCase().includes(query) ||
             fac.toLowerCase().includes(query)
         );
       }

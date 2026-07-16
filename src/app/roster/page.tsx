@@ -35,8 +35,14 @@ function armyDp(army: Army): number {
   return army.detachments.reduce((s, d) => s + d.detachment.dp, 0);
 }
 
+// Detachments with an unpublished disposition (d: null) contribute none —
+// the army's disposition stays unresolved until GW publishes it.
 function armyDispositions(army: Army): Disposition[] {
-  const unique = new Set(army.detachments.map((d) => d.detachment.d));
+  const unique = new Set(
+    army.detachments
+      .map((d) => d.detachment.d)
+      .filter((x): x is Disposition => x !== null)
+  );
   return [...unique];
 }
 
@@ -176,7 +182,9 @@ export default function RosterPage() {
     if (det.dp > remainingDp) return;
     updateArmy(activeArmy, (a) => {
       const newDets = [...a.detachments, { detachment: det, faction }];
-      const disps = new Set(newDets.map((d) => d.detachment.d));
+      const disps = new Set(
+        newDets.map((d) => d.detachment.d).filter((x): x is Disposition => x !== null)
+      );
       let newChosen = a.chosenDisposition;
       if (disps.size === 1) {
         const only = [...disps][0];
@@ -196,7 +204,9 @@ export default function RosterPage() {
     updateArmy(armyIdx, (a) => {
       const newDets = a.detachments.filter((_, i) => i !== detIdx);
       if (newDets.length === 0) return emptyArmy();
-      const disps = new Set(newDets.map((d) => d.detachment.d));
+      const disps = new Set(
+        newDets.map((d) => d.detachment.d).filter((x): x is Disposition => x !== null)
+      );
       let newChosen = a.chosenDisposition;
       if (newChosen && !disps.has(newChosen)) {
         newChosen = disps.size === 1 ? [...disps][0] : null;
