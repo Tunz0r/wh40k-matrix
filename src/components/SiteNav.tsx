@@ -5,12 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
 
+// The matrix itself lives on "/" — reachable via the brand logo, so it
+// doesn't need its own nav item.
 const LINKS: { href: string; label: string; match: (path: string) => boolean }[] = [
-  {
-    href: "/",
-    label: "Matrix",
-    match: (p) => p === "/" || p.startsWith("/faction"),
-  },
   {
     href: "/roster",
     label: "Roster",

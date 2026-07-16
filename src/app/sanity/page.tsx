@@ -25,6 +25,13 @@ import {
 // before it's flagged.
 const TOLERANCE = 2;
 
+// Rule 3: two archetypes at least this similar (but below the cluster
+// threshold, or they'd be one archetype) with estimates differing more than
+// DIVERGENCE_MAX are flagged — near-identical lists shouldn't score wildly
+// differently.
+const SIMILAR_PAIR_MIN = 60;
+const DIVERGENCE_MAX = 4;
+
 function BPChip({ v }: { v: number }) {
   const s = estimateStyle(v);
   return (
@@ -96,16 +103,37 @@ export default function SanityPage() {
     };
   }, [opponents]);
 
+  // Archetype pairs similar enough that their estimates should agree.
+  const similarPairs = useMemo(() => {
+    const pairs: { a: ListCluster; b: ListCluster; sim: number }[] = [];
+    for (let i = 0; i < clusters.length; i++) {
+      for (let j = i + 1; j < clusters.length; j++) {
+        const sim = listSimilarity(clusters[i].rep.list, clusters[j].rep.list);
+        if (sim >= SIMILAR_PAIR_MIN) pairs.push({ a: clusters[i], b: clusters[j], sim });
+      }
+    }
+    return pairs;
+  }, [clusters]);
+
   // Rule 1 — mirror pairs: if our player A (archetype X) estimates 14 vs
   // archetype Y, then our player B (archetype Y) should estimate ~6 vs X;
   // the two must sum to ~20 because it's the same matchup seen from both sides.
   // Rule 2 — self-mirror: an estimate vs your OWN archetype is a mirror match
   // and should be ~10.
-  const { findings, checkedPairs, checkedSelfs } = useMemo(() => {
+  // Rule 3 — similar archetypes: the same army's estimates vs two near-identical
+  // archetypes shouldn't diverge wildly.
+  const { findings, checkedPairs, checkedSelfs, checkedSimilar } = useMemo(() => {
     const findings: Finding[] = [];
     let checkedPairs = 0;
     let checkedSelfs = 0;
+    let checkedSimilar = 0;
     const withCluster = resolved.filter((r) => r.cluster);
+    // Countries included so two same-named clusters can be told apart.
+    const archLabel = (c: ListCluster) => {
+      const countries = [...new Set(c.members.map((m) => m.teamName))];
+      const shown = countries.slice(0, 2).join(", ") + (countries.length > 2 ? ` +${countries.length - 2}` : "");
+      return `${c.rep.list.faction} ${(c.rep.list.detachments || []).join(", ")} [${shown}]`;
+    };
 
     for (let x = 0; x < withCluster.length; x++) {
       for (let y = x + 1; y < withCluster.length; y++) {
@@ -161,9 +189,37 @@ export default function SanityPage() {
       }
     }
 
+    // Rule 3 — for every army, compare estimates across similar archetype pairs.
+    resolved.forEach((r) => {
+      for (const p of similarPairs) {
+        const a = clusterEstimate(p.a, r.idx);
+        const b = clusterEstimate(p.b, r.idx);
+        if (a === null || b === null) continue;
+        checkedSimilar++;
+        const diff = Math.abs(a - b);
+        if (diff > DIVERGENCE_MAX) {
+          findings.push({
+            severity: diff - DIVERGENCE_MAX,
+            text: (
+              <>
+                <span className="font-semibold text-[#e8e8f0]">{r.label}</span>
+                <span className="text-[#8888a0]"> siger </span>
+                <BPChip v={a} />
+                <span className="text-[#8888a0]"> mod {archLabel(p.a)}, men </span>
+                <BPChip v={b} />
+                <span className="text-[#8888a0]">
+                  {" "}mod {archLabel(p.b)} — arketyperne er {Math.round(p.sim)}% ens, så en forskel på {diff} ser forkert ud.
+                </span>
+              </>
+            ),
+          });
+        }
+      }
+    });
+
     findings.sort((a, b) => b.severity - a.severity);
-    return { findings, checkedPairs, checkedSelfs };
-  }, [resolved, clusterEstimate]);
+    return { findings, checkedPairs, checkedSelfs, checkedSimilar };
+  }, [resolved, clusterEstimate, similarPairs]);
 
   const missing = resolved.filter((r) => !r.profile);
   const unmatched = resolved.filter((r) => r.profile && !r.cluster);
@@ -177,11 +233,11 @@ export default function SanityPage() {
             <span className="text-[#4ade80] ml-2 text-sm font-normal">— {TEAM_NAME}</span>
           </h1>
           <span className="text-[11px] text-[#8888a0]">
-            {checkedPairs} spejl-par · {checkedSelfs} egne arketyper tjekket
+            {checkedPairs} spejl-par · {checkedSelfs} egne arketyper · {checkedSimilar} lignende-par tjekket
           </span>
         </div>
         <p className="text-[10px] text-[#8888a0] mt-1">
-          Krydstjek af holdets estimater mod hinandens arketyper: samme matchup set fra begge sider skal summe til ~20, og et spejlkamp mod egen arketype skal være ~10 (tolerance ±{TOLERANCE}).
+          Krydstjek af holdets estimater: samme matchup set fra begge sider skal summe til ~20, et spejlkamp mod egen arketype skal være ~10 (tolerance ±{TOLERANCE}), og estimater mod arketyper der er ≥{SIMILAR_PAIR_MIN}% ens må højst afvige {DIVERGENCE_MAX}.
         </p>
       </header>
 
@@ -199,7 +255,7 @@ export default function SanityPage() {
               ))}
             </div>
           </div>
-        ) : checkedPairs + checkedSelfs > 0 ? (
+        ) : checkedPairs + checkedSelfs + checkedSimilar > 0 ? (
           <div className="rounded-xl border border-[rgba(34,197,94,0.25)] bg-[rgba(34,197,94,0.03)] p-4">
             <p className="text-[12px] text-[#4ade80]">
               Ingen konflikter fundet — alle tjekkede estimater er konsistente.

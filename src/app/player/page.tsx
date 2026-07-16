@@ -26,7 +26,7 @@ import {
   type ClusterMember,
   type OpponentList,
 } from "@/lib/estimates-db";
-import { parseTeamLists } from "@/lib/list-parser";
+import { parseTeamLists, formatUnitsLines } from "@/lib/list-parser";
 import {
   fetchSession,
   subscribeToSession,
@@ -146,17 +146,32 @@ export default function PlayerPage() {
   // --- Warmup games: log prep results vs archetypes and compare to estimates ---
   const clusters = useMemo(() => clusterLists(opponents), [opponents]);
 
-  // Archetype dropdown sorted alphabetically for findability.
+  // Archetype dropdown sorted alphabetically for findability. Each option
+  // carries a hover tooltip (title) with countries + full unit list so the
+  // right archetype can be identified before picking.
   const clusterOptions = useMemo(
     () =>
       clusters
-        .map((c, i) => ({
-          c,
-          i,
-          label: `${c.rep.list.faction} — ${(c.rep.list.detachments || []).join(", ")}${
-            c.members.length > 1 ? ` (${c.members.length} lister)` : ""
-          }`,
-        }))
+        .map((c, i) => {
+          const units = c.rep.list.units?.length
+            ? c.rep.list.units
+            : c.members.find((m) => m.list.units?.length)?.list.units;
+          const countries = [...new Set(c.members.map((m) => m.teamName))];
+          const title =
+            [
+              c.rep.list.disposition,
+              countries.join(", "),
+            ].filter(Boolean).join(" · ") +
+            (units ? `\n\n${formatUnitsLines(units)}` : "\n\n(ingen liste indsat endnu)");
+          return {
+            c,
+            i,
+            title,
+            label: `${c.rep.list.faction} — ${(c.rep.list.detachments || []).join(", ")}${
+              c.members.length > 1 ? ` (${c.members.length} lister)` : ""
+            }`,
+          };
+        })
         .sort((a, b) => a.label.localeCompare(b.label, "da")),
     [clusters]
   );
@@ -403,8 +418,8 @@ export default function PlayerPage() {
                       className="flex-1 min-w-[200px] bg-[#1a1a22] border border-white/[0.14] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
                     >
                       <option value="">Vælg arketype…</option>
-                      {clusterOptions.map(({ i, label }) => (
-                        <option key={i} value={i}>{label}</option>
+                      {clusterOptions.map(({ i, label, title }) => (
+                        <option key={i} value={i} title={title}>{label}</option>
                       ))}
                     </select>
                     <button
@@ -523,8 +538,8 @@ export default function PlayerPage() {
                   className="flex-1 min-w-[200px] bg-[#1a1a22] border border-white/[0.14] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
                 >
                   <option value="">Vælg arketype…</option>
-                  {clusterOptions.map(({ i, label }) => (
-                    <option key={i} value={i}>{label}</option>
+                  {clusterOptions.map(({ i, label, title }) => (
+                    <option key={i} value={i} title={title}>{label}</option>
                   ))}
                 </select>
                 {wuSelected && (
