@@ -296,8 +296,19 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
           <span className="ml-auto flex items-center gap-2 shrink-0">
             {timerStartedAt !== null ? (
               <>
-                <span className={`font-semibold ${elapsedMin! > timerMinutes ? "text-[#f87171]" : "text-[#e8e8f0]"}`}>
-                  ⏱ {fmtMin(elapsedMin!)} / {fmtMin(timerMinutes)}
+                <span
+                  className={`font-semibold ${
+                    elapsedMin! >= timerMinutes
+                      ? "text-[#f87171]"
+                      : timerMinutes - elapsedMin! < 30
+                        ? "text-[#facc15]"
+                        : "text-[#e8e8f0]"
+                  }`}
+                  title={`Startet for ${fmtMin(elapsedMin!)} siden · rundelængde ${fmtMin(timerMinutes)}`}
+                >
+                  ⏱ {elapsedMin! >= timerMinutes
+                    ? `slut (+${fmtMin(elapsedMin! - timerMinutes)})`
+                    : `${fmtMin(Math.ceil(timerMinutes - elapsedMin!))} tilbage`}
                 </span>
                 <span className="text-[#8888a0]">forventet spilrunde {expectedRound}</span>
                 {isCoachView && (
