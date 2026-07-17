@@ -18,6 +18,8 @@ export interface MatchupData {
   round: number; // current game round (1-5)
   notes: string;
   final: boolean; // true when game is done
+  startedAt?: number | null; // game clock: auto-set on the first score/round input
+  finishedAt?: number | null; // set when marked final, freezing the duration
 }
 
 export interface SessionData {
@@ -114,6 +116,20 @@ export async function updateMatchupFinal(
     `sessions/${sessionId}/matchups/${matchupIndex}/final`
   );
   await set(matchupRef, final);
+}
+
+// Set or clear a single game's clock fields.
+export async function updateMatchupClock(
+  sessionId: string,
+  matchupIndex: number,
+  clock: { startedAt?: number | null; finishedAt?: number | null }
+): Promise<void> {
+  await authReady();
+  const base = `sessions/${sessionId}/matchups/${matchupIndex}`;
+  const updates: Record<string, unknown> = {};
+  if (clock.startedAt !== undefined) updates[`${base}/startedAt`] = clock.startedAt;
+  if (clock.finishedAt !== undefined) updates[`${base}/finishedAt`] = clock.finishedAt;
+  await update(ref(getDb()), updates);
 }
 
 // Start (startedAt = now), stop (null) or reconfigure the shared round clock.

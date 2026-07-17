@@ -11,6 +11,7 @@ import {
   subscribeToSession,
   subscribeToConnection,
   setSessionTimer,
+  updateMatchupClock,
   updateMatchupVP,
   updateMatchupRound,
   updateMatchupNotes,
@@ -81,18 +82,32 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
     }
   }, [sessionId]);
 
+  // The game clock starts itself on the first meaningful input — coaches
+  // shouldn't have to remember a button mid-round.
+  const ensureGameClock = useCallback(
+    (idx: number) => {
+      const m = session?.matchups?.[idx];
+      if (m && !m.startedAt) {
+        updateMatchupClock(sessionId, idx, { startedAt: Date.now(), finishedAt: null }).catch(() => {});
+      }
+    },
+    [sessionId, session]
+  );
+
   const handleVP = useCallback(
     (idx: number, aVP: number, bVP: number) => {
+      ensureGameClock(idx);
       updateMatchupVP(sessionId, idx, aVP, bVP);
     },
-    [sessionId]
+    [sessionId, ensureGameClock]
   );
 
   const handleRound = useCallback(
     (idx: number, round: number) => {
+      ensureGameClock(idx);
       updateMatchupRound(sessionId, idx, round);
     },
-    [sessionId]
+    [sessionId, ensureGameClock]
   );
 
   const handleNotes = useCallback(
@@ -109,9 +124,28 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
     [sessionId]
   );
 
+  // Marking a game final freezes its clock; unmarking lets it run again.
   const handleFinal = useCallback(
     (idx: number, final: boolean) => {
       updateMatchupFinal(sessionId, idx, final);
+      const m = session?.matchups?.[idx];
+      if (final && m?.startedAt) {
+        updateMatchupClock(sessionId, idx, { finishedAt: Date.now() }).catch(() => {});
+      } else if (!final && m?.finishedAt) {
+        updateMatchupClock(sessionId, idx, { finishedAt: null }).catch(() => {});
+      }
+    },
+    [sessionId, session]
+  );
+
+  // Manual fallback: start the clock at deployment, or reset a stray one.
+  const handleClock = useCallback(
+    (idx: number, action: "start" | "reset") => {
+      if (action === "start") {
+        updateMatchupClock(sessionId, idx, { startedAt: Date.now(), finishedAt: null }).catch(() => {});
+      } else {
+        updateMatchupClock(sessionId, idx, { startedAt: null, finishedAt: null }).catch(() => {});
+      }
     },
     [sessionId]
   );
@@ -362,11 +396,13 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
               onToggle={() => setExpandedMatch(expandedMatch === idx ? null : idx)}
               isCoach={view === "coach"}
               expectedRound={expectedRound}
+              now={now}
               onVP={handleVP}
               onRound={handleRound}
               onNotes={handleNotes}
               onFinal={handleFinal}
               onTableAdj={handleTableAdj}
+              onClock={handleClock}
             />
           ))}
         </div>
@@ -401,11 +437,13 @@ function MatchupCard({
   onToggle,
   isCoach,
   expectedRound,
+  now,
   onVP,
   onRound,
   onNotes,
   onFinal,
   onTableAdj,
+  onClock,
 }: {
   idx: number;
   matchup: MatchupData;
@@ -415,11 +453,13 @@ function MatchupCard({
   onToggle: () => void;
   isCoach: boolean;
   expectedRound: number | null;
+  now: number;
   onVP: (idx: number, aVP: number, bVP: number) => void;
   onRound: (idx: number, r: number) => void;
   onNotes: (idx: number, n: string) => void;
   onFinal: (idx: number, f: boolean) => void;
   onTableAdj: (idx: number, adj: number) => void;
+  onClock: (idx: number, action: "start" | "reset") => void;
 }) {
   const aVP = matchup.aVP ?? 0;
   const bVP = matchup.bVP ?? 0;
@@ -440,6 +480,10 @@ function MatchupCard({
   const showDelta = delta !== null && Math.abs(delta) >= 3;
   const behindPace =
     expectedRound !== null && !matchup.final && matchup.round < expectedRound;
+  // Per-game clock: runs from first input (or manual start), frozen at final.
+  const gameClock = matchup.startedAt
+    ? fmtMin(Math.max(0, ((matchup.finishedAt ?? now) - matchup.startedAt) / 60000))
+    : null;
 
   return (
     <div
@@ -497,6 +541,11 @@ function MatchupCard({
                 title={`Kampen er i runde ${matchup.round}, men uret siger runde ${expectedRound}`}
               >
                 ⏱ bagud
+              </span>
+            )}
+            {gameClock && (
+              <span className="text-[9px] text-[#8888a0]" title="Spilletid for denne kamp">
+                ⏱ {gameClock}
               </span>
             )}
             <div className="flex items-center gap-1">
@@ -562,6 +611,11 @@ function MatchupCard({
               title={`Kampen er i runde ${matchup.round}, men uret siger runde ${expectedRound}`}
             >
               ⏱ bagud
+            </span>
+          )}
+          {gameClock && (
+            <span className="text-[9px] text-[#8888a0] shrink-0" title="Spilletid for denne kamp">
+              ⏱ {gameClock}
             </span>
           )}
           <div className="flex items-center gap-1 shrink-0 ml-1">
@@ -643,6 +697,44 @@ function MatchupCard({
               </span>
             </div>
           )}
+
+          {/* Game clock */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">
+              Spilur
+            </span>
+            {matchup.startedAt ? (
+              <>
+                <span className="text-[12px] font-semibold text-[#e8e8f0]">⏱ {gameClock}</span>
+                <span className="text-[10px] text-[#8888a0]">
+                  startet {new Date(matchup.startedAt).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" })}
+                  {matchup.finishedAt ? " · stoppet" : ""}
+                </span>
+                {canEdit && (
+                  <button
+                    onClick={() => {
+                      if (!confirm("Nulstil spiluret for denne kamp?")) return;
+                      onClock(idx, "reset");
+                    }}
+                    className="text-[10px] text-[#8888a0] hover:text-red-400 transition-colors"
+                  >
+                    Nulstil
+                  </button>
+                )}
+              </>
+            ) : canEdit ? (
+              <button
+                onClick={() => onClock(idx, "start")}
+                className="text-[10px] font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] px-2 py-0.5 rounded transition-colors"
+              >
+                ▶ Start spilur
+              </button>
+            ) : (
+              <span className="text-[10px] text-[#8888a0]">
+                ikke startet — starter automatisk ved første score/runde-input
+              </span>
+            )}
+          </div>
 
           {/* Round tracker */}
           <div>
