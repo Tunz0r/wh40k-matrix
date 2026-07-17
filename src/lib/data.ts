@@ -533,7 +533,7 @@ export const FACTIONS: Record<string, Detachment[]> = {
       dp: 1,
       new: true,
     },
-    { n: "Auxillary Cadre", d: "Disruption", dp: 1, new: true },
+    { n: "Auxiliary Cadre", d: "Disruption", dp: 1, new: true },
     {
       n: "Experimental Prototype Cadre",
       d: "Priority Assets",
