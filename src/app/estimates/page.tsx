@@ -487,6 +487,7 @@ export default function EstimatesPage() {
             opponents={opponents}
             ourArmies={ourArmies}
             playedRounds={playedRounds}
+            profiles={fbDoc?.profiles}
             onSet={setEstimate}
           />
         )}

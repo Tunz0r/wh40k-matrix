@@ -20,11 +20,17 @@ import {
   clusterLists,
   lookupEstimate,
   listSimilarity,
+  slugifyTeam,
+  archetypeId,
+  fetchArchetypeBank,
+  snapshotSlotCells,
+  switchSlotArchetype,
   SIMILARITY_THRESHOLD,
   type OpponentMap,
   type ListCluster,
   type ClusterMember,
   type OpponentList,
+  type ArchetypeDescriptor,
 } from "@/lib/estimates-db";
 import { parseTeamLists, formatUnitsLines } from "@/lib/list-parser";
 import {
@@ -214,19 +220,106 @@ export default function PlayerPage() {
   const [profCluster, setProfCluster] = useState<string>("");
   const [profPaste, setProfPaste] = useState("");
   const [profPasting, setProfPasting] = useState(false);
+  const [profChanging, setProfChanging] = useState(false);
+  const [profBusy, setProfBusy] = useState(false);
 
-  function saveProfileFromCluster(cluster: ListCluster, ownUnits?: string[]) {
-    if (myIdx === null) return;
+  // Opponents already played (locked rounds) — their estimate cells are the
+  // historical record and are never rewritten by archetype moves.
+  const lockedSlugs = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of doc?.rounds || []) {
+      if ((r.status === "live" || r.status === "completed") && r.opponentName) {
+        s.add(slugifyTeam(r.opponentName));
+      }
+    }
+    return s;
+  }, [doc]);
+
+  const profileDescriptor = (p: PlayerProfile): ArchetypeDescriptor => ({
+    faction: p.faction,
+    detachments: p.detachments || [],
+    disposition: p.disposition ?? null,
+  });
+
+  // Set or switch the archetype: park the old row in the bank, attribute or
+  // inherit for the new one (see switchSlotArchetype), then save the profile.
+  async function saveProfileFromCluster(cluster: ListCluster, ownUnits?: string[]) {
+    if (myIdx === null || profBusy) return;
     const profile: PlayerProfile = {
       faction: cluster.rep.list.faction,
       detachments: cluster.rep.list.detachments || [],
       disposition: cluster.rep.list.disposition ?? null,
       ...(ownUnits?.length ? { units: ownUnits } : {}),
     };
-    savePlayerProfile(TEAM_SLUG, myIdx, profile).catch(() => alert("Kunne ikke gemme — tjek Firebase."));
-    setProfCluster("");
-    setProfPaste("");
-    setProfPasting(false);
+    const newDesc = profileDescriptor(profile);
+    const oldDesc = myProfile ? profileDescriptor(myProfile) : null;
+    const label = `${newDesc.faction} — ${newDesc.detachments.join(", ")}`;
+    const ownCount = Object.keys(snapshotSlotCells(opponents, myIdx)).length;
+    setProfBusy(true);
+    try {
+      if (oldDesc && archetypeId(oldDesc) !== archetypeId(newDesc)) {
+        const bank = await fetchArchetypeBank(archetypeId(newDesc));
+        const m = Object.keys(bank).length;
+        if (
+          !confirm(
+            `Skift arketype til ${label}?\n\n` +
+              `Dine ${ownCount} estimater gemmes på den gamle arketype og hentes frem hvis nogen vælger den igen.\n` +
+              (m > 0
+                ? `Du overtager ${m} gemte estimater fra ${label}.`
+                : `${label} har ingen gemte estimater — du starter forfra.`)
+          )
+        ) {
+          setProfBusy(false);
+          return;
+        }
+      } else if (!oldDesc && ownCount > 0) {
+        const bank = await fetchArchetypeBank(archetypeId(newDesc));
+        const m = Object.keys(bank).length;
+        if (
+          !confirm(
+            `Vælg ${label} som din arketype?\n\n` +
+              `Dine ${ownCount} eksisterende estimater knyttes til arketypen.` +
+              (m > 0 ? ` Gemte estimater fra banken udfylder de felter du mangler.` : "")
+          )
+        ) {
+          setProfBusy(false);
+          return;
+        }
+      }
+      const res = await switchSlotArchetype(opponents, myIdx, oldDesc, newDesc, lockedSlugs);
+      await savePlayerProfile(TEAM_SLUG, myIdx, profile);
+      if (res.inherited > 0) alert(`${res.inherited} estimater overtaget fra arketypen.`);
+      setProfCluster("");
+      setProfPaste("");
+      setProfPasting(false);
+      setProfChanging(false);
+    } catch {
+      alert("Kunne ikke gemme arketypen — tjek Firebase.");
+    } finally {
+      setProfBusy(false);
+    }
+  }
+
+  // Clearing parks the row in the archetype's bank and empties it — a slot
+  // without an archetype should not carry estimates.
+  async function clearProfile() {
+    if (myIdx === null || !myProfile || profBusy) return;
+    const n = Object.keys(snapshotSlotCells(opponents, myIdx)).length;
+    if (
+      !confirm(
+        `Nulstil din arketype?\n\nDine ${n} estimater parkeres på arketypen og din række tømmes. De kommer tilbage når du eller en holdkammerat vælger arketypen igen.`
+      )
+    )
+      return;
+    setProfBusy(true);
+    try {
+      await switchSlotArchetype(opponents, myIdx, profileDescriptor(myProfile), null, lockedSlugs);
+      await savePlayerProfile(TEAM_SLUG, myIdx, null);
+    } catch {
+      alert("Kunne ikke nulstille — tjek Firebase.");
+    } finally {
+      setProfBusy(false);
+    }
   }
 
   // Paste own list → parse → must land on a field archetype (≥ threshold).
@@ -382,19 +475,26 @@ export default function PlayerPage() {
               <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h2 className="text-sm font-semibold text-[#e8e8f0]">Min arketype</h2>
                 {myProfile && (
-                  <button
-                    onClick={() => {
-                      if (!confirm("Nulstil din arketype?")) return;
-                      if (myIdx !== null) savePlayerProfile(TEAM_SLUG, myIdx, null).catch(() => {});
-                    }}
-                    className="ml-auto text-[10px] text-[#8888a0] hover:text-red-400 transition-colors"
-                  >
-                    Nulstil
-                  </button>
+                  <span className="ml-auto flex items-center gap-2">
+                    <button
+                      onClick={() => setProfChanging(!profChanging)}
+                      disabled={profBusy}
+                      className="text-[10px] text-[#a855f7] hover:text-[#c084fc] transition-colors disabled:opacity-40"
+                    >
+                      {profChanging ? "Annullér skift" : "Skift arketype"}
+                    </button>
+                    <button
+                      onClick={clearProfile}
+                      disabled={profBusy}
+                      className="text-[10px] text-[#8888a0] hover:text-red-400 transition-colors disabled:opacity-40"
+                    >
+                      Nulstil
+                    </button>
+                  </span>
                 )}
               </div>
-              {myProfile ? (
-                <div className="text-[12px] text-[#e8e8f0]">
+              {myProfile && (
+                <div className={`text-[12px] text-[#e8e8f0] ${profChanging ? "mb-2" : ""}`}>
                   {myProfile.faction}
                   <span className="text-[#8888a0]"> — {(myProfile.detachments || []).join(", ")}</span>
                   {myProfile.disposition && (
@@ -402,11 +502,12 @@ export default function PlayerPage() {
                   )}
                   <p className="text-[10px] text-[#8888a0] mt-1">
                     {profileCluster
-                      ? `Matcher arketypen med ${profileCluster.members.length} ${profileCluster.members.length === 1 ? "liste" : "lister"} i feltet — bruges til sanity-tjek af estimater.`
+                      ? `Matcher arketypen med ${profileCluster.members.length} ${profileCluster.members.length === 1 ? "liste" : "lister"} i feltet — dine estimater er knyttet til arketypen.`
                       : "⚠ Matcher ikke længere nogen arketype i feltet — vælg en ny."}
                   </p>
                 </div>
-              ) : (
+              )}
+              {(!myProfile || profChanging) && (
                 <>
                   <p className="text-[10px] text-[#8888a0] mb-2">
                     Vælg den arketype du selv spiller — eller indsæt din liste, så finder vi den. Bruges til at sanity-tjekke holdets estimater.

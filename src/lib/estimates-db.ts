@@ -1,4 +1,4 @@
-import { ref, set, remove, onValue, off, update } from "firebase/database";
+import { ref, set, get, remove, onValue, off, update } from "firebase/database";
 import { getDb, authReady } from "./firebase";
 import { TEAM_SLUG } from "./team";
 import type { RosterArmy } from "./roster";
@@ -119,6 +119,120 @@ export async function writeEstimateCells(
     updates[`${BASE}/${teamSlug}/estimates/${cellKey}`] = value;
   }
   await update(ref(getDb()), updates);
+}
+
+// --- Archetype estimate bank ---
+// An estimate is a statement about "my archetype vs theirs" — it belongs to
+// the archetype, not to a roster slot. When a slot's chosen archetype is set,
+// switched or cleared, the slot's estimate row is parked here (keyed by the
+// archetype descriptor) and the new archetype's banked row is inherited.
+// Lives NEXT TO the team node (not inside it) so subscribeToOpponents never
+// sees it.
+const BANK = `estimates/${TEAM_SLUG}-arketype-bank`;
+
+export interface ArchetypeDescriptor {
+  faction: string;
+  detachments: string[];
+  disposition: string | null;
+}
+
+// Stable identity: same faction + detachments + disposition = same archetype,
+// regardless of who plays it or how the live clustering shifts.
+export function archetypeId(d: ArchetypeDescriptor): string {
+  return [d.faction, ...(d.detachments || []), d.disposition || "ukendt"]
+    .join("--")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Bank cells are keyed "{teamSlug}|{theirIdx}".
+export async function fetchArchetypeBank(
+  id: string
+): Promise<Record<string, EstimateCell>> {
+  await authReady();
+  const snap = await get(ref(getDb(), `${BANK}/${id}/cells`));
+  return snap.val() || {};
+}
+
+// Every estimate cell in slot (row) armyIdx across the whole field.
+export function snapshotSlotCells(
+  opponents: OpponentMap,
+  armyIdx: number
+): Record<string, EstimateCell> {
+  const cells: Record<string, EstimateCell> = {};
+  for (const [slug, team] of Object.entries(opponents)) {
+    (team.armies || []).forEach((_, j) => {
+      const cell = team.estimates?.[`${armyIdx}_${j}`];
+      if (cell) cells[`${slug}|${j}`] = cell;
+    });
+  }
+  return cells;
+}
+
+// The whole move, in one call:
+// - old archetype set → park the row's current state in its bank
+// - new profile null → clear the row (unset)
+// - first pick → existing row is ATTRIBUTED to the archetype (row wins,
+//   bank fills the gaps)
+// - switch → clear the row, inherit the new archetype's banked cells
+// Cells for already-played opponents (lockedSlugs) are never rewritten, and
+// banked cells whose team/list no longer exists are dropped.
+export async function switchSlotArchetype(
+  opponents: OpponentMap,
+  armyIdx: number,
+  oldProfile: ArchetypeDescriptor | null,
+  newProfile: ArchetypeDescriptor | null,
+  lockedSlugs: Set<string>
+): Promise<{ parked: number; inherited: number }> {
+  await authReady();
+  const snapshot = snapshotSlotCells(opponents, armyIdx);
+  const updates: Record<string, EstimateCell | null> = {};
+  let inherited = 0;
+
+  const writeCell = (key: string, value: EstimateCell | null): boolean => {
+    const [slug, j] = key.split("|");
+    if (lockedSlugs.has(slug)) return false;
+    if (value !== null && !opponents[slug]?.armies?.[Number(j)]) return false;
+    updates[`estimates/${TEAM_SLUG}/${slug}/estimates/${armyIdx}_${j}`] = value;
+    return true;
+  };
+
+  if (oldProfile) {
+    await set(ref(getDb(), `${BANK}/${archetypeId(oldProfile)}`), {
+      descriptor: oldProfile,
+      cells: snapshot,
+      savedAt: Date.now(),
+    });
+  }
+
+  if (newProfile === null) {
+    if (oldProfile) {
+      for (const key of Object.keys(snapshot)) writeCell(key, null);
+    }
+  } else if (!oldProfile) {
+    const id = archetypeId(newProfile);
+    const bank = await fetchArchetypeBank(id);
+    for (const [key, cell] of Object.entries(bank)) {
+      if (!snapshot[key] && writeCell(key, cell)) inherited++;
+    }
+    await set(ref(getDb(), `${BANK}/${id}`), {
+      descriptor: newProfile,
+      cells: { ...bank, ...snapshot },
+      savedAt: Date.now(),
+    });
+  } else if (archetypeId(oldProfile) !== archetypeId(newProfile)) {
+    const bank = await fetchArchetypeBank(archetypeId(newProfile));
+    for (const key of Object.keys(snapshot)) writeCell(key, null);
+    for (const [key, cell] of Object.entries(bank)) {
+      if (writeCell(key, cell)) inherited++;
+    }
+  }
+
+  if (Object.keys(updates).length) await update(ref(getDb()), updates);
+  return { parked: Object.keys(snapshot).length, inherited };
 }
 
 // --- List similarity ---

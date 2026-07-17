@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import type { RosterArmy } from "@/lib/roster";
+import type { ProfilesNode } from "@/lib/tournament-db";
 import { DISP_STYLES } from "@/lib/data";
 import {
   type OpponentMap,
@@ -33,11 +35,13 @@ export default function PlayerEstimates({
   opponents,
   ourArmies,
   playedRounds,
+  profiles,
   onSet,
 }: {
   opponents: OpponentMap;
   ourArmies: RosterArmy[];
   playedRounds: Map<string, number>;
+  profiles?: ProfilesNode;
   onSet: (teamSlug: string, ourIdx: number, theirIdx: number, v: number | null) => void;
 }) {
   const [myIdx, setMyIdx] = useState<number | null>(null);
@@ -196,6 +200,13 @@ export default function PlayerEstimates({
         </p>
       ) : (
         <>
+          {!profiles?.[`a${myIdx}`] && (
+            <div className="rounded-xl border border-[rgba(250,204,21,0.35)] bg-[rgba(250,204,21,0.05)] px-3 py-2 text-[11px] text-[#facc15]">
+              ⚠ Du har ikke valgt din arketype endnu — gør det på{" "}
+              <Link href="/player" className="underline font-semibold">Min side</Link>{" "}
+              hurtigst muligt, så dine estimater bliver knyttet til arketypen (de bevares når du vælger).
+            </div>
+          )}
           <div className="flex items-center gap-3 flex-wrap text-[11px] text-[#8888a0]">
             <span>
               <span className="text-[#e8e8f0] font-semibold">{myProgress?.filled}</span>/
