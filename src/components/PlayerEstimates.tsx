@@ -37,12 +37,14 @@ export default function PlayerEstimates({
   playedRounds,
   profiles,
   onSet,
+  onNeedsTest,
 }: {
   opponents: OpponentMap;
   ourArmies: RosterArmy[];
   playedRounds: Map<string, number>;
   profiles?: ProfilesNode;
   onSet: (teamSlug: string, ourIdx: number, theirIdx: number, v: number | null) => void;
+  onNeedsTest: (keys: string[], flag: boolean) => void;
 }) {
   const [myIdx, setMyIdx] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -106,7 +108,9 @@ export default function PlayerEstimates({
       // Clusters where a real army list has been pasted (unit content) are the
       // useful ones to estimate; synthetic placeholders sink to the bottom.
       const hasUnits = cluster.members.some((m) => m.list.units?.length);
-      return { cluster, displayCell, anchor, weight, filledCount, hasUnits };
+      // "Needs testing" is a per-archetype flag: any member cell carrying it.
+      const needsTest = cluster.members.some((m) => cellFor(m, myIdx)?.needsTest);
+      return { cluster, displayCell, anchor, weight, filledCount, hasUnits, needsTest };
     });
   }, [clusters, myIdx, opponents, playedRounds]);
 
@@ -230,7 +234,7 @@ export default function PlayerEstimates({
               }
             }}
           >
-            {displayList.map(({ cluster, displayCell, anchor, filledCount, weight }) => {
+            {displayList.map(({ cluster, displayCell, anchor, filledCount, weight, needsTest }) => {
               const key = clusterKey(cluster);
               const isOpen = expanded === key;
               const disp = cluster.rep.list.disposition;
@@ -254,7 +258,7 @@ export default function PlayerEstimates({
                 <div
                   key={key}
                   title={cardTitle}
-                  className={`rounded-lg border ${filledCount === 0 ? "border-[rgba(168,85,247,0.25)]" : "border-white/[0.08]"}`}
+                  className={`rounded-lg border ${needsTest ? "border-[rgba(251,146,60,0.5)]" : filledCount === 0 ? "border-[rgba(168,85,247,0.25)]" : "border-white/[0.08]"}`}
                 >
                   <div className="flex items-center gap-2.5 p-2.5">
                     <div className="flex-1 min-w-0">
@@ -302,6 +306,23 @@ export default function PlayerEstimates({
                     <span className="text-[9px] text-[#8888a0] shrink-0">
                       {filledCount}/{cluster.members.length}
                     </span>
+                    <button
+                      onClick={() => {
+                        const keys = cluster.members
+                          .filter((m) => cellFor(m, myIdx) && !playedRounds.has(m.teamSlug))
+                          .map((m) => `${m.teamSlug}/${myIdx}_${m.listIdx}`);
+                        if (keys.length) onNeedsTest(keys, !needsTest);
+                      }}
+                      disabled={filledCount === 0}
+                      title={needsTest ? "Markeret: skal testes — klik for at fjerne" : "Markér estimatet som 'skal testes' (usikkert gæt)"}
+                      className={`text-[13px] leading-none shrink-0 rounded px-1 py-0.5 transition-colors disabled:opacity-25 disabled:cursor-not-allowed ${
+                        needsTest
+                          ? "text-[#fb923c] bg-[rgba(251,146,60,0.12)]"
+                          : "text-[#8888a0] hover:text-[#fb923c]"
+                      }`}
+                    >
+                      🧪
+                    </button>
                     <EstimateInput
                       cell={displayCell}
                       locked={!anchor}

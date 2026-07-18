@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { DISP_STYLES, type Disposition } from "@/lib/data";
 import { getLayoutImage } from "@/lib/layouts";
-import { vpToBP, calculateTeamBP, teamResult, projectGame } from "@/lib/scoring";
+import { vpToBP, calculateTeamBP, teamResult, projectGame, teamWinProbability } from "@/lib/scoring";
 import {
   type SessionData,
   type MatchupData,
@@ -189,6 +189,10 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
     { a: 0, b: 0 }
   );
   const projDiff = proj.a - proj.b;
+  // Win probability: treats each unfinished game as a distribution, not a point
+  // — the honest read for a dice game. Recomputed cheaply each render.
+  const winProb = teamWinProbability(session.matchups);
+  const pct = (x: number) => Math.round(x * 100);
 
   // Round clock → which game round the tables SHOULD be at right now.
   // WTC rounds are 4:30 incl. 30 min pairing — the clock tracks the 4 hours
@@ -326,6 +330,17 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
                 DRAW-bånd ({projDiff > 0 ? "+" : ""}{projDiff}) · {12 - projDiff} BP til sejr
               </span>
             )}
+          </span>
+          <span className="text-[#44445a]">·</span>
+          <span
+            className="text-[#8888a0]"
+            title="Sandsynlighed for holdsejr/uafgjort/tab — hver ikke-færdig kamp behandlet som en fordeling (σ≈5 BP), ikke ét tal. Krymper efterhånden som kampene spilles."
+          >
+            <span className="font-bold text-[#4ade80]">{pct(winProb.win)}%</span> sejr
+            <span className="text-[#44445a]"> / </span>
+            <span className="text-[#facc15]">{pct(winProb.draw)}%</span>
+            <span className="text-[#44445a]"> / </span>
+            <span className="text-[#f87171]">{pct(winProb.loss)}%</span>
           </span>
           <span className="ml-auto flex items-center gap-2 shrink-0">
             {timerStartedAt !== null ? (

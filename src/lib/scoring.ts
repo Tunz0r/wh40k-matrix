@@ -66,6 +66,67 @@ export function projectGame(m: {
   return { a, b: 20 - a };
 }
 
+// A game's actual BP is a draw from a distribution around its expected value,
+// not a fixed number — same lists, different dice/terrain/first-turn give
+// different results. GAME_BP_SIGMA is the aleatoric spread on the 0-20 scale,
+// anchored in the team's own warmup scatter (results land ~4-5 BP off the
+// estimate on average → σ ≈ 5 for an unstarted game). As a game progresses the
+// VP become known and the spread shrinks toward 0.
+const GAME_BP_SIGMA = 5;
+
+function randNormal(): number {
+  let u = 0;
+  let v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+export interface WinProbability {
+  win: number;
+  draw: number;
+  loss: number;
+}
+
+// Monte-Carlo the team result: each unfinished game is sampled from a normal
+// around its projected BP (finished games are fixed). Team A wins when its BP
+// lead reaches the win margin (12 of the 160 total across 8 games).
+export function teamWinProbability(
+  matchups: {
+    aVP?: number;
+    bVP?: number;
+    final?: boolean;
+    round?: number;
+    estimate: number;
+    tableAdj?: number;
+  }[],
+  samples = 3000
+): WinProbability {
+  const games = matchups.map((m) => {
+    const mean = projectGame(m).a;
+    const started = (m.aVP ?? 0) > 0 || (m.bVP ?? 0) > 0;
+    const w = started ? Math.min(1, (m.round ?? 1) / 5) : 0;
+    return { mean, sigma: m.final ? 0 : GAME_BP_SIGMA * (1 - w) };
+  });
+  const total = 20 * matchups.length;
+  const margin = 12;
+  let win = 0;
+  let draw = 0;
+  let loss = 0;
+  for (let s = 0; s < samples; s++) {
+    let teamA = 0;
+    for (const g of games) {
+      const a = g.sigma > 0 ? g.mean + g.sigma * randNormal() : g.mean;
+      teamA += Math.max(0, Math.min(20, Math.round(a)));
+    }
+    const diff = 2 * teamA - total;
+    if (diff >= margin) win++;
+    else if (diff <= -margin) loss++;
+    else draw++;
+  }
+  return { win: win / samples, draw: draw / samples, loss: loss / samples };
+}
+
 // 8-player teams need 12 BP differential for a win
 export function teamResult(
   teamABP: number,

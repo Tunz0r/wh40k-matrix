@@ -28,14 +28,22 @@ function tierWeight(tier: string): number {
   return m ? TIER_WEIGHT[Number(m[0])] ?? 0 : 0;
 }
 
-function Chip({ v, answer }: { v: number; answer?: boolean }) {
+function Chip({ v, answer, test }: { v: number; answer?: boolean; test?: boolean }) {
   const s = estimateStyle(v);
   return (
-    <span
-      className={`inline-flex items-center justify-center rounded border font-bold w-7 h-6 text-[11px] ${answer ? "ring-2 ring-[#a855f7]" : ""}`}
-      style={{ background: s.bg, color: s.fg, borderColor: s.border }}
-    >
-      {v}
+    <span className="relative inline-flex">
+      <span
+        className={`inline-flex items-center justify-center rounded border font-bold w-7 h-6 text-[11px] ${answer ? "ring-2 ring-[#a855f7]" : ""}`}
+        style={{ background: s.bg, color: s.fg, borderColor: s.border }}
+      >
+        {v}
+      </span>
+      {test && (
+        <span
+          className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#fb923c] border border-[#0f0f13]"
+          title="Estimatet skal testes (usikkert)"
+        />
+      )}
     </span>
   );
 }
@@ -77,6 +85,12 @@ export default function MetaPage() {
     };
   }, [opponents]);
 
+  // Does one army's estimate against this cluster carry the "needs testing" flag?
+  const cellNeedsTest = useMemo(() => {
+    return (cluster: ListCluster, idx: number): boolean =>
+      cluster.members.some((m) => opponents[m.teamSlug]?.estimates?.[`${idx}_${m.listIdx}`]?.needsTest);
+  }, [opponents]);
+
   const rows = useMemo(() => {
     return clusters.map((c) => {
       const cells = armies.map((_, i) => clusterEstimate(c, i));
@@ -96,21 +110,34 @@ export default function MetaPage() {
                 : "problem";
       const weight = c.members.reduce((s, m) => s + tierWeight(m.tier), 0);
       const countries = [...new Set(c.members.map((m) => m.teamName))];
+      // Which of our answers are still just guesses? Flag the row when EVERY
+      // positive answer is untested — that's a coverage number we can't trust.
+      const answerIdxs = cells
+        .map((v, i) => (v !== null && v >= ANSWER ? i : -1))
+        .filter((i) => i >= 0);
+      const testedAnswers = answerIdxs.filter((i) => !cellNeedsTest(c, i)).length;
+      const allAnswersUntested = answerIdxs.length > 0 && testedAnswers === 0;
       const units = c.rep.list.units?.length
         ? c.rep.list.units
         : c.members.find((m) => m.list.units?.length)?.list.units;
       const title =
         [c.rep.list.disposition, countries.join(", ")].filter(Boolean).join(" · ") +
         (units ? `\n\n${formatUnitsLines(units)}` : "");
-      return { c, cells, best, bestIdx, answerCount, category, weight, countries, title };
+      return { c, cells, best, bestIdx, answerCount, testedAnswers, allAnswersUntested, category, weight, countries, title };
     });
-  }, [clusters, armies, clusterEstimate]);
+  }, [clusters, armies, clusterEstimate, cellNeedsTest]);
 
   const counts = useMemo(() => {
     const n: Record<Category, number> = { problem: 0, even: 0, unknown: 0, single: 0, covered: 0 };
     for (const r of rows) n[r.category]++;
     return n;
   }, [rows]);
+
+  // Answered archetypes whose answers are ALL still untested guesses.
+  const untestedCovered = useMemo(
+    () => rows.filter((r) => r.answerCount > 0 && r.allAnswersUntested).length,
+    [rows]
+  );
 
   return (
     <>
@@ -127,10 +154,15 @@ export default function MetaPage() {
             <span className="text-[#8888a0] font-semibold">{counts.unknown} ukendte</span>
             <span className="text-[#fb923c] font-semibold">{counts.single} sårbare</span>
             <span className="text-[#4ade80] font-semibold">{counts.covered} dækket</span>
+            {untestedCovered > 0 && (
+              <span className="text-[#fb923c] font-semibold" title="Arketyper hvor alle vores svar stadig kun er utestede gæt">
+                🧪 {untestedCovered} utestet
+              </span>
+            )}
           </span>
         </div>
         <p className="text-[10px] text-[#8888a0] mt-1">
-          Hver arketype vs alle vores hære — hvem er vores svar, og hvor har vi huller? Målet er mindst to hære med et positivt svar (≥ {ANSWER}) mod hver arketype. Sorteret efter prioritet (seedingvægtet udbredelse). Ring om hvert svar ≥ {ANSWER}. Hover en række for listen.
+          Hver arketype vs alle vores hære — hvem er vores svar, og hvor har vi huller? Målet er mindst to hære med et positivt svar (≥ {ANSWER}) mod hver arketype. Sorteret efter prioritet (seedingvægtet udbredelse). Ring om hvert svar ≥ {ANSWER}; 🧪-prik = estimatet skal stadig testes. Hover en række for listen.
         </p>
       </header>
 
@@ -189,7 +221,7 @@ export default function MetaPage() {
                         {r.cells.map((v, i) => (
                           <td key={i} className="text-center px-0.5">
                             {v !== null ? (
-                              <Chip v={v} answer={v >= ANSWER} />
+                              <Chip v={v} answer={v >= ANSWER} test={cellNeedsTest(r.c, i)} />
                             ) : (
                               <span className="text-[10px] text-[#44445a]">·</span>
                             )}

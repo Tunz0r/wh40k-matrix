@@ -24,6 +24,7 @@ import {
   saveListNote,
   restoreOpponents,
   writeEstimateCells,
+  setNeedsTestCells,
   listSimilarity,
   clusterLists,
   appendListToMetaTeam,
@@ -587,6 +588,7 @@ export default function EstimatesPage() {
             playedRounds={playedRounds}
             profiles={fbDoc?.profiles}
             onSet={setEstimate}
+            onNeedsTest={(keys, flag) => setNeedsTestCells(keys, flag).catch(() => {})}
           />
         )}
 

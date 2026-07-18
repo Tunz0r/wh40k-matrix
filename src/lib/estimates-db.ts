@@ -5,9 +5,12 @@ import type { RosterArmy } from "./roster";
 
 // One estimate cell: our army (row) vs an opponent list (column).
 // `auto` marks values propagated via list similarity — overridable, shown dimmed.
+// `needsTest` flags the estimate as a guess we still want to playtest — an
+// explicit low-confidence marker. Changing the value clears it (fresh judgment).
 export interface EstimateCell {
   v: number; // 0-20 WTC scale
   auto?: boolean;
+  needsTest?: boolean;
 }
 
 // An opponent list: faction/detachments/disposition metadata, optionally with
@@ -117,6 +120,22 @@ export async function writeEstimateCells(
   for (const [key, value] of Object.entries(cells)) {
     const [teamSlug, cellKey] = key.split("/");
     updates[`${BASE}/${teamSlug}/estimates/${cellKey}`] = value;
+  }
+  await update(ref(getDb()), updates);
+}
+
+// Toggle the "needs testing" flag on existing estimate cells without touching
+// their value/auto. Keys are `${teamSlug}/${ourIdx}_${theirIdx}`. Only writes
+// the subfield, so cells that don't exist are left alone (nothing to flag).
+export async function setNeedsTestCells(
+  keys: string[],
+  flag: boolean
+): Promise<void> {
+  await authReady();
+  const updates: Record<string, true | null> = {};
+  for (const key of keys) {
+    const [teamSlug, cellKey] = key.split("/");
+    updates[`${BASE}/${teamSlug}/estimates/${cellKey}/needsTest`] = flag ? true : null;
   }
   await update(ref(getDb()), updates);
 }
