@@ -25,8 +25,11 @@ import {
   restoreOpponents,
   writeEstimateCells,
   listSimilarity,
+  clusterLists,
+  appendListToMetaTeam,
   SIMILARITY_THRESHOLD,
   estimateStyle,
+  type ListCluster,
 } from "@/lib/estimates-db";
 
 const OTHER_TIER = "Andre hold";
@@ -99,6 +102,8 @@ export default function EstimatesPage() {
   const [unitsShown, setUnitsShown] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<{ key: string; text: string } | null>(null);
   const [mode, setMode] = useState<"country" | "player">("country");
+  const [archOpen, setArchOpen] = useState(false);
+  const [archText, setArchText] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem("wtc-est-mode");
@@ -380,6 +385,53 @@ export default function EstimatesPage() {
     setPasteText("");
   }
 
+  // Add a single list to the archetype library (the Warmup Arketyper meta
+  // team). Warns when the list already matches an existing archetype.
+  async function addArchetype() {
+    const parsed = parseTeamLists(archText.trim())[0];
+    if (!parsed || !parsed.units.length) {
+      alert("Kunne ikke læse listen — indsæt et komplet liste-export (GW-app, WTC eller NewRecruit).");
+      return;
+    }
+    if (!parsed.faction || !parsed.detachments.length) {
+      alert("Faction/detachment kunne ikke læses fra listen — tjek at listen har faction- og detachment-linjer.");
+      return;
+    }
+    const disposition =
+      parsed.disposition ?? dispositionForDet(parsed.faction, parsed.detachments[0] ?? null);
+    const list: OpponentList = {
+      faction: parsed.faction,
+      detachments: parsed.detachments,
+      disposition,
+      units: parsed.units,
+    };
+    const label = `${parsed.faction} — ${parsed.detachments.join(", ")}`;
+    let best: { c: ListCluster; sim: number } | null = null;
+    for (const c of clusterLists(opponents)) {
+      const sim = listSimilarity(list, c.rep.list);
+      if (sim >= SIMILARITY_THRESHOLD && (!best || sim > best.sim)) best = { c, sim };
+    }
+    if (best) {
+      const b = best as { c: ListCluster; sim: number };
+      if (
+        !confirm(
+          `Listen matcher en eksisterende arketype: ${b.c.rep.list.faction} — ${(b.c.rep.list.detachments || []).join(", ")} (${Math.round(b.sim)}% lighed, ${b.c.members.length} ${b.c.members.length === 1 ? "liste" : "lister"}).\n\nTilføj den alligevel som endnu en liste i biblioteket?`
+        )
+      )
+        return;
+    } else if (!confirm(`Opret ny arketype "${label}" i biblioteket?`)) {
+      return;
+    }
+    try {
+      await appendListToMetaTeam(list);
+      alert(`"${label}" er tilføjet til arketype-biblioteket.`);
+      setArchText("");
+      setArchOpen(false);
+    } catch {
+      alert("Kunne ikke gemme — tjek Firebase.");
+    }
+  }
+
   function removeTeam(slug: string, name: string) {
     if (!confirm(`Slet ${name} og alle estimater?`)) return;
     deleteOpponentTeam(slug).catch(() => {});
@@ -422,6 +474,17 @@ export default function EstimatesPage() {
           <Link href="/sanity" className="text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors">
             Sanity-tjek →
           </Link>
+          <button
+            onClick={() => setArchOpen(!archOpen)}
+            title="Tilføj en liste til arketype-biblioteket"
+            className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
+              archOpen
+                ? "border-[#a855f7]/60 text-[#c084fc] bg-[rgba(168,85,247,0.1)]"
+                : "border-white/[0.1] text-[#8888a0] hover:text-[#c084fc] hover:border-[#a855f7]/40"
+            }`}
+          >
+            + Arketype
+          </button>
           <div className="flex items-center gap-1 w-full sm:w-auto">
             <button
               onClick={exportBackup}
@@ -476,6 +539,38 @@ export default function EstimatesPage() {
       </header>
 
       <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+        {archOpen && (
+          <div className="rounded-xl border border-[rgba(168,85,247,0.35)] p-4 space-y-2">
+            <h2 className="text-xs font-semibold text-[#a855f7] uppercase tracking-wider">
+              Tilføj arketype til biblioteket
+            </h2>
+            <p className="text-[10px] text-[#8888a0]">
+              Indsæt ét liste-export — arketypen gemmes permanent i meta-biblioteket (&quot;Warmup Arketyper&quot;), så hele holdet kan estimere mod den. Matcher listen en eksisterende arketype, får du besked først.
+            </p>
+            <textarea
+              value={archText}
+              onChange={(e) => setArchText(e.target.value)}
+              placeholder="Indsæt hele liste-exporten her (GW-app, WTC eller NewRecruit format)..."
+              className="w-full h-28 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-2.5 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={addArchetype}
+                disabled={!archText.trim()}
+                className="text-[11px] font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md transition-colors"
+              >
+                Gem arketype
+              </button>
+              <button
+                onClick={() => { setArchOpen(false); setArchText(""); }}
+                className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0] px-3 py-1.5 transition-colors"
+              >
+                Annullér
+              </button>
+            </div>
+          </div>
+        )}
+
         {ourArmies.length === 0 && (
           <div className="rounded-xl border border-dashed border-[rgba(239,68,68,0.3)] p-4 text-[11px] text-[#f87171]">
             Intet roster fundet — gå til <Link href="/tournament" className="underline">turneringen</Link> og opdater roster først.
