@@ -108,15 +108,31 @@ function matchOneDetachment(faction: string | null, name: string): string | null
   return null;
 }
 
+// Strip leading enumeration from header lines: "2. Hearthguard..." → "Hearthguard..."
+function stripNum(s: string): string {
+  return s.replace(/^\d+\s*[.)]\s*/, "");
+}
+
 // Dual-detachment aware: "Cabal of Chaos, Soulforged Warpack (Empyric
 // Wellspring)" → ["Cabal of Chaos", "Soulforged Warpack"]. The parenthetical
-// is the keystone/upgrade suite, not a detachment name.
+// is the keystone/upgrade suite or DP cost, not a detachment name. Pairs are
+// joined by "," or "and"/"og" — but "and" only splits when the whole name
+// doesn't match (names like "Legends of Saga and Song" stay intact).
 function matchDetachments(faction: string | null, raw: string): string[] {
-  const cleaned = raw.replace(/^.*:/, "").replace(/\([^)]*\)/g, "").trim();
+  const cleaned = stripNum(raw.replace(/^.*:/, "").replace(/\([^)]*\)/g, "").trim());
   const result: string[] = [];
+  const add = (name: string | null) => {
+    if (name && !result.includes(name)) result.push(name);
+  };
   for (const part of cleaned.split(",").map((s) => s.trim()).filter(Boolean)) {
     const hit = matchOneDetachment(faction, part);
-    if (hit && !result.includes(hit)) result.push(hit);
+    if (hit) {
+      add(hit);
+      continue;
+    }
+    for (const sub of part.split(/\s+(?:and|og|&)\s+/i).map((s) => s.trim()).filter(Boolean)) {
+      add(matchOneDetachment(faction, sub));
+    }
   }
   return result;
 }
@@ -153,6 +169,14 @@ function detectMeta(chunk: string): {
     for (const line of lines.slice(0, 15)) {
       const d = matchDetachments(faction, line);
       if (d.length) { detachments = d; break; }
+    }
+  }
+  // Bare disposition line near the top ("3. Priority Assets")
+  if (!disposition) {
+    for (const line of lines.slice(0, 15)) {
+      const c = stripNum(line.replace(/^.*:/, "").trim());
+      const hit = DISPOSITION_NAMES.find((d) => d.toLowerCase() === c.toLowerCase());
+      if (hit) { disposition = hit; break; }
     }
   }
   return { faction, detachments, disposition };
