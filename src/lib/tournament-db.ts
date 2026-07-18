@@ -24,6 +24,9 @@ export interface WarmupGame {
   faction: string;
   detachments: string[];
   disposition: string | null;
+  // The player's OWN archetype at log time (their profile snapshot) — a game
+  // is "my archetype vs theirs", and the player may switch archetype later.
+  own?: { faction: string; detachments: string[]; disposition: string | null } | null;
   estimate: number | null; // our estimate at log time (0-20 BP scale)
   actual: number; // actual result in BP (0-20)
   notes?: string;

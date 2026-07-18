@@ -97,8 +97,22 @@ function GameRowView({ g, delta, showPlayer, playerLabel }: {
             {playerLabel}
           </span>
         )}
-        <span className="text-[11px] text-[#e8e8f0] flex-1 min-w-0 truncate">
-          vs {g.faction}
+        <span
+          className="text-[11px] flex-1 min-w-0 truncate"
+          title={
+            g.own
+              ? `${g.own.faction} — ${(g.own.detachments || []).join(", ")}\nvs\n${g.faction} — ${(g.detachments || []).join(", ")}`
+              : undefined
+          }
+        >
+          {g.own && (
+            <span className="text-[#8888a0]">
+              {g.own.faction}
+              {g.own.detachments?.length ? ` (${g.own.detachments.join(", ")})` : ""}{" "}
+            </span>
+          )}
+          <span className="text-[#8888a0] font-semibold">vs</span>{" "}
+          <span className="text-[#e8e8f0]">{g.faction}</span>
           <span className="text-[#8888a0]"> · {(g.detachments || []).join(", ")}</span>
         </span>
         {g.currentEstimate !== null ? (

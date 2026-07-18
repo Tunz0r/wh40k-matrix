@@ -408,6 +408,13 @@ export default function PlayerPage() {
       faction: wuSelected.rep.list.faction,
       detachments: wuSelected.rep.list.detachments || [],
       disposition: wuSelected.rep.list.disposition ?? null,
+      own: myProfile
+        ? {
+            faction: myProfile.faction,
+            detachments: myProfile.detachments || [],
+            disposition: myProfile.disposition ?? null,
+          }
+        : null,
       estimate: wuEstimate,
       actual,
       ...(wuNotes.trim() ? { notes: wuNotes.trim() } : {}),
@@ -728,8 +735,22 @@ export default function PlayerPage() {
                       <div key={g.id} className="rounded-lg border border-white/[0.05] px-2.5 py-1.5">
                         <div className="flex items-center gap-2">
                           <span className="text-[9px] text-[#8888a0] shrink-0 w-16">{g.date.slice(5)}</span>
-                          <span className="text-[11px] text-[#e8e8f0] flex-1 min-w-0 truncate">
-                            vs {g.faction}
+                          <span
+                            className="text-[11px] flex-1 min-w-0 truncate"
+                            title={
+                              g.own
+                                ? `${g.own.faction} — ${(g.own.detachments || []).join(", ")}\nvs\n${g.faction} — ${(g.detachments || []).join(", ")}`
+                                : undefined
+                            }
+                          >
+                            {g.own && (
+                              <span className="text-[#8888a0]">
+                                {g.own.faction}
+                                {g.own.detachments?.length ? ` (${g.own.detachments.join(", ")})` : ""}{" "}
+                              </span>
+                            )}
+                            <span className="text-[#8888a0] font-semibold">vs</span>{" "}
+                            <span className="text-[#e8e8f0]">{g.faction}</span>
                             <span className="text-[#8888a0]"> · {(g.detachments || []).join(", ")}</span>
                           </span>
                           {g.currentEstimate !== null ? (
