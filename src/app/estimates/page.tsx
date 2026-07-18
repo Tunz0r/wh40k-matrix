@@ -471,6 +471,9 @@ export default function EstimatesPage() {
           <span className="text-[11px] text-[#8888a0] hidden sm:inline">
             {totals.teams} hold · {totals.manual} manuelle · {totals.auto} auto
           </span>
+          <Link href="/meta" className="text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors">
+            Meta-overblik →
+          </Link>
           <Link href="/sanity" className="text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors">
             Sanity-tjek →
           </Link>
