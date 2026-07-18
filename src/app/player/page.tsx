@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
-import { DISP_STYLES } from "@/lib/data";
+import { DISP_STYLES, FACTIONS } from "@/lib/data";
 import {
   subscribeToTournament,
   addWarmupGame,
@@ -25,6 +25,7 @@ import {
   fetchArchetypeBank,
   snapshotSlotCells,
   switchSlotArchetype,
+  appendListToMetaTeam,
   SIMILARITY_THRESHOLD,
   type OpponentMap,
   type ListCluster,
@@ -243,14 +244,8 @@ export default function PlayerPage() {
 
   // Set or switch the archetype: park the old row in the bank, attribute or
   // inherit for the new one (see switchSlotArchetype), then save the profile.
-  async function saveProfileFromCluster(cluster: ListCluster, ownUnits?: string[]) {
+  async function commitProfile(profile: PlayerProfile) {
     if (myIdx === null || profBusy) return;
-    const profile: PlayerProfile = {
-      faction: cluster.rep.list.faction,
-      detachments: cluster.rep.list.detachments || [],
-      disposition: cluster.rep.list.disposition ?? null,
-      ...(ownUnits?.length ? { units: ownUnits } : {}),
-    };
     const newDesc = profileDescriptor(profile);
     const oldDesc = myProfile ? profileDescriptor(myProfile) : null;
     const label = `${newDesc.faction} — ${newDesc.detachments.join(", ")}`;
@@ -300,6 +295,15 @@ export default function PlayerPage() {
     }
   }
 
+  function saveProfileFromCluster(cluster: ListCluster, ownUnits?: string[]) {
+    commitProfile({
+      faction: cluster.rep.list.faction,
+      detachments: cluster.rep.list.detachments || [],
+      disposition: cluster.rep.list.disposition ?? null,
+      ...(ownUnits?.length ? { units: ownUnits } : {}),
+    });
+  }
+
   // Clearing parks the row in the archetype's bank and empties it — a slot
   // without an archetype should not carry estimates.
   async function clearProfile() {
@@ -322,8 +326,10 @@ export default function PlayerPage() {
     }
   }
 
-  // Paste own list → parse → must land on a field archetype (≥ threshold).
-  function matchProfilePaste() {
+  // Paste own list → parse → match to a field archetype (≥ threshold), or
+  // — when nothing matches — CREATE the archetype from the list (appended to
+  // the Warmup Arketyper meta team) and pick it.
+  async function matchProfilePaste() {
     const parsed = parseTeamLists(profPaste.trim())[0];
     if (!parsed || !parsed.units.length) {
       alert("Kunne ikke læse listen — indsæt et komplet liste-export (GW-app, WTC eller NewRecruit).");
@@ -340,13 +346,46 @@ export default function PlayerPage() {
       const sim = listSimilarity(asList, c.rep.list);
       if (sim >= SIMILARITY_THRESHOLD && (!best || sim > best.sim)) best = { c, sim };
     }
-    if (!best) {
+    if (best) {
+      saveProfileFromCluster((best as { c: ListCluster }).c, parsed.units);
+      return;
+    }
+
+    // No match — create the archetype, but only with resolved metadata.
+    if (!parsed.faction || !parsed.detachments.length) {
       alert(
-        `Ingen arketype i feltet matcher listen (≥${SIMILARITY_THRESHOLD}% lighed) — vælg den nærmeste arketype manuelt i stedet.`
+        "Ingen arketype matcher listen, og faction/detachment kunne ikke læses fra den — så kan arketypen ikke oprettes. Tjek at listen har faction- og detachment-linjer, eller vælg en arketype manuelt."
       );
       return;
     }
-    saveProfileFromCluster((best as { c: ListCluster }).c, parsed.units);
+    const disposition =
+      parsed.disposition ??
+      FACTIONS[parsed.faction]?.find((d) => d.n === parsed.detachments[0])?.d ??
+      null;
+    const label = `${parsed.faction} — ${parsed.detachments.join(", ")}`;
+    if (
+      !confirm(
+        `Ingen arketype i feltet matcher din liste (≥${SIMILARITY_THRESHOLD}% lighed).\n\nOpret "${label}" som ny arketype i biblioteket og vælg den?`
+      )
+    )
+      return;
+    try {
+      await appendListToMetaTeam({
+        faction: parsed.faction,
+        detachments: parsed.detachments,
+        disposition,
+        units: parsed.units,
+      });
+    } catch {
+      alert("Kunne ikke oprette arketypen — tjek Firebase.");
+      return;
+    }
+    await commitProfile({
+      faction: parsed.faction,
+      detachments: parsed.detachments,
+      disposition,
+      units: parsed.units,
+    });
   }
 
   const [wuCluster, setWuCluster] = useState<string>("");
@@ -545,7 +584,7 @@ export default function PlayerPage() {
                       <textarea
                         value={profPaste}
                         onChange={(e) => setProfPaste(e.target.value)}
-                        placeholder="Indsæt hele dit liste-export her (GW-app, WTC eller NewRecruit) — vi matcher den til en arketype i feltet..."
+                        placeholder="Indsæt hele dit liste-export her (GW-app, WTC eller NewRecruit) — vi matcher den til en arketype i feltet, eller opretter den som ny arketype hvis intet matcher..."
                         className="w-full h-24 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-2 text-[10px] text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
                       />
                       <button

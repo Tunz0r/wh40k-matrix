@@ -235,6 +235,26 @@ export async function switchSlotArchetype(
   return { parked: Object.keys(snapshot).length, inherited };
 }
 
+// The permanent home for archetypes created ad hoc (e.g. a player's own list
+// that matches nothing in the field): appended to the "Warmup Arketyper"
+// meta-reference team, so manual estimates anchor there and survive country
+// rebuilds. Appending never shifts existing list indices.
+const WARMUP_TEAM_SLUG = "warmup-arketyper";
+
+export async function appendListToMetaTeam(list: OpponentList): Promise<number> {
+  await authReady();
+  const teamRef = ref(getDb(), `${BASE}/${WARMUP_TEAM_SLUG}`);
+  const snap = await get(teamRef);
+  const team = snap.val() as OpponentTeam | null;
+  if (!team) {
+    await set(teamRef, { name: "Warmup Arketyper", tier: "Meta (Warmup)", armies: [list] });
+    return 0;
+  }
+  const idx = (team.armies || []).length;
+  await set(ref(getDb(), `${BASE}/${WARMUP_TEAM_SLUG}/armies/${idx}`), list);
+  return idx;
+}
+
 // --- List similarity ---
 // Two modes, both gated on same faction:
 //
