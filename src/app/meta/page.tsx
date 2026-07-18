@@ -28,11 +28,11 @@ function tierWeight(tier: string): number {
   return m ? TIER_WEIGHT[Number(m[0])] ?? 0 : 0;
 }
 
-function Chip({ v, best }: { v: number; best?: boolean }) {
+function Chip({ v, answer }: { v: number; answer?: boolean }) {
   const s = estimateStyle(v);
   return (
     <span
-      className={`inline-flex items-center justify-center rounded border font-bold w-7 h-6 text-[11px] ${best ? "ring-2 ring-[#a855f7]" : ""}`}
+      className={`inline-flex items-center justify-center rounded border font-bold w-7 h-6 text-[11px] ${answer ? "ring-2 ring-[#a855f7]" : ""}`}
       style={{ background: s.bg, color: s.fg, borderColor: s.border }}
     >
       {v}
@@ -40,13 +40,14 @@ function Chip({ v, best }: { v: number; best?: boolean }) {
   );
 }
 
-type Category = "problem" | "even" | "unknown" | "answer";
+type Category = "problem" | "even" | "unknown" | "single" | "covered";
 
 const SECTIONS: { cat: Category; title: string; desc: string; color: string; border: string }[] = [
   { cat: "problem", title: "Problemer — intet svar", desc: `Bedste estimat ≤ ${PROBLEM}: ingen af vores hære slår arketypen`, color: "#f87171", border: "rgba(239,68,68,0.3)" },
   { cat: "even", title: "Kun lige kampe", desc: `Bedste estimat 9–11: vi kan holde stand, men ingen vinder på den`, color: "#facc15", border: "rgba(250,204,21,0.3)" },
   { cat: "unknown", title: "Ukendte — ingen estimater", desc: "Ingen af vores hære har estimeret mod arketypen endnu", color: "#8888a0", border: "rgba(255,255,255,0.12)" },
-  { cat: "answer", title: "Har svar", desc: `Mindst én hær estimerer ≥ ${ANSWER} mod arketypen`, color: "#4ade80", border: "rgba(34,197,94,0.3)" },
+  { cat: "single", title: "Kun ét svar — sårbart", desc: `Præcis én hær estimerer ≥ ${ANSWER}: bliver den hær pairet væk, står vi uden svar. Målet er mindst to.`, color: "#fb923c", border: "rgba(251,146,60,0.3)" },
+  { cat: "covered", title: "Dækket — mindst to svar", desc: `To eller flere hære estimerer ≥ ${ANSWER} mod arketypen`, color: "#4ade80", border: "rgba(34,197,94,0.3)" },
 ];
 
 export default function MetaPage() {
@@ -82,8 +83,17 @@ export default function MetaPage() {
       const known = cells.filter((v): v is number => v !== null);
       const best = known.length ? Math.max(...known) : null;
       const bestIdx = best !== null ? cells.indexOf(best) : -1;
+      const answerCount = cells.filter((v): v is number => v !== null && v >= ANSWER).length;
       const category: Category =
-        best === null ? "unknown" : best >= ANSWER ? "answer" : best > PROBLEM ? "even" : "problem";
+        best === null
+          ? "unknown"
+          : answerCount >= 2
+            ? "covered"
+            : answerCount === 1
+              ? "single"
+              : best > PROBLEM
+                ? "even"
+                : "problem";
       const weight = c.members.reduce((s, m) => s + tierWeight(m.tier), 0);
       const countries = [...new Set(c.members.map((m) => m.teamName))];
       const units = c.rep.list.units?.length
@@ -92,12 +102,12 @@ export default function MetaPage() {
       const title =
         [c.rep.list.disposition, countries.join(", ")].filter(Boolean).join(" · ") +
         (units ? `\n\n${formatUnitsLines(units)}` : "");
-      return { c, cells, best, bestIdx, category, weight, countries, title };
+      return { c, cells, best, bestIdx, answerCount, category, weight, countries, title };
     });
   }, [clusters, armies, clusterEstimate]);
 
   const counts = useMemo(() => {
-    const n: Record<Category, number> = { problem: 0, even: 0, unknown: 0, answer: 0 };
+    const n: Record<Category, number> = { problem: 0, even: 0, unknown: 0, single: 0, covered: 0 };
     for (const r of rows) n[r.category]++;
     return n;
   }, [rows]);
@@ -115,11 +125,12 @@ export default function MetaPage() {
             <span className="text-[#f87171] font-semibold">{counts.problem} problemer</span>
             <span className="text-[#facc15] font-semibold">{counts.even} lige</span>
             <span className="text-[#8888a0] font-semibold">{counts.unknown} ukendte</span>
-            <span className="text-[#4ade80] font-semibold">{counts.answer} med svar</span>
+            <span className="text-[#fb923c] font-semibold">{counts.single} sårbare</span>
+            <span className="text-[#4ade80] font-semibold">{counts.covered} dækket</span>
           </span>
         </div>
         <p className="text-[10px] text-[#8888a0] mt-1">
-          Hver arketype vs alle vores hære — hvem er vores svar, og hvor har vi huller? Sorteret efter prioritet (seedingvægtet udbredelse). Ring om bedste svar. Hover en række for listen.
+          Hver arketype vs alle vores hære — hvem er vores svar, og hvor har vi huller? Målet er mindst to hære med et positivt svar (≥ {ANSWER}) mod hver arketype. Sorteret efter prioritet (seedingvægtet udbredelse). Ring om hvert svar ≥ {ANSWER}. Hover en række for listen.
         </p>
       </header>
 
@@ -157,7 +168,7 @@ export default function MetaPage() {
                           {(a.player || a.faction).slice(0, 5)}
                         </th>
                       ))}
-                      <th className="text-[9px] text-[#8888a0] font-semibold px-1 whitespace-nowrap">Bedst</th>
+                      <th className="text-[9px] text-[#8888a0] font-semibold px-1 whitespace-nowrap">Svar</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -178,22 +189,29 @@ export default function MetaPage() {
                         {r.cells.map((v, i) => (
                           <td key={i} className="text-center px-0.5">
                             {v !== null ? (
-                              <Chip v={v} best={i === r.bestIdx && r.category !== "unknown"} />
+                              <Chip v={v} answer={v >= ANSWER} />
                             ) : (
                               <span className="text-[10px] text-[#44445a]">·</span>
                             )}
                           </td>
                         ))}
-                        <td className="text-center px-1">
-                          {r.best !== null ? (
-                            <span className="text-[11px] font-bold" style={{ color }}>
-                              {r.best}
+                        <td className="text-center px-1 whitespace-nowrap">
+                          {r.best === null ? (
+                            <span className="text-[10px] text-[#44445a]">—</span>
+                          ) : r.answerCount > 0 ? (
+                            <span className="text-[11px] font-bold" style={{ color }} title={`${r.answerCount} hær(e) estimerer ≥ ${ANSWER}; bedste er ${r.best}`}>
+                              {r.answerCount}×
                               <span className="text-[9px] text-[#8888a0] font-normal ml-1">
                                 {r.bestIdx >= 0 ? (armies[r.bestIdx].player || armies[r.bestIdx].faction).slice(0, 8) : ""}
                               </span>
                             </span>
                           ) : (
-                            <span className="text-[10px] text-[#44445a]">—</span>
+                            <span className="text-[11px] font-bold" style={{ color }} title={`Intet svar ≥ ${ANSWER}; bedste er ${r.best}`}>
+                              {r.best}
+                              <span className="text-[9px] text-[#8888a0] font-normal ml-1">
+                                {r.bestIdx >= 0 ? (armies[r.bestIdx].player || armies[r.bestIdx].faction).slice(0, 8) : ""}
+                              </span>
+                            </span>
                           )}
                         </td>
                       </tr>
