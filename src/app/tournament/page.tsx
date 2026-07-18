@@ -139,6 +139,7 @@ function ArmyCard({
   onClick,
   label,
   highlight,
+  units,
 }: {
   army: RosterArmy;
   index: number;
@@ -148,12 +149,20 @@ function ArmyCard({
   onClick?: () => void;
   label?: string;
   highlight?: boolean;
+  units?: string[];
 }) {
   const s = army.disposition ? DISP_STYLES[army.disposition] : null;
+  // Hover shows our own list content when the player has pasted it (via their
+  // profile on Min side); falls back to the faction/detachment summary.
+  const head = [army.faction, (army.detachments || []).join(", "), army.disposition]
+    .filter(Boolean)
+    .join(" · ");
+  const title = units?.length ? `${head}\n\n${formatUnitsLines(units)}` : head;
   return (
     <button
       onClick={onClick}
       disabled={disabled || paired}
+      title={title}
       className={`w-full text-left rounded-lg border transition-colors p-2.5 ${
         paired
           ? "border-white/[0.04] opacity-30 cursor-default"
@@ -1131,8 +1140,15 @@ export default function TournamentPage() {
               </div>
               {tournament.roster ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {readiness.map((r, i) => (
-                    <div key={i} className="flex items-center gap-2 rounded-lg border border-white/[0.06] px-2.5 py-1.5">
+                  {readiness.map((r, i) => {
+                    const units = fbDoc?.profiles?.[`a${i}`]?.units;
+                    const head = [r.faction, (tournament.roster?.armies[i]?.detachments || []).join(", ")].filter(Boolean).join(" · ");
+                    return (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 rounded-lg border border-white/[0.06] px-2.5 py-1.5"
+                      title={units?.length ? `${head}\n\n${formatUnitsLines(units)}` : head}
+                    >
                       <span className="text-[11px] text-[#8888a0] w-4">{i + 1}.</span>
                       <span className="text-[12px] text-[#e8e8f0] font-medium truncate flex-1">
                         {r.player ? `${r.player} — ` : <span className="text-[#facc15]">Ingen spiller · </span>}
@@ -1143,7 +1159,8 @@ export default function TournamentPage() {
                       </div>
                       <span className={`text-[10px] font-bold w-8 text-right ${r.pct >= 100 ? "text-[#4ade80]" : "text-[#8888a0]"}`}>{r.pct}%</span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-[11px] text-[#8888a0]">Intet roster endnu.</p>
@@ -1202,7 +1219,7 @@ export default function TournamentPage() {
                     ) : (
                       <div key={i} className="flex items-stretch gap-1.5">
                         <div className="flex-1 min-w-0">
-                          <ArmyCard army={army} index={i} highlight />
+                          <ArmyCard army={army} index={i} highlight units={fbDoc?.profiles?.[`a${i}`]?.units} />
                         </div>
                         <button
                           onClick={() => setEditingArmyIdx(i)}

@@ -293,6 +293,50 @@ function unitOverlap(a: string[], b: string[]): number {
   return (2 * inter) / (a.length + b.length);
 }
 
+// --- Faction-specific key units ---
+// Some factions are defined by a small backbone of units: lists with matching
+// counts of them play alike even if the support differs, and lists that differ
+// in those counts play differently even if the support matches. Each key unit
+// (a) collapses to a shared category token so different names in the same
+// category are interchangeable (all C'tan → "§ctan"), and (b) is weighted
+// heavily in the overlap so its COUNT dominates; a per-category count mismatch
+// then subtracts an explicit penalty. Extend as more faction rules are found.
+interface KeyCategory { token: string; re: RegExp; }
+const FACTION_KEY_UNITS: Record<string, KeyCategory[]> = {
+  "T'au Empire": [
+    { token: "§riptide", re: /riptide/i },
+    { token: "§stormsurge", re: /stormsurge/i },
+    { token: "§broadside", re: /broadside/i },
+  ],
+  // All five C'tan datasheets read as one category — count is what matters.
+  Necrons: [
+    { token: "§ctan", re: /c['’]?tan|nightbringer|deceiver|void dragon|silent king|szarekh/i },
+  ],
+  "Chaos Space Marines": [{ token: "§defiler", re: /defiler/i }],
+  "Emperor's Children": [{ token: "§defiler", re: /defiler/i }],
+  "Thousand Sons": [{ token: "§defiler", re: /defiler/i }],
+};
+const KEY_UNIT_WEIGHT = 6; // a key unit counts as this many copies in the overlap
+const KEY_MISMATCH_PENALTY = 7; // points lost per key-unit count difference
+
+function expandForKeys(
+  cats: KeyCategory[],
+  units: string[]
+): { tokens: string[]; counts: Map<string, number> } {
+  const tokens: string[] = [];
+  const counts = new Map<string, number>();
+  for (const u of units) {
+    const cat = cats.find((c) => c.re.test(u));
+    if (cat) {
+      counts.set(cat.token, (counts.get(cat.token) || 0) + 1);
+      for (let k = 0; k < KEY_UNIT_WEIGHT; k++) tokens.push(cat.token);
+    } else {
+      tokens.push(u);
+    }
+  }
+  return { tokens, counts };
+}
+
 export function listSimilarity(a: OpponentList, b: OpponentList): number {
   if (a.faction !== b.faction) return 0;
 
@@ -306,6 +350,22 @@ export function listSimilarity(a: OpponentList, b: OpponentList): number {
   const aUnits = a.units || [];
   const bUnits = b.units || [];
   if (aUnits.length > 0 && bUnits.length > 0) {
+    const cats = FACTION_KEY_UNITS[a.faction];
+    if (cats) {
+      const ea = expandForKeys(cats, aUnits);
+      const eb = expandForKeys(cats, bUnits);
+      let mismatch = 0;
+      for (const c of cats) {
+        mismatch += Math.abs((ea.counts.get(c.token) || 0) - (eb.counts.get(c.token) || 0));
+      }
+      const raw =
+        30 +
+        50 * unitOverlap(ea.tokens, eb.tokens) +
+        15 * detScore +
+        (sameDisp ? 5 : 0) -
+        KEY_MISMATCH_PENALTY * mismatch;
+      return Math.max(0, raw);
+    }
     return 30 + 50 * unitOverlap(aUnits, bUnits) + 15 * detScore + (sameDisp ? 5 : 0);
   }
   return 40 + 40 * detScore + (sameDisp ? 20 : 0);

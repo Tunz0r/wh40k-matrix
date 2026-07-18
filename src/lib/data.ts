@@ -39,8 +39,8 @@ export const DISP_STYLES: Record<
 > = {
   "Take and Hold": {
     cls: "take",
-    color: "rgb(59,130,246)",
-    bg: "rgba(59,130,246,0.12)",
+    color: "rgb(34,197,94)",
+    bg: "rgba(34,197,94,0.12)",
   },
   "Purge the Foe": {
     cls: "purge",
@@ -54,8 +54,8 @@ export const DISP_STYLES: Record<
   },
   Reconnaissance: {
     cls: "recon",
-    color: "rgb(34,197,94)",
-    bg: "rgba(34,197,94,0.12)",
+    color: "rgb(59,130,246)",
+    bg: "rgba(59,130,246,0.12)",
   },
   Disruption: {
     cls: "dis",
@@ -67,8 +67,8 @@ export const DISP_STYLES: Record<
 export const MISSIONS: Record<Disposition, DispositionInfo> = {
   "Take and Hold": {
     desc: "Hold the most objective markers across the battlefield.",
-    color: "rgb(59,130,246)",
-    bg: "rgba(59,130,246,0.12)",
+    color: "rgb(34,197,94)",
+    bg: "rgba(34,197,94,0.12)",
     vs: {
       "Take and Hold": {
         name: "Battlefield Dominance",
@@ -148,8 +148,8 @@ export const MISSIONS: Record<Disposition, DispositionInfo> = {
   },
   Reconnaissance: {
     desc: "Move into and scan different areas of the battlefield.",
-    color: "rgb(34,197,94)",
-    bg: "rgba(34,197,94,0.12)",
+    color: "rgb(59,130,246)",
+    bg: "rgba(59,130,246,0.12)",
     vs: {
       "Take and Hold": {
         name: "Reconnaissance Sweep",
