@@ -72,30 +72,47 @@ export interface ParsedList {
 const FACTION_NAMES = Object.keys(FACTIONS);
 const DISPOSITION_NAMES = Object.keys(DISP_STYLES) as Disposition[];
 
+// Exports differ from our data in punctuation and accent encoding — curly vs
+// straight apostrophes, and composed vs decomposed accents ("Needgaârd").
+// Compare names on a form that ignores both.
+function normName(s: string): string {
+  return s
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[’‘`´]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 // "Chaos - World Eaters", "Xenos - Aeldari", "Adepta Sororitas" → our faction key
 function matchFaction(raw: string): string | null {
   const cleaned = raw.replace(/^.*:/, "").trim();
   // Exact match on the part after a leading "Grand Alliance - " prefix, or whole
   const candidates = [cleaned, cleaned.split(/\s[-–]\s/).pop()?.trim() || cleaned];
   for (const c of candidates) {
-    const hit = FACTION_NAMES.find((f) => f.toLowerCase() === c.toLowerCase());
+    const hit = FACTION_NAMES.find((f) => normName(f) === normName(c));
     if (hit) return hit;
   }
-  // Substring fallback (longest faction name first to avoid "Chaos" clashes)
-  const byLen = [...FACTION_NAMES].sort((a, b) => b.length - a.length);
-  const sub = byLen.find((f) => cleaned.toLowerCase().includes(f.toLowerCase()));
-  if (sub) return sub;
+  // Substring fallback. "Space Marines Black Templars" names the codex first and
+  // the chapter second, so prefer the LATEST match (most specific), then the
+  // longest — that also keeps "Chaos" from swallowing "Chaos Space Marines".
+  const n = normName(cleaned);
+  const hits = FACTION_NAMES.map((f) => ({ f, at: n.indexOf(normName(f)) }))
+    .filter((h) => h.at >= 0)
+    .sort((a, b) => b.at - a.at || b.f.length - a.f.length);
+  if (hits.length) return hits[0].f;
   // Chapters without their own faction entry ("Imperium - Adeptus Astartes -
   // Ultramarines") play the shared Space Marines codex.
   if (/adeptus\s+astartes/i.test(cleaned)) {
-    return FACTION_NAMES.find((f) => f.toLowerCase() === "space marines") || null;
+    return FACTION_NAMES.find((f) => normName(f) === "space marines") || null;
   }
   return null;
 }
 
 function matchOneDetachment(faction: string | null, name: string): string | null {
   const search = (dets: { n: string }[]) =>
-    dets.find((d) => d.n.toLowerCase() === name.toLowerCase())?.n || null;
+    dets.find((d) => normName(d.n) === normName(name))?.n || null;
   if (faction && FACTIONS[faction]) {
     const hit = search(FACTIONS[faction]);
     if (hit) return hit;
@@ -113,26 +130,49 @@ function stripNum(s: string): string {
   return s.replace(/^\d+\s*[.)]\s*/, "");
 }
 
-// Dual-detachment aware: "Cabal of Chaos, Soulforged Warpack (Empyric
+// A multi-detachment list can offer a CHOICE of dispositions ("Force
+// Dispositions: Disruption, Purge the Foe"). We store one, so take the first
+// listed — the captain picks the real one at pairing anyway.
+function firstDisposition(raw: string): Disposition | null {
+  for (const part of raw.split(/[,/]/).map((s) => s.trim())) {
+    const hit = DISPOSITION_NAMES.find((d) => d.toLowerCase() === part.toLowerCase());
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// Resolve a run of detachment names joined by "and"/"og"/"&". The whole string
+// is tried first, then every separator position — a split is only accepted when
+// BOTH sides fully resolve to known detachments. That keeps names that contain
+// "and" intact: "Legends of Saga and Song and Saga of the Great Wolf" splits at
+// the SECOND "and", not the first.
+function resolveDetachmentRun(faction: string | null, text: string): string[] | null {
+  const whole = matchOneDetachment(faction, text);
+  if (whole) return [whole];
+  const seps = [...text.matchAll(/\s+(?:and|og|&)\s+/gi)];
+  for (const m of seps) {
+    if (m.index === undefined) continue;
+    const left = resolveDetachmentRun(faction, text.slice(0, m.index).trim());
+    if (!left) continue;
+    const right = resolveDetachmentRun(faction, text.slice(m.index + m[0].length).trim());
+    if (right) return [...left, ...right];
+  }
+  return null;
+}
+
+// Dual/triple-detachment aware: "Cabal of Chaos, Soulforged Warpack (Empyric
 // Wellspring)" → ["Cabal of Chaos", "Soulforged Warpack"]. The parenthetical
-// is the keystone/upgrade suite or DP cost, not a detachment name. Pairs are
-// joined by "," or "and"/"og" — but "and" only splits when the whole name
-// doesn't match (names like "Legends of Saga and Song" stay intact).
+// is the keystone/upgrade suite or DP cost, not a detachment name. Names are
+// joined by "," and/or "and"/"og".
 function matchDetachments(faction: string | null, raw: string): string[] {
   const cleaned = stripNum(raw.replace(/^.*:/, "").replace(/\([^)]*\)/g, "").trim());
   const result: string[] = [];
-  const add = (name: string | null) => {
-    if (name && !result.includes(name)) result.push(name);
+  const add = (name: string) => {
+    if (!result.includes(name)) result.push(name);
   };
   for (const part of cleaned.split(",").map((s) => s.trim()).filter(Boolean)) {
-    const hit = matchOneDetachment(faction, part);
-    if (hit) {
-      add(hit);
-      continue;
-    }
-    for (const sub of part.split(/\s+(?:and|og|&)\s+/i).map((s) => s.trim()).filter(Boolean)) {
-      add(matchOneDetachment(faction, sub));
-    }
+    const run = resolveDetachmentRun(faction, part);
+    if (run) run.forEach(add);
   }
   return result;
 }
@@ -153,15 +193,16 @@ function detectMeta(chunk: string): {
     if (!detachments.length && /detachment/i.test(line))
       detachments = matchDetachments(faction, line);
     if (!disposition && /force\s*disposition/i.test(line)) {
-      const c = line.replace(/^.*:/, "").trim();
-      disposition =
-        DISPOSITION_NAMES.find((d) => d.toLowerCase() === c.toLowerCase()) ?? null;
+      disposition = firstDisposition(line.replace(/^.*:/, ""));
     }
   }
-  // GW-app style: faction / detachment appear as bare lines near the top
+  // GW-app style: the faction is a bare line near the top, sometimes with the
+  // chapter appended ("Space Marines Black Templars"). Only short lines are
+  // considered so unit/wargear lines can't masquerade as a faction.
   if (!faction) {
     for (const line of lines.slice(0, 12)) {
-      const f = FACTION_NAMES.find((n) => n.toLowerCase() === line.toLowerCase());
+      if (!line || line.split(/\s+/).length > 6 || /\(|\d/.test(line)) continue;
+      const f = matchFaction(line);
       if (f) { faction = f; break; }
     }
   }
@@ -174,8 +215,7 @@ function detectMeta(chunk: string): {
   // Bare disposition line near the top ("3. Priority Assets")
   if (!disposition) {
     for (const line of lines.slice(0, 15)) {
-      const c = stripNum(line.replace(/^.*:/, "").trim());
-      const hit = DISPOSITION_NAMES.find((d) => d.toLowerCase() === c.toLowerCase());
+      const hit = firstDisposition(stripNum(line.replace(/^.*:/, "")));
       if (hit) { disposition = hit; break; }
     }
   }
