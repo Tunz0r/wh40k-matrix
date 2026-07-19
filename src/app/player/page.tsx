@@ -24,6 +24,7 @@ import {
   archetypeId,
   fetchArchetypeBank,
   snapshotSlotCells,
+  setNeedsTestCells,
   switchSlotArchetype,
   appendListToMetaTeam,
   SIMILARITY_THRESHOLD,
@@ -421,6 +422,12 @@ export default function PlayerPage() {
     };
     try {
       await addWarmupGame(TEAM_SLUG, myIdx, game);
+      // Closing the loop: testing the matchup clears its "needs testing" flag
+      // on this army's estimate cells for the archetype.
+      const testedKeys = wuSelected.members
+        .filter((m) => opponents[m.teamSlug]?.estimates?.[`${myIdx}_${m.listIdx}`]?.needsTest)
+        .map((m) => `${m.teamSlug}/${myIdx}_${m.listIdx}`);
+      if (testedKeys.length) setNeedsTestCells(testedKeys, false).catch(() => {});
       setWuCluster("");
       setWuActual("");
       setWuNotes("");

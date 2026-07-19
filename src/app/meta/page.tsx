@@ -8,10 +8,12 @@ import {
   subscribeToOpponents,
   estimateStyle,
   clusterLists,
+  lookupEstimate,
   type OpponentMap,
   type ListCluster,
   type ClusterMember,
   type EstimateCell,
+  type OpponentList,
 } from "@/lib/estimates-db";
 import { formatUnitsLines } from "@/lib/list-parser";
 
@@ -19,6 +21,12 @@ import { formatUnitsLines } from "@/lib/list-parser";
 // against it; a "problem" when the BEST we have is ≤ PROBLEM.
 const ANSWER = 12;
 const PROBLEM = 8;
+
+// Per-player bias needs a few games before it's trusted; below this we fall
+// back to the team-wide number.
+const MIN_PLAYER_GAMES = 3;
+type BiasMode = "raw" | "team" | "player";
+const BIAS_KEY = "wtc-meta-bias";
 
 // Same seeding-tier weighting as the estimate priority: prevalence in strong
 // fields matters most. Meta reference copies count 0.
@@ -61,6 +69,7 @@ const SECTIONS: { cat: Category; title: string; desc: string; color: string; bor
 export default function MetaPage() {
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
   const [opponents, setOpponents] = useState<OpponentMap>({});
+  const [biasMode, setBiasMode] = useState<BiasMode>("raw");
 
   useEffect(() => {
     try {
@@ -69,9 +78,60 @@ export default function MetaPage() {
       return () => { u1(); u2(); };
     } catch {}
   }, []);
+  useEffect(() => {
+    const m = sessionStorage.getItem(BIAS_KEY);
+    if (m === "team" || m === "player" || m === "raw") setBiasMode(m);
+  }, []);
+  function pickBias(m: BiasMode) {
+    setBiasMode(m);
+    try { sessionStorage.setItem(BIAS_KEY, m); } catch {}
+  }
 
   const armies = useMemo(() => doc?.roster?.armies || [], [doc]);
   const clusters = useMemo(() => clusterLists(opponents), [opponents]);
+
+  // Calibration bias from warmup games: how far actuals land from our CURRENT
+  // estimate, per army and team-wide. Positive = we play better than we
+  // estimate (estimates too pessimistic). Display-only — never rewrites data.
+  const bias = useMemo(() => {
+    const perArmy: Record<number, { bias: number; n: number }> = {};
+    const teamDeltas: number[] = [];
+    armies.forEach((_, idx) => {
+      const node = doc?.warmups?.[`a${idx}`] || {};
+      const deltas: number[] = [];
+      for (const g of Object.values(node)) {
+        const est = lookupEstimate(opponents, null, idx, {
+          faction: g.faction,
+          detachments: g.detachments || [],
+          disposition: (g.disposition ?? null) as OpponentList["disposition"],
+        });
+        if (est !== null) {
+          deltas.push(g.actual - est);
+          teamDeltas.push(g.actual - est);
+        }
+      }
+      perArmy[idx] = deltas.length
+        ? { bias: deltas.reduce((a, b) => a + b, 0) / deltas.length, n: deltas.length }
+        : { bias: 0, n: 0 };
+    });
+    const team = teamDeltas.length
+      ? { bias: teamDeltas.reduce((a, b) => a + b, 0) / teamDeltas.length, n: teamDeltas.length }
+      : { bias: 0, n: 0 };
+    return { perArmy, team };
+  }, [doc, opponents, armies]);
+
+  // The correction applied to army idx under the current mode. Player mode
+  // falls back to the team number until the player has enough games.
+  const biasFor = useMemo(() => {
+    return (idx: number): number => {
+      if (biasMode === "team") return bias.team.bias;
+      if (biasMode === "player") {
+        const p = bias.perArmy[idx];
+        return p && p.n >= MIN_PLAYER_GAMES ? p.bias : bias.team.bias;
+      }
+      return 0;
+    };
+  }, [biasMode, bias]);
 
   // Our best current estimate per army vs a cluster — manual values win.
   const clusterEstimate = useMemo(() => {
@@ -93,7 +153,11 @@ export default function MetaPage() {
 
   const rows = useMemo(() => {
     return clusters.map((c) => {
-      const cells = armies.map((_, i) => clusterEstimate(c, i));
+      const rawCells = armies.map((_, i) => clusterEstimate(c, i));
+      // Bias-adjusted view (display-only); raw kept for the hover tooltip.
+      const cells = rawCells.map((v, i) =>
+        v === null ? null : Math.max(0, Math.min(20, Math.round(v + biasFor(i))))
+      );
       const known = cells.filter((v): v is number => v !== null);
       const best = known.length ? Math.max(...known) : null;
       const bestIdx = best !== null ? cells.indexOf(best) : -1;
@@ -123,9 +187,9 @@ export default function MetaPage() {
       const title =
         [c.rep.list.disposition, countries.join(", ")].filter(Boolean).join(" · ") +
         (units ? `\n\n${formatUnitsLines(units)}` : "");
-      return { c, cells, best, bestIdx, answerCount, testedAnswers, allAnswersUntested, category, weight, countries, title };
+      return { c, cells, rawCells, best, bestIdx, answerCount, testedAnswers, allAnswersUntested, category, weight, countries, title };
     });
-  }, [clusters, armies, clusterEstimate, cellNeedsTest]);
+  }, [clusters, armies, clusterEstimate, cellNeedsTest, biasFor]);
 
   const counts = useMemo(() => {
     const n: Record<Category, number> = { problem: 0, even: 0, unknown: 0, single: 0, covered: 0 };
@@ -160,6 +224,32 @@ export default function MetaPage() {
               </span>
             )}
           </span>
+        </div>
+        <div className="flex items-center gap-2 mt-2 flex-wrap">
+          <span className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">Justér for bias</span>
+          <div className="flex gap-1">
+            {([
+              ["raw", "Rå"],
+              ["team", `Hold (${bias.team.bias >= 0 ? "+" : ""}${bias.team.bias.toFixed(1)})`],
+              ["player", "Pr. spiller"],
+            ] as [BiasMode, string][]).map(([m, label]) => (
+              <button
+                key={m}
+                onClick={() => pickBias(m)}
+                disabled={m !== "raw" && bias.team.n === 0}
+                className={`text-[10px] px-2 py-0.5 rounded-md transition-colors disabled:opacity-30 ${
+                  biasMode === m ? "bg-[#a855f7] text-white" : "bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {biasMode !== "raw" && (
+            <span className="text-[10px] text-[#facc15]">
+              Estimater vist justeret ud fra {bias.team.n} warmup-kampe (kun visning — rå værdi ved hover)
+            </span>
+          )}
         </div>
         <p className="text-[10px] text-[#8888a0] mt-1">
           Hver arketype vs alle vores hære — hvem er vores svar, og hvor har vi huller? Målet er mindst to hære med et positivt svar (≥ {ANSWER}) mod hver arketype. Sorteret efter prioritet (seedingvægtet udbredelse). Ring om hvert svar ≥ {ANSWER}; 🧪-prik = estimatet skal stadig testes. Hover en række for listen.
@@ -219,7 +309,15 @@ export default function MetaPage() {
                           </div>
                         </td>
                         {r.cells.map((v, i) => (
-                          <td key={i} className="text-center px-0.5">
+                          <td
+                            key={i}
+                            className="text-center px-0.5"
+                            title={
+                              v !== null && r.rawCells[i] !== v
+                                ? `Rå estimat ${r.rawCells[i]} → justeret ${v}`
+                                : undefined
+                            }
+                          >
                             {v !== null ? (
                               <Chip v={v} answer={v >= ANSWER} test={cellNeedsTest(r.c, i)} />
                             ) : (
