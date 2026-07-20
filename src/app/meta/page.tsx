@@ -27,6 +27,7 @@ const PROBLEM = 8;
 const MIN_PLAYER_GAMES = 3;
 type BiasMode = "raw" | "team" | "player";
 const BIAS_KEY = "wtc-meta-bias";
+const TEST_KEY = "wtc-meta-onlytest";
 
 // Same seeding-tier weighting as the estimate priority: prevalence in strong
 // fields matters most. Meta reference copies count 0.
@@ -70,6 +71,7 @@ export default function MetaPage() {
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
   const [opponents, setOpponents] = useState<OpponentMap>({});
   const [biasMode, setBiasMode] = useState<BiasMode>("raw");
+  const [onlyUntested, setOnlyUntested] = useState(false);
 
   useEffect(() => {
     try {
@@ -79,6 +81,7 @@ export default function MetaPage() {
     } catch {}
   }, []);
   useEffect(() => {
+    setOnlyUntested(sessionStorage.getItem(TEST_KEY) === "1");
     const m = sessionStorage.getItem(BIAS_KEY);
     if (m === "team" || m === "player" || m === "raw") setBiasMode(m);
   }, []);
@@ -181,13 +184,17 @@ export default function MetaPage() {
         .filter((i) => i >= 0);
       const testedAnswers = answerIdxs.filter((i) => !cellNeedsTest(c, i)).length;
       const allAnswersUntested = answerIdxs.length > 0 && testedAnswers === 0;
+      // Every army whose estimate against this archetype is flagged "skal testes".
+      const untestedBy = armies
+        .map((_, i) => (cells[i] !== null && cellNeedsTest(c, i) ? i : -1))
+        .filter((i) => i >= 0);
       const units = c.rep.list.units?.length
         ? c.rep.list.units
         : c.members.find((m) => m.list.units?.length)?.list.units;
       const title =
         [c.rep.list.disposition, countries.join(", ")].filter(Boolean).join(" · ") +
         (units ? `\n\n${formatUnitsLines(units)}` : "");
-      return { c, cells, rawCells, best, bestIdx, answerCount, testedAnswers, allAnswersUntested, category, weight, countries, title };
+      return { c, cells, rawCells, best, bestIdx, answerCount, testedAnswers, allAnswersUntested, untestedBy, category, weight, countries, title };
     });
   }, [clusters, armies, clusterEstimate, cellNeedsTest, biasFor]);
 
@@ -202,6 +209,19 @@ export default function MetaPage() {
     () => rows.filter((r) => r.answerCount > 0 && r.allAnswersUntested).length,
     [rows]
   );
+  // Archetypes with at least one 🧪-flagged estimate, and how many flags total.
+  const flagged = useMemo(() => rows.filter((r) => r.untestedBy.length > 0), [rows]);
+  const flaggedCells = useMemo(
+    () => flagged.reduce((s, r) => s + r.untestedBy.length, 0),
+    [flagged]
+  );
+
+  function toggleOnlyUntested() {
+    setOnlyUntested((v) => {
+      try { sessionStorage.setItem(TEST_KEY, v ? "0" : "1"); } catch {}
+      return !v;
+    });
+  }
 
   return (
     <>
@@ -250,7 +270,28 @@ export default function MetaPage() {
               Estimater vist justeret ud fra {bias.team.n} warmup-kampe (kun visning — rå værdi ved hover)
             </span>
           )}
+          <button
+            onClick={toggleOnlyUntested}
+            disabled={!flagged.length}
+            title={
+              flagged.length
+                ? "Vis kun arketyper hvor mindst ét estimat er markeret 'skal testes'"
+                : "Ingen estimater er markeret 'skal testes' endnu — markér dem med 🧪 under Estimater → Min hær"
+            }
+            className={`ml-auto text-[10px] px-2 py-0.5 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+              onlyUntested
+                ? "bg-[#fb923c] text-[#0f0f13] font-semibold"
+                : "bg-[#22222e] text-[#8888a0] hover:text-[#fb923c]"
+            }`}
+          >
+            🧪 Kun usikre ({flagged.length})
+          </button>
         </div>
+        {onlyUntested && (
+          <p className="text-[10px] text-[#fb923c] mt-1">
+            {`Filtrerer: viser ${flagged.length} arketyper med ${flaggedCells} ${flaggedCells === 1 ? "estimat" : "estimater"} markeret "skal testes" — hærene med flaget er fremhævet.`}
+          </p>
+        )}
         <p className="text-[10px] text-[#8888a0] mt-1">
           Hver arketype vs alle vores hære — hvem er vores svar, og hvor har vi huller? Målet er mindst to hære med et positivt svar (≥ {ANSWER}) mod hver arketype. Sorteret efter prioritet (seedingvægtet udbredelse). Ring om hvert svar ≥ {ANSWER}; 🧪-prik = estimatet skal stadig testes. Hover en række for listen.
         </p>
@@ -263,9 +304,16 @@ export default function MetaPage() {
           </p>
         )}
 
+        {onlyUntested && !flagged.length && (
+          <p className="text-[11px] text-[#8888a0]">
+            Ingen estimater er markeret &quot;skal testes&quot;. Spillerne markerer dem med 🧪 på arketype-kortene under{" "}
+            <Link href="/estimates" className="text-[#a855f7] underline">Estimater → Min hær</Link>.
+          </p>
+        )}
+
         {SECTIONS.map(({ cat, title, desc, color, border }) => {
           const sectionRows = rows
-            .filter((r) => r.category === cat)
+            .filter((r) => r.category === cat && (!onlyUntested || r.untestedBy.length > 0))
             .sort((a, b) => b.weight - a.weight || b.c.members.length - a.c.members.length);
           if (!sectionRows.length) return null;
           return (
@@ -308,23 +356,28 @@ export default function MetaPage() {
                             {r.c.members.length === 1 ? "liste" : "lister"}
                           </div>
                         </td>
-                        {r.cells.map((v, i) => (
-                          <td
-                            key={i}
-                            className="text-center px-0.5"
-                            title={
-                              v !== null && r.rawCells[i] !== v
-                                ? `Rå estimat ${r.rawCells[i]} → justeret ${v}`
-                                : undefined
-                            }
-                          >
-                            {v !== null ? (
-                              <Chip v={v} answer={v >= ANSWER} test={cellNeedsTest(r.c, i)} />
-                            ) : (
-                              <span className="text-[10px] text-[#44445a]">·</span>
-                            )}
-                          </td>
-                        ))}
+                        {r.cells.map((v, i) => {
+                          const flaggedCell = cellNeedsTest(r.c, i);
+                          return (
+                            <td
+                              key={i}
+                              // While filtering, dim the estimates that are NOT
+                              // flagged so the ones needing a test stand out.
+                              className={`text-center px-0.5 ${onlyUntested && !flaggedCell ? "opacity-25" : ""}`}
+                              title={
+                                v !== null && r.rawCells[i] !== v
+                                  ? `Rå estimat ${r.rawCells[i]} → justeret ${v}`
+                                  : undefined
+                              }
+                            >
+                              {v !== null ? (
+                                <Chip v={v} answer={v >= ANSWER} test={flaggedCell} />
+                              ) : (
+                                <span className="text-[10px] text-[#44445a]">·</span>
+                              )}
+                            </td>
+                          );
+                        })}
                         <td className="text-center px-1 whitespace-nowrap">
                           {r.best === null ? (
                             <span className="text-[10px] text-[#44445a]">—</span>
