@@ -6,7 +6,13 @@ import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
 import { subscribeToTournament, type TournamentDoc, type TournamentRound } from "@/lib/tournament-db";
 import { fetchSession, type SessionData } from "@/lib/session";
 import { vpToBP } from "@/lib/scoring";
-import { estimateStyle } from "@/lib/estimates-db";
+import {
+  estimateStyle,
+  lookupEstimate,
+  subscribeToOpponents,
+  type OpponentMap,
+  type OpponentList,
+} from "@/lib/estimates-db";
 
 interface GameRow {
   roundNumber: number;
@@ -45,12 +51,15 @@ function DeltaBadge({ d }: { d: number | null }) {
 
 export default function CalibrationPage() {
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
+  const [opponents, setOpponents] = useState<OpponentMap>({});
   const [sessions, setSessions] = useState<Record<string, SessionData>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     try {
-      return subscribeToTournament(TEAM_SLUG, setDoc);
+      const u1 = subscribeToTournament(TEAM_SLUG, setDoc);
+      const u2 = subscribeToOpponents(setOpponents);
+      return () => { u1(); u2(); };
     } catch {}
   }, []);
 
@@ -108,31 +117,57 @@ export default function CalibrationPage() {
     return rows;
   }, [rounds, sessions, doc]);
 
-  // Per-army/player bias across all finished games with an estimate
+  // Per-player bias from BOTH calibration sources, merged on the roster slot:
+  // warmup games (prep — deltas vs the CURRENT estimate, same math as /meta's
+  // bias correction) and finished tournament rounds (deltas vs the estimate
+  // locked at pairing). Comparing the two shows whether prep calibration held
+  // up at the event.
   const playerStats = useMemo(() => {
-    const map = new Map<string, { player: string | null; deltas: number[]; games: number }>();
-    for (const g of games) {
-      const entry = map.get(g.ourFaction) || { player: g.player, deltas: [], games: 0 };
-      entry.games++;
-      if (g.delta !== null) entry.deltas.push(g.delta);
-      if (g.player) entry.player = g.player;
-      map.set(g.ourFaction, entry);
-    }
-    return [...map.entries()]
-      .map(([faction, e]) => ({
-        faction,
-        player: e.player,
-        games: e.games,
-        rated: e.deltas.length,
-        avgDelta: e.deltas.length
-          ? e.deltas.reduce((a, b) => a + b, 0) / e.deltas.length
-          : null,
-        avgAbs: e.deltas.length
-          ? e.deltas.reduce((a, b) => a + Math.abs(b), 0) / e.deltas.length
-          : null,
-      }))
-      .sort((a, b) => (b.avgAbs ?? -1) - (a.avgAbs ?? -1));
-  }, [games]);
+    const armies = doc?.roster?.armies || [];
+    const stat = (deltas: number[]) =>
+      deltas.length
+        ? {
+            n: deltas.length,
+            avg: deltas.reduce((a, b) => a + b, 0) / deltas.length,
+            abs: deltas.reduce((a, b) => a + Math.abs(b), 0) / deltas.length,
+          }
+        : null;
+    return armies
+      .map((army, idx) => {
+        // warmup deltas vs live estimate (snapshot as fallback)
+        const wuDeltas: number[] = [];
+        let wuGames = 0;
+        for (const g of Object.values(doc?.warmups?.[`a${idx}`] || {})) {
+          wuGames++;
+          const est =
+            lookupEstimate(opponents, null, idx, {
+              faction: g.faction,
+              detachments: g.detachments || [],
+              disposition: (g.disposition ?? null) as OpponentList["disposition"],
+            }) ?? g.estimate ?? null;
+          if (est !== null) wuDeltas.push(g.actual - est);
+        }
+        // tournament deltas (rows already computed per game)
+        const tourDeltas = games
+          .filter((g) => g.ourFaction === army.faction && g.delta !== null)
+          .map((g) => g.delta as number);
+        const tourGames = games.filter((g) => g.ourFaction === army.faction).length;
+        return {
+          faction: army.faction,
+          player: army.player || null,
+          warmup: stat(wuDeltas),
+          warmupGames: wuGames,
+          tour: stat(tourDeltas),
+          tourGames,
+        };
+      })
+      .sort(
+        (a, b) =>
+          (b.tour?.abs ?? b.warmup?.abs ?? -1) - (a.tour?.abs ?? a.warmup?.abs ?? -1)
+      );
+  }, [doc, opponents, games]);
+
+  const hasAnyCalibration = playerStats.some((s) => s.warmup || s.tour);
 
   const roundNumbers = [...new Set(games.map((g) => g.roundNumber))].sort((a, b) => b - a);
 
@@ -152,76 +187,89 @@ export default function CalibrationPage() {
           </button>
         </div>
         <p className="text-xs text-[#8888a0] mt-1">
-          Estimat vs. faktisk resultat (0-20 BP) for alle færdigspillede kampe. Positiv delta = spillet bedre end estimeret.
+          Estimat vs. faktisk resultat (0-20 BP) — warmup-kampe under forberedelsen og rigtige runder ved WTC. Positiv delta = spillet bedre end estimeret.
         </p>
       </header>
 
       <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
-        {loading && games.length === 0 ? (
+        {loading && !hasAnyCalibration ? (
           <div className="text-[#8888a0] text-sm text-center py-12">Indlæser...</div>
-        ) : games.length === 0 ? (
+        ) : !hasAnyCalibration ? (
           <div className="rounded-xl border border-dashed border-white/[0.08] p-8 text-center">
             <p className="text-[12px] text-[#8888a0]">
-              Ingen færdigspillede kampe endnu — kalibreringen fyldes ud efterhånden som runderne afsluttes.
+              Ingen kalibreringsdata endnu — log warmup-kampe på{" "}
+              <Link href="/player" className="text-[#a855f7] underline">Min side</Link>, så fyldes siden ud. Rigtige runder kommer til ved WTC.
             </p>
-            <Link
-              href="/tournament"
-              className="inline-block mt-3 text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors"
-            >
-              ← Til turneringen
-            </Link>
           </div>
         ) : (
           <>
-            {/* Per-player bias */}
+            {/* Per-player bias: warmup (prep) vs tournament rounds side by side */}
             <div className="rounded-xl border border-white/[0.08] p-4">
-              <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-3">
-                Bias pr. spiller
-              </h2>
-              <div className="space-y-1.5">
-                {playerStats.map((s) => (
-                  <div
-                    key={s.faction}
-                    className="flex items-center gap-3 rounded-lg border border-white/[0.06] px-3 py-2"
-                  >
-                    <span className="text-[12px] text-[#e8e8f0] font-medium flex-1 min-w-0 truncate">
-                      {s.player ? `${s.player} — ` : ""}
-                      {s.faction}
-                    </span>
-                    <span className="text-[10px] text-[#8888a0] shrink-0">
-                      {s.rated}/{s.games} kampe med estimat
-                    </span>
-                    {s.avgDelta !== null ? (
-                      <span
-                        className={`text-[12px] font-bold shrink-0 w-24 text-right ${
-                          Math.abs(s.avgDelta) <= 1
-                            ? "text-[#4ade80]"
-                            : s.avgDelta > 0
-                              ? "text-[#facc15]"
-                              : "text-[#f87171]"
-                        }`}
-                        title={
-                          s.avgDelta > 0
-                            ? "Undervurderer sig selv — spiller bedre end estimaterne"
-                            : s.avgDelta < 0
-                              ? "Overvurderer sig selv — estimaterne er for optimistiske"
-                              : "Rammer plet"
-                        }
-                      >
-                        {s.avgDelta > 0 ? "+" : ""}
-                        {s.avgDelta.toFixed(1)}
-                        <span className="text-[9px] text-[#8888a0] font-normal ml-1">
-                          (±{s.avgAbs!.toFixed(1)})
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-[#8888a0] w-24 text-right">—</span>
-                    )}
-                  </div>
-                ))}
+              <div className="flex items-baseline gap-2 mb-3 flex-wrap">
+                <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider">
+                  Bias pr. spiller
+                </h2>
+                <span className="text-[10px] text-[#8888a0]">
+                  warmup-kampe (mod nuværende estimater) · runder (mod estimatet ved pairing)
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-separate border-spacing-y-1.5">
+                  <thead>
+                    <tr>
+                      <th className="text-left text-[9px] text-[#8888a0] font-semibold">Spiller</th>
+                      <th className="text-right text-[9px] text-[#8888a0] font-semibold px-2 whitespace-nowrap">Warmup</th>
+                      <th className="text-right text-[9px] text-[#8888a0] font-semibold px-2 whitespace-nowrap">Runder</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {playerStats.map((s) => {
+                      const cell = (
+                        st: { n: number; avg: number; abs: number } | null,
+                        total: number
+                      ) =>
+                        st ? (
+                          <span
+                            className={`text-[12px] font-bold ${
+                              Math.abs(st.avg) <= 1
+                                ? "text-[#4ade80]"
+                                : st.avg > 0
+                                  ? "text-[#facc15]"
+                                  : "text-[#f87171]"
+                            }`}
+                            title={
+                              (st.avg > 1
+                                ? "Undervurderer sig selv — spiller bedre end estimaterne"
+                                : st.avg < -1
+                                  ? "Overvurderer sig selv — estimaterne er for optimistiske"
+                                  : "Rammer plet") + ` · ${st.n}${total > st.n ? `/${total}` : ""} kampe med estimat`
+                            }
+                          >
+                            {st.avg > 0 ? "+" : ""}
+                            {st.avg.toFixed(1)}
+                            <span className="text-[9px] text-[#8888a0] font-normal ml-1">
+                              (±{st.abs.toFixed(1)} · {st.n})
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-[#44445a]">—</span>
+                        );
+                      return (
+                        <tr key={s.faction}>
+                          <td className="text-[12px] text-[#e8e8f0] font-medium pr-2 truncate max-w-[220px]">
+                            {s.player ? `${s.player} — ` : ""}
+                            {s.faction}
+                          </td>
+                          <td className="text-right px-2 whitespace-nowrap">{cell(s.warmup, s.warmupGames)}</td>
+                          <td className="text-right px-2 whitespace-nowrap">{cell(s.tour, s.tourGames)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
               <p className="text-[10px] text-[#8888a0] mt-2">
-                Delta = faktisk BP minus estimat. Negativ (rød) = for optimistiske estimater; brug det når I retter estimater til de kommende runder.
+                Delta = faktisk BP minus estimat. Negativ (rød) = for optimistiske estimater. Når runderne begynder, viser kolonnerne om jeres warmup-kalibrering holdt ved WTC.
               </p>
             </div>
 
