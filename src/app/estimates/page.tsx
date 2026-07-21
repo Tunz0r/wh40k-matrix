@@ -31,6 +31,13 @@ import {
   SIMILARITY_THRESHOLD,
   estimateStyle,
   type ListCluster,
+  type VersionsNode,
+  BASE_VERSION_ID,
+  BASE_VERSION_LABEL,
+  subscribeToVersions,
+  ensureVersions,
+  createVersion,
+  stampVersion,
 } from "@/lib/estimates-db";
 
 const OTHER_TIER = "Andre hold";
@@ -105,6 +112,10 @@ export default function EstimatesPage() {
   const [mode, setMode] = useState<"country" | "player">("country");
   const [archOpen, setArchOpen] = useState(false);
   const [archText, setArchText] = useState("");
+  const [versions, setVersions] = useState<VersionsNode>({
+    current: BASE_VERSION_ID,
+    list: { [BASE_VERSION_ID]: { id: BASE_VERSION_ID, label: BASE_VERSION_LABEL, createdAt: 0 } },
+  });
 
   useEffect(() => {
     const saved = localStorage.getItem("wtc-est-mode");
@@ -125,6 +136,7 @@ export default function EstimatesPage() {
       exportedAt: new Date().toISOString(),
       team: TEAM_NAME,
       opponents,
+      versions,
       seedingTiers: fbDoc?.seedingTiers || [],
       roster: fbDoc?.roster || null,
     };
@@ -160,9 +172,31 @@ export default function EstimatesPage() {
     try {
       const unsub1 = subscribeToOpponents(setOpponents);
       const unsub2 = subscribeToTournament(TEAM_SLUG, setFbDoc);
-      return () => { unsub1(); unsub2(); };
+      const unsub3 = subscribeToVersions(setVersions);
+      // Writes the "11th fresh" base version the first time anyone opens the
+      // page; existing estimate cells stay untouched and count as that version.
+      ensureVersions().catch(() => {});
+      return () => { unsub1(); unsub2(); unsub3(); };
     } catch {}
   }, []);
+
+  const currentVersion = versions.current;
+  const currentVersionLabel = versions.list?.[currentVersion]?.label ?? currentVersion;
+
+  // Cut a new estimate version: from here on, new/changed estimates are stamped
+  // with it, and anything still carrying an older stamp shows up as carried
+  // over. No existing estimate is touched.
+  async function cutVersion() {
+    const label = prompt(
+      `Ny estimat-version — f.eks. "11th balance dataslate".\n\nNuværende: ${currentVersionLabel}.\n\nEksisterende estimater bevares og markeres som fra "${currentVersionLabel}", indtil de bekræftes.`
+    );
+    if (!label?.trim()) return;
+    try {
+      await createVersion(label.trim());
+    } catch {
+      alert("Kunne ikke oprette versionen — tjek Firebase.");
+    }
+  }
 
   const ourArmies: RosterArmy[] = useMemo(
     () => fbDoc?.roster?.armies || [],
@@ -226,17 +260,22 @@ export default function EstimatesPage() {
     const result: Record<string, EstimateCell> = {};
     for (let i = 0; i < ourArmies.length; i++) {
       armies.forEach((list, j) => {
-        let best: { sim: number; v: number } | null = null;
+        let best: { sim: number; v: number; ver?: string } | null = null;
         for (const team of Object.values(opponents)) {
           (team.armies || []).forEach((other, k) => {
             const cell = team.estimates?.[`${i}_${k}`];
             if (!cell || cell.auto) return;
             const sim = listSimilarity(list, other);
             if (sim < SIMILARITY_THRESHOLD) return;
-            if (!best || sim > best.sim) best = { sim, v: cell.v };
+            if (!best || sim > best.sim) best = { sim, v: cell.v, ver: cell.ver };
           });
         }
-        if (best) result[`${i}_${j}`] = { v: (best as { v: number }).v, auto: true };
+        // The copy is only as fresh as the judgment it came from, so it
+        // inherits the source's version rather than claiming the current one.
+        if (best) {
+          const b = best as { v: number; ver?: string };
+          result[`${i}_${j}`] = { v: b.v, auto: true, ...(b.ver ? { ver: b.ver } : {}) };
+        }
       });
     }
     return result;
@@ -302,7 +341,8 @@ export default function EstimatesPage() {
   function setEstimate(teamSlug: string, ourIdx: number, theirIdx: number, value: number | null) {
     if (playedRounds.has(teamSlug)) return;
     const updates: Record<string, EstimateCell | null> = {};
-    updates[`${teamSlug}/${ourIdx}_${theirIdx}`] = value === null ? null : { v: value };
+    updates[`${teamSlug}/${ourIdx}_${theirIdx}`] =
+      value === null ? null : stampVersion({ v: value }, currentVersion);
     if (value !== null) {
       const srcList = opponents[teamSlug]?.armies?.[theirIdx];
       if (srcList) {
@@ -313,7 +353,7 @@ export default function EstimatesPage() {
             if (listSimilarity(srcList, list) < SIMILARITY_THRESHOLD) return;
             const existing = team.estimates?.[`${ourIdx}_${j}`];
             if (existing && !existing.auto) return;
-            updates[`${slug}/${ourIdx}_${j}`] = { v: value, auto: true };
+            updates[`${slug}/${ourIdx}_${j}`] = stampVersion({ v: value, auto: true }, currentVersion);
           });
         }
       }
@@ -331,7 +371,7 @@ export default function EstimatesPage() {
           const key = `${i}_${idx}`;
           const existing = opponents[slug]?.estimates?.[key];
           if (existing && !existing.auto) continue;
-          let best: { sim: number; v: number } | null = null;
+          let best: { sim: number; v: number; ver?: string } | null = null;
           for (const [oslug, team] of Object.entries(opponents)) {
             (team.armies || []).forEach((other, k) => {
               if (oslug === slug && k === idx) return;
@@ -339,10 +379,11 @@ export default function EstimatesPage() {
               if (!cell || cell.auto) return;
               const sim = listSimilarity(list, other);
               if (sim < SIMILARITY_THRESHOLD) return;
-              if (!best || sim > best.sim) best = { sim, v: cell.v };
+              if (!best || sim > best.sim) best = { sim, v: cell.v, ver: cell.ver };
             });
           }
-          const next = best ? { v: (best as { v: number }).v, auto: true } : null;
+          const b = best as { v: number; ver?: string } | null;
+          const next = b ? { v: b.v, auto: true, ...(b.ver ? { ver: b.ver } : {}) } : null;
           if (JSON.stringify(next) !== JSON.stringify(existing ?? null)) updates[`${slug}/${key}`] = next;
         }
         if (Object.keys(updates).length) writeEstimateCells(updates).catch(() => {});
@@ -472,6 +513,13 @@ export default function EstimatesPage() {
           <span className="text-[11px] text-[#8888a0] hidden sm:inline">
             {totals.teams} hold · {totals.manual} manuelle · {totals.auto} auto
           </span>
+          <button
+            onClick={cutVersion}
+            title={`Alle estimater hører til en version. Nuværende: ${currentVersionLabel}. Klik for at skære en ny version, når metaen flytter sig — gamle estimater bevares og markeres som fra den forrige.`}
+            className="text-[11px] px-2 py-0.5 rounded-md border border-[rgba(74,222,128,0.3)] text-[#4ade80] hover:border-[#4ade80] transition-colors"
+          >
+            v: {currentVersionLabel}
+          </button>
           <Link href="/meta" className="text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors">
             Meta-overblik →
           </Link>
@@ -587,6 +635,7 @@ export default function EstimatesPage() {
             ourArmies={ourArmies}
             playedRounds={playedRounds}
             profiles={fbDoc?.profiles}
+            versions={versions}
             onSet={setEstimate}
             onNeedsTest={(keys, flag) => setNeedsTestCells(keys, flag).catch(() => {})}
           />

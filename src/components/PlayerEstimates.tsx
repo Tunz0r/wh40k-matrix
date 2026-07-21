@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import type { RosterArmy } from "@/lib/roster";
 import type { ProfilesNode } from "@/lib/tournament-db";
@@ -10,7 +10,9 @@ import {
   type EstimateCell,
   type ListCluster,
   type ClusterMember,
+  type VersionsNode,
   clusterLists,
+  versionOf,
 } from "@/lib/estimates-db";
 import { formatUnits, formatUnitsLines } from "@/lib/list-parser";
 import EstimateInput from "./EstimateInput";
@@ -31,11 +33,28 @@ function tierWeight(tier: string): number {
   return /^tier/i.test(tier) ? TIER_WEIGHT[tierRank(tier)] ?? 0 : 0;
 }
 
+interface Annotated {
+  cluster: ListCluster;
+  displayCell: EstimateCell | undefined;
+  anchor: ClusterMember | null;
+  weight: number;
+  filledCount: number;
+  needsTest: boolean;
+}
+
+// The frozen display order plus the block split it was built with, so the
+// headers can't drift out of sync with the positions while you type.
+interface Ordering {
+  keys: string[];
+  estimated: Set<string>;
+}
+
 export default function PlayerEstimates({
   opponents,
   ourArmies,
   playedRounds,
   profiles,
+  versions,
   onSet,
   onNeedsTest,
 }: {
@@ -43,6 +62,7 @@ export default function PlayerEstimates({
   ourArmies: RosterArmy[];
   playedRounds: Map<string, number>;
   profiles?: ProfilesNode;
+  versions: VersionsNode;
   onSet: (teamSlug: string, ourIdx: number, theirIdx: number, v: number | null) => void;
   onNeedsTest: (keys: string[], flag: boolean) => void;
 }) {
@@ -81,7 +101,7 @@ export default function PlayerEstimates({
 
   // Clusters annotated for the selected army — values update live, but the
   // ORDER is frozen in state so cards don't jump away while you're typing.
-  const annotated = useMemo(() => {
+  const annotated: Annotated[] = useMemo(() => {
     if (myIdx === null) return [];
     return clusters.map((cluster) => {
       const repCell = cellFor(cluster.rep, myIdx);
@@ -105,42 +125,57 @@ export default function PlayerEstimates({
       // archetype (meta reference copies count 0). Blends prevalence with
       // opponent strength.
       const weight = cluster.members.reduce((s, m) => s + tierWeight(m.tier), 0);
-      // Clusters where a real army list has been pasted (unit content) are the
-      // useful ones to estimate; synthetic placeholders sink to the bottom.
-      const hasUnits = cluster.members.some((m) => m.list.units?.length);
       // "Needs testing" is a per-archetype flag: any member cell carrying it.
       const needsTest = cluster.members.some((m) => cellFor(m, myIdx)?.needsTest);
-      return { cluster, displayCell, anchor, weight, filledCount, hasUnits, needsTest };
+      return { cluster, displayCell, anchor, weight, filledCount, needsTest };
     });
   }, [clusters, myIdx, opponents, playedRounds]);
 
   const clusterKey = (c: ListCluster) => `${c.rep.teamSlug}_${c.rep.listIdx}`;
 
-  // Real lists first, then unfilled first, then highest tier-weighted priority.
-  // Recomputed only when the army/field changes or focus leaves the list.
-  const sortedKeys = (list: typeof annotated) =>
-    [...list]
-      .sort((a, b) => {
-        if (a.hasUnits !== b.hasUnits) return a.hasUnits ? -1 : 1;
-        const aEmpty = a.filledCount === 0 ? 0 : 1;
-        const bEmpty = b.filledCount === 0 ? 0 : 1;
-        if (aEmpty !== bEmpty) return aEmpty - bEmpty;
-        if (b.weight !== a.weight) return b.weight - a.weight;
-        return b.cluster.members.length - a.cluster.members.length;
-      })
-      .map((a) => clusterKey(a.cluster));
+  // Within a block: grouped by codex, then alphabetically by detachment, so an
+  // archetype sits in the same relative place whether it's estimated or not.
+  const byCodex = (a: Annotated, b: Annotated) => {
+    const al = a.cluster.rep.list;
+    const bl = b.cluster.rep.list;
+    return (
+      al.faction.localeCompare(bl.faction) ||
+      (al.detachments || []).join(", ").localeCompare((bl.detachments || []).join(", ")) ||
+      (al.disposition || "").localeCompare(bl.disposition || "")
+    );
+  };
 
-  const [order, setOrder] = useState<string[]>([]);
+  // Two blocks: the archetypes still MISSING an estimate float to the top, the
+  // estimated ones sink below — each block sorted identically (by codex), so
+  // the list reads as the same catalogue twice over.
+  // Recomputed only when the army/field changes or focus leaves the list, so
+  // cards never jump away mid-keystroke; the block split is captured here too
+  // and stays put until the next re-sort.
+  const buildOrder = (list: Annotated[]): Ordering => {
+    const sorted = [...list].sort((a, b) => {
+      const aEmpty = a.filledCount === 0 ? 0 : 1;
+      const bEmpty = b.filledCount === 0 ? 0 : 1;
+      return aEmpty - bEmpty || byCodex(a, b);
+    });
+    return {
+      keys: sorted.map((a) => clusterKey(a.cluster)),
+      estimated: new Set(
+        sorted.filter((a) => a.filledCount > 0).map((a) => clusterKey(a.cluster))
+      ),
+    };
+  };
+
+  const [order, setOrder] = useState<Ordering>({ keys: [], estimated: new Set() });
 
   useEffect(() => {
-    setOrder(sortedKeys(annotated));
+    setOrder(buildOrder(annotated));
     // Only re-sort when the selected army or the field itself changes —
     // not on every estimate keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myIdx, annotated.length]);
 
   const displayList = useMemo(() => {
-    const pos = new Map(order.map((k, i) => [k, i]));
+    const pos = new Map(order.keys.map((k, i) => [k, i]));
     return [...annotated].sort(
       (a, b) =>
         (pos.get(clusterKey(a.cluster)) ?? Number.MAX_SAFE_INTEGER) -
@@ -221,7 +256,7 @@ export default function PlayerEstimates({
               <span className="text-[#e8e8f0] font-semibold">{clustersDone}</span>/
               {annotated.length} arketyper
             </span>
-            <span className="ml-auto">Uudfyldte arketyper vises først — ét estimat dækker alle lignende lister</span>
+            <span className="ml-auto">Uudfyldte arketyper først, begge lister grupperet efter kodeks — ét estimat dækker alle lignende lister</span>
           </div>
 
           <div
@@ -230,12 +265,21 @@ export default function PlayerEstimates({
               // Re-sort once focus leaves the whole list — not while tabbing
               // between inputs inside it.
               if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                setOrder(sortedKeys(annotated));
+                setOrder(buildOrder(annotated));
               }
             }}
           >
-            {displayList.map(({ cluster, displayCell, anchor, filledCount, weight, needsTest }) => {
+            {displayList.map((item, idx) => {
+              const { cluster, displayCell, anchor, filledCount, weight, needsTest } = item;
               const key = clusterKey(cluster);
+              // Headers come from the FROZEN ordering, not the live cell state,
+              // so filling in an estimate doesn't move a heading mid-typing.
+              const prev = idx > 0 ? displayList[idx - 1] : null;
+              const inEstimated = order.estimated.has(key);
+              const newBlock =
+                !prev || order.estimated.has(clusterKey(prev.cluster)) !== inEstimated;
+              const faction = cluster.rep.list.faction;
+              const newFaction = newBlock || prev!.cluster.rep.list.faction !== faction;
               const isOpen = expanded === key;
               const disp = cluster.rep.list.disposition;
               const countries = cluster.members.map((m) => m.teamName);
@@ -255,8 +299,20 @@ export default function PlayerEstimates({
                 [headline, disp].filter(Boolean).join(" · ") +
                 (cardUnits ? `\n\n${formatUnitsLines(cardUnits)}` : "");
               return (
+                <Fragment key={key}>
+                  {newBlock && (
+                    <h3 className={`text-[10px] font-semibold uppercase tracking-wider pt-3 first:pt-0 ${inEstimated ? "text-[#8888a0]" : "text-[#a855f7]"}`}>
+                      {inEstimated
+                        ? `Estimeret (${order.estimated.size})`
+                        : `Mangler estimat (${order.keys.length - order.estimated.size})`}
+                    </h3>
+                  )}
+                  {newFaction && (
+                    <div className="text-[10px] text-[#8888a0] font-medium pt-1.5 pl-0.5 border-t border-white/[0.05]">
+                      {faction}
+                    </div>
+                  )}
                 <div
-                  key={key}
                   title={cardTitle}
                   className={`rounded-lg border ${needsTest ? "border-[rgba(251,146,60,0.5)]" : filledCount === 0 ? "border-[rgba(168,85,247,0.25)]" : "border-white/[0.08]"}`}
                 >
@@ -297,6 +353,14 @@ export default function PlayerEstimates({
                         {isOpen ? "▴" : "▾"}
                       </button>
                     </div>
+                    {displayCell && versionOf(displayCell) !== versions.current && (
+                      <span
+                        className="text-[9px] font-semibold text-[#facc15] bg-[rgba(250,204,21,0.1)] px-1.5 py-0.5 rounded shrink-0"
+                        title={`Estimatet stammer fra en tidligere version — bekræft det for den nuværende (${versions.list?.[versions.current]?.label ?? versions.current})`}
+                      >
+                        {versions.list?.[versionOf(displayCell)]?.label ?? versionOf(displayCell)}
+                      </span>
+                    )}
                     <span
                       className="text-[9px] font-semibold text-[#a855f7] bg-[rgba(168,85,247,0.1)] px-1.5 py-0.5 rounded shrink-0"
                       title="Prioritet: sum af seeding-vægte (Tier 1=4, 2=3, 3=2, 4=1) for landene med denne arketype"
@@ -375,6 +439,7 @@ export default function PlayerEstimates({
                     </div>
                   )}
                 </div>
+                </Fragment>
               );
             })}
           </div>

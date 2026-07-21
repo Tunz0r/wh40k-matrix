@@ -7,10 +7,14 @@ import type { RosterArmy } from "./roster";
 // `auto` marks values propagated via list similarity — overridable, shown dimmed.
 // `needsTest` flags the estimate as a guess we still want to playtest — an
 // explicit low-confidence marker. Changing the value clears it (fresh judgment).
+// `ver` is the estimate VERSION the value was set in (see below). Cells with no
+// `ver` belong to the base version — that's every estimate made before
+// versioning existed, so nothing had to be rewritten to introduce it.
 export interface EstimateCell {
   v: number; // 0-20 WTC scale
   auto?: boolean;
   needsTest?: boolean;
+  ver?: string;
 }
 
 // An opponent list: faction/detachments/disposition metadata, optionally with
@@ -138,6 +142,104 @@ export async function setNeedsTestCells(
     updates[`${BASE}/${teamSlug}/estimates/${cellKey}/needsTest`] = flag ? true : null;
   }
   await update(ref(getDb()), updates);
+}
+
+// --- Estimate versions ---
+// An estimate is only true for one rules/meta era: a points update or dataslate
+// can invalidate a whole column of judgments. So estimates carry the version
+// they were made in, and the team can cut a new version when the meta moves —
+// old values are KEPT and carried forward, just marked as belonging to the
+// previous era so they can be re-confirmed rather than re-guessed from scratch.
+//
+// Lives next to the team node (like the bank) so subscribeToOpponents never
+// sees it. Cutting a version writes ONLY this node — never the estimates.
+export interface EstimateVersion {
+  id: string;
+  label: string;
+  createdAt: number;
+}
+
+export interface VersionsNode {
+  current: string;
+  list: Record<string, EstimateVersion>;
+}
+
+const VERSIONS = `estimates/${TEAM_SLUG}-versioner`;
+
+// The era every pre-existing estimate was made in: 11th edition, freshly out.
+export const BASE_VERSION_ID = "11th-fresh";
+export const BASE_VERSION_LABEL = "11th fresh";
+
+const BASE_VERSIONS: VersionsNode = {
+  current: BASE_VERSION_ID,
+  list: {
+    [BASE_VERSION_ID]: { id: BASE_VERSION_ID, label: BASE_VERSION_LABEL, createdAt: 0 },
+  },
+};
+
+// A cell with no stamp is a base-version estimate.
+export function versionOf(cell: EstimateCell | undefined): string {
+  return cell?.ver ?? BASE_VERSION_ID;
+}
+
+// Stamp a cell being written with the version it's made in. Base-version cells
+// stay unstamped, so the common case writes exactly the same shape as before.
+export function stampVersion(cell: EstimateCell, versionId: string): EstimateCell {
+  return versionId === BASE_VERSION_ID ? cell : { ...cell, ver: versionId };
+}
+
+export function subscribeToVersions(
+  callback: (versions: VersionsNode) => void
+): () => void {
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const r = ref(getDb(), VERSIONS);
+    onValue(r, (snap) => callback((snap.val() as VersionsNode) || BASE_VERSIONS));
+    cleanup = () => off(r);
+  });
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
+}
+
+// Write the base version node once, if the team has never had one. Never
+// touches an existing node — a team that already cut versions keeps them.
+export async function ensureVersions(): Promise<void> {
+  await authReady();
+  const r = ref(getDb(), VERSIONS);
+  const snap = await get(r);
+  if (!snap.exists()) await set(r, BASE_VERSIONS);
+}
+
+export function versionId(label: string): string {
+  return label
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Cut a new version and make it current. Estimates are untouched: they keep
+// their old stamp and show up as carried over from the previous era.
+export async function createVersion(label: string): Promise<string> {
+  await authReady();
+  const id = versionId(label);
+  if (!id) throw new Error("Tomt versionsnavn");
+  await update(ref(getDb(), VERSIONS), {
+    current: id,
+    [`list/${id}`]: { id, label, createdAt: Date.now() },
+  });
+  return id;
+}
+
+// Switch back to an existing version (e.g. undoing a version cut).
+export async function setCurrentVersion(id: string): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `${VERSIONS}/current`), id);
 }
 
 // --- Archetype estimate bank ---
