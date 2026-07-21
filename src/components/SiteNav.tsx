@@ -21,7 +21,17 @@ const LINKS: { href: string; label: string; match: (path: string) => boolean }[]
   {
     href: "/estimates",
     label: "Estimater",
-    match: (p) => p.startsWith("/estimates") || p.startsWith("/sanity") || p.startsWith("/meta"),
+    match: (p) => p.startsWith("/estimates"),
+  },
+  {
+    href: "/meta",
+    label: "Meta",
+    match: (p) => p.startsWith("/meta"),
+  },
+  {
+    href: "/sanity",
+    label: "Sanity",
+    match: (p) => p.startsWith("/sanity"),
   },
   {
     href: "/player",
@@ -70,7 +80,7 @@ export default function SiteNav() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                  className={`px-2.5 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
                     active
                       ? "bg-[rgba(168,85,247,0.15)] text-[#c084fc]"
                       : "text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04]"
