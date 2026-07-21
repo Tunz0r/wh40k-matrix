@@ -133,6 +133,15 @@ export default function PlayerEstimates({
 
   const clusterKey = (c: ListCluster) => `${c.rep.teamSlug}_${c.rep.listIdx}`;
 
+  // Sort key only — the card still displays the detachments as written. Lists
+  // name the same pair in either order ("Assimilation Swarm, Talons of the Norn
+  // Queen" vs the reverse), and those land in separate clusters often enough
+  // that sorting on the raw string threw look-alike archetypes to opposite ends
+  // of their codex. Normalising the order puts them next to each other, where a
+  // wrong split is actually visible.
+  const detSortKey = (l: { detachments?: string[] | null }) =>
+    [...(l.detachments || [])].map((d) => d.trim().toLowerCase()).sort().join(" + ");
+
   // Within a block: grouped by codex, then alphabetically by detachment, so an
   // archetype sits in the same relative place whether it's estimated or not.
   const byCodex = (a: Annotated, b: Annotated) => {
@@ -140,7 +149,7 @@ export default function PlayerEstimates({
     const bl = b.cluster.rep.list;
     return (
       al.faction.localeCompare(bl.faction) ||
-      (al.detachments || []).join(", ").localeCompare((bl.detachments || []).join(", ")) ||
+      detSortKey(al).localeCompare(detSortKey(bl)) ||
       (al.disposition || "").localeCompare(bl.disposition || "")
     );
   };
