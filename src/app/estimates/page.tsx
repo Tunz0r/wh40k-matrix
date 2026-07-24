@@ -338,7 +338,20 @@ export default function EstimatesPage() {
   // Manual estimate + propagation: every list ≥80% similar (whole field) gets the
   // same value for the same one of our armies, unless it was set manually.
   // Played opponents are never written to — their estimates are locked history.
-  function setEstimate(teamSlug: string, ourIdx: number, theirIdx: number, value: number | null) {
+  //
+  // `clusterTargets` (passed when estimating a whole archetype) are the cluster's
+  // members: they ALWAYS receive the value, even ones below the similarity
+  // threshold to the anchor. Similarity propagation alone strands members that
+  // are <75% to the anchor or were added after the estimate was set, so an
+  // archetype could be "estimated" yet leave member cells empty — the explicit
+  // target list closes that gap so estimating an archetype covers all its lists.
+  function setEstimate(
+    teamSlug: string,
+    ourIdx: number,
+    theirIdx: number,
+    value: number | null,
+    clusterTargets?: { teamSlug: string; listIdx: number }[]
+  ) {
     if (playedRounds.has(teamSlug)) return;
     const updates: Record<string, EstimateCell | null> = {};
     updates[`${teamSlug}/${ourIdx}_${theirIdx}`] =
@@ -357,6 +370,16 @@ export default function EstimatesPage() {
           });
         }
       }
+    }
+    // Explicit cluster members: fill (or clear) regardless of similarity, but
+    // never overwrite a manual estimate or touch a played opponent.
+    for (const t of clusterTargets || []) {
+      if (playedRounds.has(t.teamSlug)) continue;
+      const key = `${t.teamSlug}/${ourIdx}_${t.listIdx}`;
+      if (key in updates) continue;
+      const existing = opponents[t.teamSlug]?.estimates?.[`${ourIdx}_${t.listIdx}`];
+      if (existing && !existing.auto) continue;
+      updates[key] = value === null ? null : stampVersion({ v: value, auto: true }, currentVersion);
     }
     writeEstimateCells(updates).catch(() => {});
   }

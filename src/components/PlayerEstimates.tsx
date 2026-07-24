@@ -63,7 +63,13 @@ export default function PlayerEstimates({
   playedRounds: Map<string, number>;
   profiles?: ProfilesNode;
   versions: VersionsNode;
-  onSet: (teamSlug: string, ourIdx: number, theirIdx: number, v: number | null) => void;
+  onSet: (
+    teamSlug: string,
+    ourIdx: number,
+    theirIdx: number,
+    v: number | null,
+    clusterTargets?: { teamSlug: string; listIdx: number }[]
+  ) => void;
   onNeedsTest: (keys: string[], flag: boolean) => void;
 }) {
   const [myIdx, setMyIdx] = useState<number | null>(null);
@@ -399,7 +405,18 @@ export default function PlayerEstimates({
                     <EstimateInput
                       cell={displayCell}
                       locked={!anchor}
-                      onChange={(v) => anchor && onSet(anchor.teamSlug, myIdx, anchor.listIdx, v)}
+                      onChange={(v) =>
+                        anchor &&
+                        onSet(
+                          anchor.teamSlug,
+                          myIdx,
+                          anchor.listIdx,
+                          v,
+                          // Fill/clear every list in the archetype, even members
+                          // below the similarity threshold to the anchor.
+                          cluster.members.map((m) => ({ teamSlug: m.teamSlug, listIdx: m.listIdx }))
+                        )
+                      }
                     />
                   </div>
 
