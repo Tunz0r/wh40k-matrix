@@ -323,11 +323,30 @@ export default function EstimatesPage() {
       return;
     }
 
+    // Merge, don't overwrite. When re-importing an existing country (e.g. loading
+    // the real WTC lists over the placeholder compositions) keep the captain's
+    // work: the team-level scouting note always survives; per-list notes and
+    // MANUAL estimates carry over only when that slot keeps the same faction, so
+    // a real list can't silently inherit a note/estimate meant for a different
+    // army. Auto estimates are always re-derived from the field's manuals against
+    // the new lists. A brand-new team has no `existing`, so nothing is preserved.
+    const existing = opponents[slug];
+    const mergedArmies: OpponentList[] = armies.map((a, j) => {
+      const old = existing?.armies?.[j];
+      return old?.notes && old.faction === a.faction ? { ...a, notes: old.notes } : a;
+    });
+    const estimates = buildAutoEstimates(mergedArmies);
+    for (const [key, cell] of Object.entries(existing?.estimates || {})) {
+      if (!cell || cell.auto) continue; // only the captain's manual judgments
+      const j = Number(key.split("_")[1]);
+      if (existing?.armies?.[j]?.faction === mergedArmies[j]?.faction) estimates[key] = cell;
+    }
     const team: OpponentTeam = {
       name: importFor.name,
       tier: importFor.tier,
-      armies,
-      estimates: buildAutoEstimates(armies),
+      armies: mergedArmies,
+      estimates,
+      ...(existing?.notes ? { notes: existing.notes } : {}),
     };
     saveOpponentTeam(slug, team).catch(() => alert("Kunne ikke gemme — tjek Firebase"));
     setImportFor(null);
