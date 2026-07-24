@@ -35,7 +35,8 @@ import {
   slugifyTeam,
 } from "@/lib/estimates-db";
 import { computeStandings } from "@/lib/standings";
-import { formatUnitsLines } from "@/lib/list-parser";
+import { formatUnits, formatUnitsLines } from "@/lib/list-parser";
+import { uploadActualList } from "@/lib/profile-actions";
 
 // --- Types ---
 
@@ -506,6 +507,12 @@ export default function TournamentPage() {
   const [rosterImportText, setRosterImportText] = useState("");
   const [editingArmyIdx, setEditingArmyIdx] = useState<number | null>(null);
 
+  // Per-army actual-list panel: which army's list is expanded, its paste draft,
+  // and a busy guard while the archetype match/commit runs.
+  const [listArmyIdx, setListArmyIdx] = useState<number | null>(null);
+  const [listPaste, setListPaste] = useState("");
+  const [listBusy, setListBusy] = useState(false);
+
   // Initialize from localStorage
   useEffect(() => {
     setTournament(loadTournament());
@@ -708,6 +715,48 @@ export default function TournamentPage() {
     updateTournament({ roster });
     saveTeamSetup(TEAM_SLUG, { roster }).catch(() => {});
     setEditingArmyIdx(null);
+  }
+
+  // Opponents already played are locked — their estimate cells are historical
+  // record and switchSlotArchetype must not rewrite them.
+  const lockedSlugs = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of fbRounds)
+      if ((r.status === "live" || r.status === "completed") && r.opponentName)
+        s.add(slugifyTeam(r.opponentName));
+    return s;
+  }, [fbRounds]);
+
+  // Upload/replace an army's actual list: parse it, match (or create) a field
+  // archetype, and save it as that army's profile — the same "my army →
+  // archetype + actual list" the players set on /player.
+  async function submitActualList(idx: number) {
+    if (listBusy) return;
+    setListBusy(true);
+    try {
+      const res = await uploadActualList({
+        opponents,
+        slug: TEAM_SLUG,
+        armyIdx: idx,
+        pasteText: listPaste,
+        oldProfile: fbDoc?.profiles?.[`a${idx}`] ?? null,
+        lockedSlugs,
+      });
+      if (res.status === "error") { alert(res.message); return; }
+      if (res.status === "cancelled") return;
+      const arch = `${res.profile!.faction} — ${(res.profile!.detachments || []).join(", ")}`;
+      alert(
+        res.created
+          ? `Listen er gemt. Ny arketype oprettet: ${arch}.`
+          : `Listen er gemt og matchet til arketypen ${arch}` +
+              (res.matchedSize ? ` (${res.matchedSize} lister i feltet)` : "") +
+              (res.inherited ? `. ${res.inherited} estimater overtaget.` : ".")
+      );
+      setListPaste("");
+      setListArmyIdx(null);
+    } finally {
+      setListBusy(false);
+    }
   }
 
   function parseSeedingText(text: string): SeedingTier[] {
@@ -1207,30 +1256,100 @@ export default function TournamentPage() {
               )}
 
               {tournament.roster ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {tournament.roster.armies.map((army, i) =>
-                    editingArmyIdx === i ? (
-                      <ArmyEditor
-                        key={i}
-                        initial={army}
-                        onSave={(a) => saveArmyEdit(i, a)}
-                        onCancel={() => setEditingArmyIdx(null)}
-                      />
-                    ) : (
-                      <div key={i} className="flex items-stretch gap-1.5">
-                        <div className="flex-1 min-w-0">
-                          <ArmyCard army={army} index={i} highlight units={fbDoc?.profiles?.[`a${i}`]?.units} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 items-start">
+                  {tournament.roster.armies.map((army, i) => {
+                    if (editingArmyIdx === i)
+                      return (
+                        <ArmyEditor
+                          key={i}
+                          initial={army}
+                          onSave={(a) => saveArmyEdit(i, a)}
+                          onCancel={() => setEditingArmyIdx(null)}
+                        />
+                      );
+                    const prof = fbDoc?.profiles?.[`a${i}`];
+                    const hasList = !!prof?.units?.length;
+                    const listOpen = listArmyIdx === i;
+                    return (
+                      <div key={i} className="flex flex-col gap-1">
+                        <div className="flex items-stretch gap-1.5">
+                          <div className="flex-1 min-w-0">
+                            <ArmyCard army={army} index={i} highlight units={prof?.units} />
+                          </div>
+                          <button
+                            onClick={() => setEditingArmyIdx(i)}
+                            title={`Redigér ${army.faction}`}
+                            className="w-7 shrink-0 rounded-lg border border-dashed border-white/[0.08] text-[#8888a0] hover:text-[#a855f7] hover:border-[rgba(168,85,247,0.3)] text-[11px] transition-colors"
+                          >
+                            ✎
+                          </button>
                         </div>
                         <button
-                          onClick={() => setEditingArmyIdx(i)}
-                          title={`Redigér ${army.faction}`}
-                          className="w-7 shrink-0 rounded-lg border border-dashed border-white/[0.08] text-[#8888a0] hover:text-[#a855f7] hover:border-[rgba(168,85,247,0.3)] text-[11px] transition-colors"
+                          onClick={() => {
+                            setListArmyIdx(listOpen ? null : i);
+                            setListPaste("");
+                          }}
+                          className="flex items-center gap-1.5 text-[10px] px-1 py-0.5 transition-colors hover:text-[#e8e8f0]"
                         >
-                          ✎
+                          <span className={hasList ? "text-[#4ade80]" : "text-[#8888a0]"}>
+                            {hasList ? "📋 Aktuel liste" : "+ Upload liste"}
+                          </span>
+                          {prof && (
+                            <span className="text-[#8888a0] truncate">
+                              · {(prof.detachments || []).join(", ") || prof.faction}
+                            </span>
+                          )}
+                          <span className="ml-auto text-[#8888a0]">{listOpen ? "▴" : "▾"}</span>
                         </button>
+                        {listOpen && (
+                          <div className="rounded-lg border border-white/[0.08] bg-[#1a1a22] p-2.5 space-y-2">
+                            {hasList ? (
+                              <div>
+                                <div className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold mb-1">
+                                  {prof!.faction} — {(prof!.detachments || []).join(", ")}
+                                </div>
+                                <p
+                                  title={formatUnitsLines(prof!.units!)}
+                                  className="text-[10px] leading-[1.6] text-[#e8e8f0] break-words"
+                                >
+                                  {formatUnits(prof!.units!)}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-[10px] text-[#8888a0]">
+                                Ingen liste uploadet endnu. Indsæt hærens fulde liste-export nedenfor — den
+                                matches til en arketype (eller opretter en ny).
+                              </p>
+                            )}
+                            <textarea
+                              value={listPaste}
+                              onChange={(e) => setListPaste(e.target.value)}
+                              placeholder="Indsæt hele liste-exporten (GW-app, WTC eller NewRecruit)..."
+                              className="w-full h-24 bg-[#0f0f13] border border-white/[0.14] rounded-lg p-2 text-[10px] text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => submitActualList(i)}
+                                disabled={!listPaste.trim() || listBusy}
+                                className="text-[10px] font-medium text-white bg-[#a855f7] hover:bg-[#9333ea] disabled:opacity-40 disabled:cursor-not-allowed px-2.5 py-1 rounded-md transition-colors"
+                              >
+                                {listBusy ? "Gemmer…" : hasList ? "Erstat liste" : "Gem liste"}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setListArmyIdx(null);
+                                  setListPaste("");
+                                }}
+                                className="text-[10px] text-[#8888a0] hover:text-[#e8e8f0] px-2 py-1 transition-colors"
+                              >
+                                Luk
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )
-                  )}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-[11px] text-[#8888a0]">
