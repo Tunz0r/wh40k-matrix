@@ -106,7 +106,7 @@ export default function MetaPage() {
     let n = 0;
     for (const c of clusters)
       for (let i = 0; i < armies.length; i++)
-        if (archetypeWarmupStats(doc?.warmups, i, c.rep.list)) n++;
+        if (archetypeWarmupStats(doc?.warmups, i, c.rep.list, armies[i])) n++;
     return n;
   }, [biasMode, clusters, armies, doc]);
 
@@ -135,11 +135,11 @@ export default function MetaPage() {
       // against is replaced by our measured average result; everything else keeps
       // its raw estimate. `warmupN[i]` = games behind an overridden cell, 0 else.
       const warmupN = armies.map((_, i) =>
-        biasMode === "warmup" ? archetypeWarmupStats(doc?.warmups, i, c.rep.list)?.n ?? 0 : 0
+        biasMode === "warmup" ? archetypeWarmupStats(doc?.warmups, i, c.rep.list, armies[i])?.onArchetype ?? 0 : 0
       );
       const cells = rawCells.map((v, i) => {
         if (biasMode === "warmup") {
-          const w = archetypeWarmupStats(doc?.warmups, i, c.rep.list);
+          const w = archetypeWarmupStats(doc?.warmups, i, c.rep.list, armies[i]);
           if (w) return shrunkForecast(v, w);
         }
         return v;
@@ -323,7 +323,7 @@ export default function MetaPage() {
           {biasMode === "warmup" && (
             <span className="text-[10px] text-[#facc15]">
               {warmupCellCount > 0
-                ? `${warmupCellCount} celle${warmupCellCount === 1 ? "" : "r"} justeret mod faktiske warmup-resultater mod netop den arketype (vægtet efter antal kampe · grøn prik — rå værdi ved hover). Resten står urørt.`
+                ? `${warmupCellCount} celle${warmupCellCount === 1 ? "" : "r"} justeret mod warmup-resultater hvor hæren spillede sin NUVÆRENDE liste mod netop den arketype (vægtet efter antal kampe · grøn prik — rå værdi ved hover). Kampe med andre lister tæller kun lidt. Resten står urørt.`
                 : "Ingen warmup-kampe endnu — intet at justere. Log dem på Min side."}
             </span>
           )}
@@ -467,7 +467,7 @@ export default function MetaPage() {
                               className={`text-center px-0.5 ${onlyUntested && !flaggedCell ? "opacity-25" : ""}`}
                               title={
                                 wN > 0
-                                  ? `Warmup-justeret: rå estimat ${r.rawCells[i] ?? "—"} → ${v} (vægtet mod ${wN} kamp${wN === 1 ? "" : "e"} vs denne arketype)`
+                                  ? `Warmup-justeret: rå estimat ${r.rawCells[i] ?? "—"} → ${v} (vægtet mod ${wN} kamp${wN === 1 ? "" : "e"} med hærens nuværende liste vs denne arketype)`
                                   : undefined
                               }
                             >

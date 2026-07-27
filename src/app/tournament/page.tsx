@@ -359,7 +359,7 @@ function EstimateMatrix({
   const values = new Map<string, MatchupForecast>();
   for (const i of ourIdxs)
     for (const j of theirIdxs)
-      values.set(`${i}_${j}`, matchupForecast(opponents, warmups, i, theirArmies[j], oppName));
+      values.set(`${i}_${j}`, matchupForecast(opponents, warmups, i, theirArmies[j], ourArmies[i], oppName));
   const hasAny = [...values.values()].some((f) => f.base !== null || f.n > 0);
   if (ourIdxs.length === 0 || theirIdxs.length === 0) return null;
 
@@ -379,7 +379,7 @@ function EstimateMatrix({
         {hiddenCount > 0 && (
           <span className="text-[#8888a0] font-normal ml-2">— parrede hære er skjult</span>
         )}
-        <span className="text-[#8888a0] font-normal ml-2">· hold musen over en modstander for at se listen · <span className="text-[#4ade80]">w</span>N = warmup-justeret ud fra N kampe vs den arketype</span>
+        <span className="text-[#8888a0] font-normal ml-2">· hold musen over en modstander for at se listen · <span className="text-[#4ade80]">w</span>N = warmup-justeret ud fra N kampe med vores nuværende liste vs den arketype</span>
         {!hasAny && (
           <span className="text-[#8888a0] font-normal ml-2">
             — ingen estimater fundet. Udfyld dem under{" "}
@@ -426,7 +426,7 @@ function EstimateMatrix({
                       ? "Intet estimat"
                       : hasWarmup
                         ? `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s!.label}\n` +
-                          `Warmup-justeret, vægtet mod ${f!.n} kamp${f!.n === 1 ? "" : "e"} vs denne arketype` +
+                          `Warmup-justeret, vægtet mod ${f!.n} kamp${f!.n === 1 ? "" : "e"} med din NUVÆRENDE liste vs denne arketype` +
                           (f!.base !== null ? ` (rå estimat ${f!.base} → ${v})` : ` (intet rå estimat — snit af faktiske resultater)`)
                         : `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s!.label}`;
                   return (
@@ -899,7 +899,7 @@ export default function TournamentPage() {
     // estimate shifted to our measured result where we've warmed up vs this
     // archetype, else the raw estimate. This is the number coaching then tracks.
     const prefill = (ourIdx: number, theirIdx: number) => {
-      const f = matchupForecast(opponents, fbDoc?.warmups, ourIdx, armiesB[theirIdx], opponentRoster.name);
+      const f = matchupForecast(opponents, fbDoc?.warmups, ourIdx, armiesB[theirIdx], armiesA[ourIdx], opponentRoster.name);
       return f.n > 0 ? f.adjusted : f.base ?? 0;
     };
 
