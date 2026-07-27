@@ -30,14 +30,20 @@ import { TEAM_SLUG, TEAM_NAME, TOTAL_ROUNDS } from "@/lib/team";
 import {
   type OpponentMap,
   type OpponentTeam,
+  type ListCluster,
   subscribeToOpponents,
   estimateStyle,
   slugifyTeam,
+  clusterLists,
+  clusterEstimateValue,
+  listSimilarity,
+  SIMILARITY_THRESHOLD,
 } from "@/lib/estimates-db";
+import { computeCoverage } from "@/lib/coverage";
 import { computeStandings } from "@/lib/standings";
 import { formatUnits, formatUnitsLines } from "@/lib/list-parser";
 import { uploadActualList } from "@/lib/profile-actions";
-import { matchupForecast, type MatchupForecast } from "@/lib/forecast";
+import { matchupForecast, archetypeWarmupStats, type MatchupForecast } from "@/lib/forecast";
 
 // --- Types ---
 
@@ -341,6 +347,7 @@ function EstimateMatrix({
   theirArmies,
   hiddenOur,
   hiddenTheir,
+  isContested,
 }: {
   opponents: OpponentMap;
   warmups?: WarmupsNode;
@@ -349,6 +356,7 @@ function EstimateMatrix({
   theirArmies: RosterArmy[];
   hiddenOur?: Set<number>;
   hiddenTheir?: Set<number>;
+  isContested?: (list: RosterArmy) => boolean;
 }) {
   const short = (s: string) => (s.length > 15 ? s.slice(0, 14) + "…" : s);
   const ourIdxs = ourArmies.map((_, i) => i).filter((i) => !hiddenOur?.has(i));
@@ -394,15 +402,22 @@ function EstimateMatrix({
               <th className="text-left text-[10px] text-[#8888a0] font-semibold pr-2">
                 Vores \ Deres
               </th>
-              {theirIdxs.map((j) => (
-                <th
-                  key={j}
-                  className="text-[10px] text-[#c084fc] font-semibold w-16 max-w-16 truncate px-0.5 cursor-help underline decoration-dotted decoration-[#8888a0]/40 underline-offset-2"
-                  title={theirTooltip(j)}
-                >
-                  {j + 1}. {short(theirArmies[j].faction)}
-                </th>
-              ))}
+              {theirIdxs.map((j) => {
+                const fake = isContested?.(theirArmies[j]);
+                return (
+                  <th
+                    key={j}
+                    className="text-[10px] text-[#c084fc] font-semibold w-16 max-w-16 truncate px-0.5 cursor-help underline decoration-dotted decoration-[#8888a0]/40 underline-offset-2"
+                    title={
+                      theirTooltip(j) +
+                      (fake ? "\n\n⚠ Falsk dækning: vores svar mod denne arketype kan optages af andre factions samme runde — se Meta." : "")
+                    }
+                  >
+                    {fake && <span className="text-[#fb923c] mr-0.5" title="Falsk dækning">⚠</span>}
+                    {j + 1}. {short(theirArmies[j].faction)}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -564,6 +579,33 @@ export default function TournamentPage() {
       return subscribeToOpponents(setOpponents);
     } catch {}
   }, []);
+
+  // Live archetype clusters + which are "falsely covered" (contested), so the
+  // pairing matrix can flag opponent lists that only look covered.
+  const clusters = useMemo(() => clusterLists(opponents), [opponents]);
+  const contested = useMemo(() => {
+    const n = tournament.roster?.armies.length || 0;
+    const maskOf = (ci: number) => {
+      let m = 0;
+      for (let i = 0; i < n; i++) {
+        const v = clusterEstimateValue(opponents, clusters[ci], i);
+        if (v !== null && v >= 12) m |= 1 << i;
+      }
+      return m;
+    };
+    return computeCoverage(clusters, n, maskOf).contested;
+  }, [clusters, opponents, tournament.roster]);
+  // Is an arbitrary opponent list a contested (false-covered) archetype?
+  const isContestedList = useMemo(() => {
+    return (list: RosterArmy): boolean => {
+      let best: { c: ListCluster; s: number } | null = null;
+      for (const c of clusters) {
+        const s = listSimilarity(c.rep.list, { ...list, disposition: list.disposition ?? null });
+        if (s >= SIMILARITY_THRESHOLD && (!best || s > best.s)) best = { c, s };
+      }
+      return best ? contested.has(`${best.c.rep.teamSlug}_${best.c.rep.listIdx}`) : false;
+    };
+  }, [clusters, contested]);
 
   // Firebase is the authority for roster and seeding — sync down whenever it changes
   // (covers new browsers, cleared storage, and edits made on another device).
@@ -1063,42 +1105,57 @@ export default function TournamentPage() {
   }
 
   // Test tools use our REAL roster from the database — they only fake the opponent.
+  // A demo opponent built from the LIVE field to showcase the new pairing tools:
+  // its 8 lists (distinct factions) are chosen to prefer archetypes we've warmed
+  // up against with our current lists (→ warmup-adjusted cells, w·N) and ones that
+  // are falsely covered (→ ⚠ in the matrix). Falls back to any archetypes if the
+  // field is thin.
   function testOpponent(): RosterExport {
+    const ourArmies = tournament.roster?.armies || [];
+    const scored = clusters
+      .map((c) => {
+        const warm = ourArmies.some((a, i) => archetypeWarmupStats(fbDoc?.warmups, i, c.rep.list, a));
+        const fake = contested.has(`${c.rep.teamSlug}_${c.rep.listIdx}`);
+        return { c, score: (warm ? 2 : 0) + (fake ? 1 : 0) };
+      })
+      .sort((a, b) => b.score - a.score);
+    const picked: ListCluster[] = [];
+    const seen = new Set<string>();
+    // First the feature-rich ones, then pad with any distinct faction.
+    for (const pass of [scored.filter((x) => x.score > 0), scored]) {
+      for (const { c } of pass) {
+        const f = c.rep.list.faction;
+        if (seen.has(f)) continue;
+        seen.add(f);
+        picked.push(c);
+        if (picked.length === 8) break;
+      }
+      if (picked.length === 8) break;
+    }
     return {
       v: 1,
-      name: "Team Sweden",
-      armies: [
-        { faction: "World Eaters", detachments: ["Berzerker Warband"], disposition: "Purge the Foe" },
-        { faction: "Death Guard", detachments: ["Virulent Vectorium"], disposition: "Take and Hold" },
-        { faction: "Thousand Sons", detachments: ["Changehost of Deceit"], disposition: "Reconnaissance" },
-        { faction: "Drukhari", detachments: ["Realspace Raiders"], disposition: "Disruption" },
-        { faction: "Leagues of Votann", detachments: ["Brandfast Oathband"], disposition: "Priority Assets" },
-        { faction: "Adepta Sororitas", detachments: ["Army of Faith"], disposition: "Purge the Foe" },
-        { faction: "Chaos Knights", detachments: ["Helhunt Lance"], disposition: "Take and Hold" },
-        { faction: "Imperial Knights", detachments: ["Freeblade Company"], disposition: "Priority Assets" },
-      ],
+      name: "Demo (nye værktøjer)",
+      armies: picked.map((c) => ({
+        faction: c.rep.list.faction,
+        detachments: c.rep.list.detachments || [],
+        disposition: c.rep.list.disposition ?? null,
+      })),
     };
   }
 
-  async function testCoaching() {
+  // "Test coaching" now drops you straight into the pairing view against the demo
+  // opponent, so the Estimat-matrix shows warmup-adjusted estimates (w·N) and ⚠
+  // false-coverage flags in action. No round status is written — it's a local
+  // demo; pair on through to reach the coaching dashboard if you want.
+  function testCoaching() {
     if (!tournament.roster) { alert("Intet roster fundet — opdater roster først."); return; }
-    const dk = tournament.roster;
-    const se = testOpponent();
-    const modules = ["Initial Skirmish", "Initial Skirmish", "Main Engagement", "Main Engagement", "Main Engagement", "Main Engagement", "Main Engagement", "Champion"];
-    const estimates = [15, 8, 17, 10, 5, 12, 18, 6];
-    const matchupData: MatchupData[] = dk.armies.map((a, i) => ({
-      aFaction: a.faction, aDetachments: a.detachments, aDisposition: a.disposition ?? null,
-      bFaction: se.armies[i].faction, bDetachments: se.armies[i].detachments, bDisposition: se.armies[i].disposition,
-      module: modules[i], layoutPage: null, estimate: estimates[i], aVP: 0, bVP: 0, round: 1, notes: "", final: false,
-    }));
-    try {
-      const id = await createSession({ teamAName: TEAM_NAME, teamBName: "Team Sweden", createdAt: Date.now(), matchups: matchupData });
-      await setActiveSession(TEAM_SLUG, id, currentRoundNumber, "Team Sweden");
-      window.location.href = `/coaching/${id}`;
-    } catch (e) {
-      console.error("Failed to create test coaching session:", e);
-      alert("Kunne ikke oprette coaching session. Tjek Firebase-konfigurationen.");
-    }
+    const demo = testOpponent();
+    if (demo.armies.length === 0) { alert("Ingen arketyper i feltet endnu — tilføj lister under Estimater."); return; }
+    setOpponentRoster(demo);
+    setMatchups([]);
+    setPairingPhase("skirmish1-defender");
+    resetModuleState();
+    setView("round-pairing");
   }
 
   if (!initialized) {
@@ -1611,9 +1668,10 @@ export default function TournamentPage() {
             <div className="text-center flex justify-center gap-2">
               <button
                 onClick={testCoaching}
+                title="Åbner parringsvisningen mod en demo-modstander bygget af feltet — vis warmup-justerede estimater (w·N) og ⚠ falsk dækning i praksis. Ingen runde-status ændres."
                 className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
               >
-                Test coaching
+                Test coaching (demo-parring)
               </button>
             </div>
           </div>
@@ -1770,6 +1828,7 @@ export default function TournamentPage() {
               theirArmies={opponentRoster.armies}
               hiddenOur={pairedA}
               hiddenTheir={pairedB}
+              isContested={isContestedList}
             />
 
             {/* Defender selection */}

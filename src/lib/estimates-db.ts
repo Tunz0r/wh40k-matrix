@@ -529,6 +529,22 @@ export function clusterLists(opponents: OpponentMap): ListCluster[] {
   return clusters;
 }
 
+// Best current estimate for one of our armies vs an archetype cluster: a manual
+// value wins over an auto one; falls back to any member's cell. Shared by /meta
+// and the coverage analysis so "do we answer this archetype" is computed one way.
+export function clusterEstimateValue(
+  opponents: OpponentMap,
+  cluster: ListCluster,
+  ourIdx: number
+): number | null {
+  const cellFor = (m: ClusterMember): EstimateCell | undefined =>
+    opponents[m.teamSlug]?.estimates?.[`${ourIdx}_${m.listIdx}`];
+  const rep = cellFor(cluster.rep);
+  const manual = cluster.members.map(cellFor).find((c) => c && !c.auto);
+  const cell = (rep && !rep.auto ? rep : manual) ?? rep ?? cluster.members.map(cellFor).find(Boolean);
+  return cell ? cell.v : null;
+}
+
 // Look up the best estimate for one of our armies vs an arbitrary opponent list.
 // Prefers the named team's own stored lists, then falls back to the most
 // similar list (≥ threshold) anywhere in the field.

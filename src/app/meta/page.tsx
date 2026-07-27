@@ -15,6 +15,7 @@ import {
   type OpponentList,
 } from "@/lib/estimates-db";
 import { archetypeWarmupStats, shrunkForecast } from "@/lib/forecast";
+import { computeCoverage } from "@/lib/coverage";
 import { formatUnitsLines } from "@/lib/list-parser";
 
 // An archetype is "answered" when at least one of our armies estimates ≥ ANSWER
@@ -181,65 +182,15 @@ export default function MetaPage() {
     });
   }, [clusters, armies, clusterEstimate, cellNeedsTest, biasMode, doc]);
 
-  // --- Real coverage ("fake" detection) ---
-  // Each of our armies plays once per round, and each country brings each faction
-  // once. So "≥2 covered" is FAKE when other factions' threats can occupy EVERY
-  // army that answers this archetype — leaving it to a bad matchup even though on
-  // paper it looks covered. Worst-case, faction-once aware: an archetype X is
-  // contested iff the armies answering X can all be claimed by distinct OTHER
-  // factions whose threats are themselves only answerable within that same pool
-  // (a bipartite saturation of X's answer-armies). Uses the displayed
-  // (bias-adjusted) answers so it matches what's on screen.
+  // Real coverage ("fake" detection) + per-army load — see lib/coverage. Uses the
+  // displayed (warmup-adjusted) answers so it matches what's on screen.
   const coverage = useMemo(() => {
-    const A = armies.length;
-    const maskOf = (r: (typeof rows)[number]) => {
+    const maskOf = (ci: number) => {
       let m = 0;
-      r.cells.forEach((v, i) => { if (v !== null && v >= ANSWER) m |= 1 << i; });
+      rows[ci].cells.forEach((v, i) => { if (v !== null && v >= ANSWER) m |= 1 << i; });
       return m;
     };
-    const popcount = (x: number) => { let c = 0; while (x) { c += x & 1; x >>= 1; } return c; };
-    // per-army load = distinct factions it answers; per-faction = its answer masks
-    const armyFac: Set<string>[] = armies.map(() => new Set<string>());
-    // soleFac[i] = factions with a threat answered by ONLY army i — if brought,
-    // army i is the sole thing that beats them, so a rational captain must spend
-    // it there. That's what makes another archetype's coverage collapse.
-    const soleFac: Set<string>[] = armies.map(() => new Set<string>());
-    for (const r of rows) {
-      const m = maskOf(r);
-      if (!m) continue;
-      const f = r.c.rep.list.faction;
-      for (let i = 0; i < A; i++) if (m & (1 << i)) armyFac[i].add(f);
-      if ((m & (m - 1)) === 0) soleFac[31 - Math.clz32(m)].add(f); // single-bit mask
-    }
-    const armyLoad = armyFac.map((s) => s.size);
-
-    // X (covered) is CONTESTED when each of its answer armies can be claimed by a
-    // DISTINCT other faction that only that army answers — the opponent brings
-    // those, we must spend X's armies on them, X is left uncovered. Faction-once
-    // aware (each faction matched to at most one army). Bipartite saturation.
-    const contested = new Set<string>();
-    for (const r of rows) {
-      const AX = maskOf(r);
-      const a = popcount(AX);
-      if (a < 2) continue;
-      const fx = r.c.rep.list.faction;
-      const armyBits: number[] = [];
-      for (let i = 0; i < A; i++) if (AX & (1 << i)) armyBits.push(i);
-      const assign = new Map<string, number>(); // sole-dependent faction → army bit index
-      const tryClaim = (bi: number, seen: Set<string>): boolean => {
-        for (const f of soleFac[armyBits[bi]]) {
-          if (f === fx || seen.has(f)) continue;
-          seen.add(f);
-          const cur = assign.get(f);
-          if (cur === undefined || tryClaim(cur, seen)) { assign.set(f, bi); return true; }
-        }
-        return false;
-      };
-      let claimed = 0;
-      for (let bi = 0; bi < armyBits.length; bi++) if (tryClaim(bi, new Set())) claimed++;
-      if (claimed === a) contested.add(`${r.c.rep.teamSlug}_${r.c.rep.listIdx}`);
-    }
-    return { armyLoad, contested, factionCount: new Set(rows.map((r) => r.c.rep.list.faction)).size };
+    return computeCoverage(rows.map((r) => r.c), armies.length, maskOf);
   }, [rows, armies]);
 
   const counts = useMemo(() => {
