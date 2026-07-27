@@ -13,7 +13,7 @@ import {
   deserializeRoster,
 } from "@/lib/roster";
 import { getLayouts, getLayoutImage } from "@/lib/layouts";
-import { createSession, type MatchupData } from "@/lib/session";
+import { createSession, fetchSession, type MatchupData, type SessionData } from "@/lib/session";
 import ArmyEditor from "@/components/ArmyEditor";
 import {
   saveTeamSetup,
@@ -348,6 +348,8 @@ function EstimateMatrix({
   hiddenOur,
   hiddenTheir,
   isContested,
+  needsTest,
+  playedInTournament,
 }: {
   opponents: OpponentMap;
   warmups?: WarmupsNode;
@@ -357,6 +359,8 @@ function EstimateMatrix({
   hiddenOur?: Set<number>;
   hiddenTheir?: Set<number>;
   isContested?: (list: RosterArmy) => boolean;
+  needsTest?: (ourIdx: number, list: RosterArmy) => boolean;
+  playedInTournament?: (ourFaction: string, list: RosterArmy) => boolean;
 }) {
   const short = (s: string) => (s.length > 15 ? s.slice(0, 14) + "…" : s);
   const ourIdxs = ourArmies.map((_, i) => i).filter((i) => !hiddenOur?.has(i));
@@ -387,7 +391,7 @@ function EstimateMatrix({
         {hiddenCount > 0 && (
           <span className="text-[#8888a0] font-normal ml-2">— parrede hære er skjult</span>
         )}
-        <span className="text-[#8888a0] font-normal ml-2">· hold musen over en modstander for at se listen · <span className="text-[#4ade80]">w</span>N = warmup-justeret ud fra N kampe med vores nuværende liste vs den arketype</span>
+        <span className="text-[#8888a0] font-normal ml-2">· hold musen over en modstander for at se listen · <span className="text-[#4ade80]">w</span>N = warmup-justeret ud fra N kampe med vores nuværende liste vs den arketype · 🧪 = usikkert estimat uden warmup/turneringskamp til at bekræfte det</span>
         {!hasAny && (
           <span className="text-[#8888a0] font-normal ml-2">
             — ingen estimater fundet. Udfyld dem under{" "}
@@ -435,19 +439,27 @@ function EstimateMatrix({
                   // Show the warmup-adjusted forecast when we have games vs this
                   // archetype, otherwise the raw estimate.
                   const v = f ? (hasWarmup ? f.adjusted : f.base) : null;
-                  const s = v !== null && v !== undefined ? estimateStyle(v) : null;
+                  const hasV = v !== null && v !== undefined;
+                  const s = hasV ? estimateStyle(v) : null;
+                  // Unverified guess: estimate marked "unsure" (🧪) with no warmup
+                  // and no earlier tournament game to back the number up.
+                  const played = hasV ? playedInTournament?.(ourArmies[i].faction, theirArmies[j]) ?? false : false;
+                  const unverified = hasV && !hasWarmup && !played && (needsTest?.(i, theirArmies[j]) ?? false);
                   const title =
-                    v === null || v === undefined
+                    !hasV
                       ? "Intet estimat"
-                      : hasWarmup
-                        ? `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s!.label}\n` +
-                          `Warmup-justeret, vægtet mod ${f!.n} kamp${f!.n === 1 ? "" : "e"} med din NUVÆRENDE liste vs denne arketype` +
-                          (f!.base !== null ? ` (rå estimat ${f!.base} → ${v})` : ` (intet rå estimat — snit af faktiske resultater)`)
-                        : `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s!.label}`;
+                      : (hasWarmup
+                          ? `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s!.label}\n` +
+                            `Warmup-justeret, vægtet mod ${f!.n} kamp${f!.n === 1 ? "" : "e"} med din NUVÆRENDE liste vs denne arketype` +
+                            (f!.base !== null ? ` (rå estimat ${f!.base} → ${v})` : ` (intet rå estimat — snit af faktiske resultater)`)
+                          : `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s!.label}`) +
+                        (unverified
+                          ? "\n\n🧪 Usikkert estimat — ingen warmup- eller turneringskampe med denne liste mod arketypen til at bekræfte tallet."
+                          : "");
                   return (
                     <td key={j}>
                       <div
-                        className="relative w-16 h-11 rounded-md border flex items-center justify-center text-[17px] font-bold"
+                        className={`relative w-16 h-11 rounded-md border flex items-center justify-center text-[17px] font-bold ${unverified ? "ring-1 ring-[#fb923c]" : ""}`}
                         style={
                           s
                             ? { background: s.bg, color: s.fg, borderColor: s.border }
@@ -455,13 +467,21 @@ function EstimateMatrix({
                         }
                         title={title}
                       >
-                        {v !== null && v !== undefined ? v : "—"}
+                        {hasV ? v : "—"}
                         {hasWarmup && (
                           <span
                             className="absolute top-0.5 right-1 text-[8px] font-bold leading-none text-[#4ade80]"
                             title={`Warmup-justeret (${f!.n} kampe)`}
                           >
                             w{f!.n}
+                          </span>
+                        )}
+                        {unverified && (
+                          <span
+                            className="absolute top-0 left-0.5 text-[9px] leading-none"
+                            title="Usikkert & ubekræftet estimat"
+                          >
+                            🧪
                           </span>
                         )}
                       </div>
@@ -606,6 +626,50 @@ export default function TournamentPage() {
       return best ? contested.has(`${best.c.rep.teamSlug}_${best.c.rep.listIdx}`) : false;
     };
   }, [clusters, contested]);
+
+  // Finished games from earlier rounds — a second source (besides warmups) that
+  // verifies an estimate against real play.
+  const [pastSessions, setPastSessions] = useState<SessionData[]>([]);
+  useEffect(() => {
+    const done = (fbDoc?.rounds || []).filter((r) => r.status === "completed" && r.sessionId);
+    if (!done.length) { setPastSessions([]); return; }
+    let cancelled = false;
+    Promise.all(done.map((r) => fetchSession(r.sessionId!).catch(() => null))).then((list) => {
+      if (!cancelled) setPastSessions(list.filter((s): s is SessionData => !!s));
+    });
+    return () => { cancelled = true; };
+  }, [fbDoc?.rounds]);
+
+  // Has our army (by faction) already played this archetype in a finished
+  // tournament game? That result verifies the estimate just like a warmup.
+  const playedInTournament = useMemo(() => {
+    const played = pastSessions.flatMap((s) =>
+      (s.matchups || [])
+        .filter((m) => m.final)
+        .map((m) => ({ ourFaction: m.aFaction, list: { faction: m.bFaction, detachments: m.bDetachments || [], disposition: m.bDisposition ?? null } }))
+    );
+    return (ourFaction: string, theirList: RosterArmy): boolean =>
+      played.some(
+        (p) =>
+          p.ourFaction === ourFaction &&
+          listSimilarity(p.list, { ...theirList, disposition: theirList.disposition ?? null }) >= SIMILARITY_THRESHOLD
+      );
+  }, [pastSessions]);
+
+  // Is the estimate for (our army i, this opponent archetype) flagged "unsure"
+  // (needsTest / 🧪)? Reads the same per-archetype flag set in "Min hær".
+  const matchupNeedsTest = useMemo(() => {
+    return (ourIdx: number, list: RosterArmy): boolean => {
+      let best: { c: ListCluster; s: number } | null = null;
+      for (const c of clusters) {
+        const s = listSimilarity(c.rep.list, { ...list, disposition: list.disposition ?? null });
+        if (s >= SIMILARITY_THRESHOLD && (!best || s > best.s)) best = { c, s };
+      }
+      return best
+        ? best.c.members.some((m) => opponents[m.teamSlug]?.estimates?.[`${ourIdx}_${m.listIdx}`]?.needsTest)
+        : false;
+    };
+  }, [clusters, opponents]);
 
   // Firebase is the authority for roster and seeding — sync down whenever it changes
   // (covers new browsers, cleared storage, and edits made on another device).
@@ -1829,6 +1893,8 @@ export default function TournamentPage() {
               hiddenOur={pairedA}
               hiddenTheir={pairedB}
               isContested={isContestedList}
+              needsTest={matchupNeedsTest}
+              playedInTournament={playedInTournament}
             />
 
             {/* Defender selection */}
