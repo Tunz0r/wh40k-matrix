@@ -8,13 +8,13 @@ import {
   subscribeToOpponents,
   estimateStyle,
   clusterLists,
-  lookupEstimate,
   type OpponentMap,
   type ListCluster,
   type ClusterMember,
   type EstimateCell,
   type OpponentList,
 } from "@/lib/estimates-db";
+import { archetypeWarmupStats, shrunkForecast } from "@/lib/forecast";
 import { formatUnitsLines } from "@/lib/list-parser";
 
 // An archetype is "answered" when at least one of our armies estimates ≥ ANSWER
@@ -22,10 +22,10 @@ import { formatUnitsLines } from "@/lib/list-parser";
 const ANSWER = 12;
 const PROBLEM = 8;
 
-// Per-player bias needs a few games before it's trusted; below this we fall
-// back to the team-wide number.
-const MIN_PLAYER_GAMES = 3;
-type BiasMode = "raw" | "team" | "player";
+// "raw" = library estimates as-is; "warmup" = archetype-specific correction,
+// where each cell we've warmed up against is replaced by our measured average
+// result — a targeted shift, not a blanket per-player/team average.
+type BiasMode = "raw" | "warmup";
 const BIAS_KEY = "wtc-meta-bias";
 const TEST_KEY = "wtc-meta-onlytest";
 
@@ -37,7 +37,7 @@ function tierWeight(tier: string): number {
   return m ? TIER_WEIGHT[Number(m[0])] ?? 0 : 0;
 }
 
-function Chip({ v, answer, test }: { v: number; answer?: boolean; test?: boolean }) {
+function Chip({ v, answer, test, warmup }: { v: number; answer?: boolean; test?: boolean; warmup?: boolean }) {
   const s = estimateStyle(v);
   return (
     <span className="relative inline-flex">
@@ -51,6 +51,12 @@ function Chip({ v, answer, test }: { v: number; answer?: boolean; test?: boolean
         <span
           className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#fb923c] border border-[#0f0f13]"
           title="Estimatet skal testes (usikkert)"
+        />
+      )}
+      {warmup && (
+        <span
+          className="absolute -bottom-1 -right-1 w-2 h-2 rounded-full bg-[#4ade80] border border-[#0f0f13]"
+          title="Warmup-justeret ud fra faktiske resultater mod denne arketype"
         />
       )}
     </span>
@@ -83,7 +89,7 @@ export default function MetaPage() {
   useEffect(() => {
     setOnlyUntested(sessionStorage.getItem(TEST_KEY) === "1");
     const m = sessionStorage.getItem(BIAS_KEY);
-    if (m === "team" || m === "player" || m === "raw") setBiasMode(m);
+    if (m === "warmup" || m === "raw") setBiasMode(m);
   }, []);
   function pickBias(m: BiasMode) {
     setBiasMode(m);
@@ -93,48 +99,16 @@ export default function MetaPage() {
   const armies = useMemo(() => doc?.roster?.armies || [], [doc]);
   const clusters = useMemo(() => clusterLists(opponents), [opponents]);
 
-  // Calibration bias from warmup games: how far actuals land from our CURRENT
-  // estimate, per army and team-wide. Positive = we play better than we
-  // estimate (estimates too pessimistic). Display-only — never rewrites data.
-  const bias = useMemo(() => {
-    const perArmy: Record<number, { bias: number; n: number }> = {};
-    const teamDeltas: number[] = [];
-    armies.forEach((_, idx) => {
-      const node = doc?.warmups?.[`a${idx}`] || {};
-      const deltas: number[] = [];
-      for (const g of Object.values(node)) {
-        const est = lookupEstimate(opponents, null, idx, {
-          faction: g.faction,
-          detachments: g.detachments || [],
-          disposition: (g.disposition ?? null) as OpponentList["disposition"],
-        });
-        if (est !== null) {
-          deltas.push(g.actual - est);
-          teamDeltas.push(g.actual - est);
-        }
-      }
-      perArmy[idx] = deltas.length
-        ? { bias: deltas.reduce((a, b) => a + b, 0) / deltas.length, n: deltas.length }
-        : { bias: 0, n: 0 };
-    });
-    const team = teamDeltas.length
-      ? { bias: teamDeltas.reduce((a, b) => a + b, 0) / teamDeltas.length, n: teamDeltas.length }
-      : { bias: 0, n: 0 };
-    return { perArmy, team };
-  }, [doc, opponents, armies]);
-
-  // The correction applied to army idx under the current mode. Player mode
-  // falls back to the team number until the player has enough games.
-  const biasFor = useMemo(() => {
-    return (idx: number): number => {
-      if (biasMode === "team") return bias.team.bias;
-      if (biasMode === "player") {
-        const p = bias.perArmy[idx];
-        return p && p.n >= MIN_PLAYER_GAMES ? p.bias : bias.team.bias;
-      }
-      return 0;
-    };
-  }, [biasMode, bias]);
+  // How many warmup cells the archetype-specific view is currently overriding,
+  // for the header note.
+  const warmupCellCount = useMemo(() => {
+    if (biasMode !== "warmup") return 0;
+    let n = 0;
+    for (const c of clusters)
+      for (let i = 0; i < armies.length; i++)
+        if (archetypeWarmupStats(doc?.warmups, i, c.rep.list)) n++;
+    return n;
+  }, [biasMode, clusters, armies, doc]);
 
   // Our best current estimate per army vs a cluster — manual values win.
   const clusterEstimate = useMemo(() => {
@@ -157,10 +131,19 @@ export default function MetaPage() {
   const rows = useMemo(() => {
     return clusters.map((c) => {
       const rawCells = armies.map((_, i) => clusterEstimate(c, i));
-      // Bias-adjusted view (display-only); raw kept for the hover tooltip.
-      const cells = rawCells.map((v, i) =>
-        v === null ? null : Math.max(0, Math.min(20, Math.round(v + biasFor(i))))
+      // Archetype-specific warmup view (display-only): a cell we've warmed up
+      // against is replaced by our measured average result; everything else keeps
+      // its raw estimate. `warmupN[i]` = games behind an overridden cell, 0 else.
+      const warmupN = armies.map((_, i) =>
+        biasMode === "warmup" ? archetypeWarmupStats(doc?.warmups, i, c.rep.list)?.n ?? 0 : 0
       );
+      const cells = rawCells.map((v, i) => {
+        if (biasMode === "warmup") {
+          const w = archetypeWarmupStats(doc?.warmups, i, c.rep.list);
+          if (w) return shrunkForecast(v, w);
+        }
+        return v;
+      });
       const known = cells.filter((v): v is number => v !== null);
       const best = known.length ? Math.max(...known) : null;
       const bestIdx = best !== null ? cells.indexOf(best) : -1;
@@ -194,9 +177,9 @@ export default function MetaPage() {
       const title =
         [c.rep.list.disposition, countries.join(", ")].filter(Boolean).join(" · ") +
         (units ? `\n\n${formatUnitsLines(units)}` : "");
-      return { c, cells, rawCells, best, bestIdx, answerCount, testedAnswers, allAnswersUntested, untestedBy, category, weight, countries, title };
+      return { c, cells, rawCells, warmupN, best, bestIdx, answerCount, testedAnswers, allAnswersUntested, untestedBy, category, weight, countries, title };
     });
-  }, [clusters, armies, clusterEstimate, cellNeedsTest, biasFor]);
+  }, [clusters, armies, clusterEstimate, cellNeedsTest, biasMode, doc]);
 
   // --- Real coverage ("fake" detection) ---
   // Each of our armies plays once per round, and each country brings each faction
@@ -320,18 +303,16 @@ export default function MetaPage() {
           </span>
         </div>
         <div className="flex items-center gap-2 mt-2 flex-wrap">
-          <span className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">Justér for bias</span>
+          <span className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">Estimater</span>
           <div className="flex gap-1">
             {([
               ["raw", "Rå"],
-              ["team", `Hold (${bias.team.bias >= 0 ? "+" : ""}${bias.team.bias.toFixed(1)})`],
-              ["player", "Pr. spiller"],
+              ["warmup", "Warmup-justeret"],
             ] as [BiasMode, string][]).map(([m, label]) => (
               <button
                 key={m}
                 onClick={() => pickBias(m)}
-                disabled={m !== "raw" && bias.team.n === 0}
-                className={`text-[10px] px-2 py-0.5 rounded-md transition-colors disabled:opacity-30 ${
+                className={`text-[10px] px-2 py-0.5 rounded-md transition-colors ${
                   biasMode === m ? "bg-[#a855f7] text-white" : "bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0]"
                 }`}
               >
@@ -339,9 +320,11 @@ export default function MetaPage() {
               </button>
             ))}
           </div>
-          {biasMode !== "raw" && (
+          {biasMode === "warmup" && (
             <span className="text-[10px] text-[#facc15]">
-              Estimater vist justeret ud fra {bias.team.n} warmup-kampe (kun visning — rå værdi ved hover)
+              {warmupCellCount > 0
+                ? `${warmupCellCount} celle${warmupCellCount === 1 ? "" : "r"} justeret mod faktiske warmup-resultater mod netop den arketype (vægtet efter antal kampe · grøn prik — rå værdi ved hover). Resten står urørt.`
+                : "Ingen warmup-kampe endnu — intet at justere. Log dem på Min side."}
             </span>
           )}
           <button
@@ -475,6 +458,7 @@ export default function MetaPage() {
                         </td>
                         {r.cells.map((v, i) => {
                           const flaggedCell = cellNeedsTest(r.c, i);
+                          const wN = r.warmupN[i];
                           return (
                             <td
                               key={i}
@@ -482,13 +466,13 @@ export default function MetaPage() {
                               // flagged so the ones needing a test stand out.
                               className={`text-center px-0.5 ${onlyUntested && !flaggedCell ? "opacity-25" : ""}`}
                               title={
-                                v !== null && r.rawCells[i] !== v
-                                  ? `Rå estimat ${r.rawCells[i]} → justeret ${v}`
+                                wN > 0
+                                  ? `Warmup-justeret: rå estimat ${r.rawCells[i] ?? "—"} → ${v} (vægtet mod ${wN} kamp${wN === 1 ? "" : "e"} vs denne arketype)`
                                   : undefined
                               }
                             >
                               {v !== null ? (
-                                <Chip v={v} answer={v >= ANSWER} test={flaggedCell} />
+                                <Chip v={v} answer={v >= ANSWER} test={flaggedCell} warmup={wN > 0} />
                               ) : (
                                 <span className="text-[10px] text-[#44445a]">·</span>
                               )}

@@ -24,19 +24,20 @@ import {
   resetRound,
   subscribeToTournament,
   type TournamentDoc,
+  type WarmupsNode,
 } from "@/lib/tournament-db";
 import { TEAM_SLUG, TEAM_NAME, TOTAL_ROUNDS } from "@/lib/team";
 import {
   type OpponentMap,
   type OpponentTeam,
   subscribeToOpponents,
-  lookupEstimate,
   estimateStyle,
   slugifyTeam,
 } from "@/lib/estimates-db";
 import { computeStandings } from "@/lib/standings";
 import { formatUnits, formatUnitsLines } from "@/lib/list-parser";
 import { uploadActualList } from "@/lib/profile-actions";
+import { matchupForecast, type MatchupForecast } from "@/lib/forecast";
 
 // --- Types ---
 
@@ -334,6 +335,7 @@ const PHASE_LABELS: Record<PairingPhase, string> = {
 
 function EstimateMatrix({
   opponents,
+  warmups,
   oppName,
   ourArmies,
   theirArmies,
@@ -341,6 +343,7 @@ function EstimateMatrix({
   hiddenTheir,
 }: {
   opponents: OpponentMap;
+  warmups?: WarmupsNode;
   oppName: string | null | undefined;
   ourArmies: RosterArmy[];
   theirArmies: RosterArmy[];
@@ -351,11 +354,13 @@ function EstimateMatrix({
   const ourIdxs = ourArmies.map((_, i) => i).filter((i) => !hiddenOur?.has(i));
   const theirIdxs = theirArmies.map((_, j) => j).filter((j) => !hiddenTheir?.has(j));
   const hiddenCount = ourArmies.length - ourIdxs.length + (theirArmies.length - theirIdxs.length);
-  const values = new Map<string, number | null>();
+  // Each cell is an archetype-specific forecast: raw library estimate, shifted to
+  // our measured result when we've warmed up vs that archetype (n > 0).
+  const values = new Map<string, MatchupForecast>();
   for (const i of ourIdxs)
     for (const j of theirIdxs)
-      values.set(`${i}_${j}`, lookupEstimate(opponents, oppName, i, theirArmies[j]));
-  const hasAny = [...values.values()].some((v) => v !== null);
+      values.set(`${i}_${j}`, matchupForecast(opponents, warmups, i, theirArmies[j], oppName));
+  const hasAny = [...values.values()].some((f) => f.base !== null || f.n > 0);
   if (ourIdxs.length === 0 || theirIdxs.length === 0) return null;
 
   // Opponent lists (with parsed units) for the hover tooltip, matched by team + order
@@ -374,7 +379,7 @@ function EstimateMatrix({
         {hiddenCount > 0 && (
           <span className="text-[#8888a0] font-normal ml-2">— parrede hære er skjult</span>
         )}
-        <span className="text-[#8888a0] font-normal ml-2">· hold musen over en modstander for at se listen</span>
+        <span className="text-[#8888a0] font-normal ml-2">· hold musen over en modstander for at se listen · <span className="text-[#4ade80]">w</span>N = warmup-justeret ud fra N kampe vs den arketype</span>
         {!hasAny && (
           <span className="text-[#8888a0] font-normal ml-2">
             — ingen estimater fundet. Udfyld dem under{" "}
@@ -410,20 +415,40 @@ function EstimateMatrix({
                   {i + 1}. {short(ourArmies[i].faction)}
                 </th>
                 {theirIdxs.map((j) => {
-                  const v = values.get(`${i}_${j}`) ?? null;
-                  const s = v !== null ? estimateStyle(v) : null;
+                  const f = values.get(`${i}_${j}`);
+                  const hasWarmup = !!f && f.n > 0;
+                  // Show the warmup-adjusted forecast when we have games vs this
+                  // archetype, otherwise the raw estimate.
+                  const v = f ? (hasWarmup ? f.adjusted : f.base) : null;
+                  const s = v !== null && v !== undefined ? estimateStyle(v) : null;
+                  const title =
+                    v === null || v === undefined
+                      ? "Intet estimat"
+                      : hasWarmup
+                        ? `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s!.label}\n` +
+                          `Warmup-justeret, vægtet mod ${f!.n} kamp${f!.n === 1 ? "" : "e"} vs denne arketype` +
+                          (f!.base !== null ? ` (rå estimat ${f!.base} → ${v})` : ` (intet rå estimat — snit af faktiske resultater)`)
+                        : `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s!.label}`;
                   return (
                     <td key={j}>
                       <div
-                        className="w-16 h-11 rounded-md border flex items-center justify-center text-[17px] font-bold"
+                        className="relative w-16 h-11 rounded-md border flex items-center justify-center text-[17px] font-bold"
                         style={
                           s
                             ? { background: s.bg, color: s.fg, borderColor: s.border }
                             : { background: "#1a1a22", color: "#44445a", borderColor: "rgba(255,255,255,0.06)" }
                         }
-                        title={s ? `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s.label}` : "Intet estimat"}
+                        title={title}
                       >
-                        {v !== null ? v : "—"}
+                        {v !== null && v !== undefined ? v : "—"}
+                        {hasWarmup && (
+                          <span
+                            className="absolute top-0.5 right-1 text-[8px] font-bold leading-none text-[#4ade80]"
+                            title={`Warmup-justeret (${f!.n} kampe)`}
+                          >
+                            w{f!.n}
+                          </span>
+                        )}
                       </div>
                     </td>
                   );
@@ -870,8 +895,13 @@ export default function TournamentPage() {
     const armiesA = tournament.roster.armies;
     const armiesB = opponentRoster.armies;
     const moduleName = currentModuleName();
-    const prefill = (ourIdx: number, theirIdx: number) =>
-      lookupEstimate(opponents, opponentRoster.name, ourIdx, armiesB[theirIdx]) ?? 0;
+    // Prefill the matchup with the archetype-specific warmup forecast: the raw
+    // estimate shifted to our measured result where we've warmed up vs this
+    // archetype, else the raw estimate. This is the number coaching then tracks.
+    const prefill = (ourIdx: number, theirIdx: number) => {
+      const f = matchupForecast(opponents, fbDoc?.warmups, ourIdx, armiesB[theirIdx], opponentRoster.name);
+      return f.n > 0 ? f.adjusted : f.base ?? 0;
+    };
 
     const m1: Matchup = {
       a: armiesA[defenderA!],
@@ -1734,6 +1764,7 @@ export default function TournamentPage() {
 
             <EstimateMatrix
               opponents={opponents}
+              warmups={fbDoc?.warmups}
               oppName={opponentRoster.name}
               ourArmies={tournament.roster.armies}
               theirArmies={opponentRoster.armies}
