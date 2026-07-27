@@ -293,7 +293,7 @@ export default function MetaPage() {
           </p>
         )}
         <p className="text-[10px] text-[#8888a0] mt-1">
-          Hver arketype vs alle vores hære — hvem er vores svar, og hvor har vi huller? Målet er mindst to hære med et positivt svar (≥ {ANSWER}) mod hver arketype. Sorteret efter prioritet (seedingvægtet udbredelse). Ring om hvert svar ≥ {ANSWER}; 🧪-prik = estimatet skal stadig testes. Hover en række for listen.
+          Hver arketype vs alle vores hære — hvem er vores svar, og hvor har vi huller? Målet er mindst to hære med et positivt svar (≥ {ANSWER}) mod hver arketype. Grupperet efter faction (A→Å), derefter prioritet (seedingvægtet udbredelse). Ring om hvert svar ≥ {ANSWER}; 🧪-prik = estimatet skal stadig testes. Hover en række for listen.
         </p>
       </header>
 
@@ -312,9 +312,20 @@ export default function MetaPage() {
         )}
 
         {SECTIONS.map(({ cat, title, desc, color, border }) => {
+          const detKey = (l: OpponentList) =>
+            [...(l.detachments || [])].map((d) => d.trim().toLowerCase()).sort().join(" + ");
+          // Group each box by faction (A→Å); within a faction keep priority order,
+          // then detachment/disposition for a stable, readable sequence.
           const sectionRows = rows
             .filter((r) => r.category === cat && (!onlyUntested || r.untestedBy.length > 0))
-            .sort((a, b) => b.weight - a.weight || b.c.members.length - a.c.members.length);
+            .sort(
+              (a, b) =>
+                a.c.rep.list.faction.localeCompare(b.c.rep.list.faction) ||
+                b.weight - a.weight ||
+                detKey(a.c.rep.list).localeCompare(detKey(b.c.rep.list)) ||
+                (a.c.rep.list.disposition || "").localeCompare(b.c.rep.list.disposition || "") ||
+                b.c.members.length - a.c.members.length
+            );
           if (!sectionRows.length) return null;
           return (
             <div key={cat} className="rounded-xl border p-4" style={{ borderColor: border }}>
