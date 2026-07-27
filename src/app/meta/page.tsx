@@ -198,11 +198,78 @@ export default function MetaPage() {
     });
   }, [clusters, armies, clusterEstimate, cellNeedsTest, biasFor]);
 
+  // --- Real coverage ("fake" detection) ---
+  // Each of our armies plays once per round, and each country brings each faction
+  // once. So "≥2 covered" is FAKE when other factions' threats can occupy EVERY
+  // army that answers this archetype — leaving it to a bad matchup even though on
+  // paper it looks covered. Worst-case, faction-once aware: an archetype X is
+  // contested iff the armies answering X can all be claimed by distinct OTHER
+  // factions whose threats are themselves only answerable within that same pool
+  // (a bipartite saturation of X's answer-armies). Uses the displayed
+  // (bias-adjusted) answers so it matches what's on screen.
+  const coverage = useMemo(() => {
+    const A = armies.length;
+    const maskOf = (r: (typeof rows)[number]) => {
+      let m = 0;
+      r.cells.forEach((v, i) => { if (v !== null && v >= ANSWER) m |= 1 << i; });
+      return m;
+    };
+    const popcount = (x: number) => { let c = 0; while (x) { c += x & 1; x >>= 1; } return c; };
+    // per-army load = distinct factions it answers; per-faction = its answer masks
+    const armyFac: Set<string>[] = armies.map(() => new Set<string>());
+    // soleFac[i] = factions with a threat answered by ONLY army i — if brought,
+    // army i is the sole thing that beats them, so a rational captain must spend
+    // it there. That's what makes another archetype's coverage collapse.
+    const soleFac: Set<string>[] = armies.map(() => new Set<string>());
+    for (const r of rows) {
+      const m = maskOf(r);
+      if (!m) continue;
+      const f = r.c.rep.list.faction;
+      for (let i = 0; i < A; i++) if (m & (1 << i)) armyFac[i].add(f);
+      if ((m & (m - 1)) === 0) soleFac[31 - Math.clz32(m)].add(f); // single-bit mask
+    }
+    const armyLoad = armyFac.map((s) => s.size);
+
+    // X (covered) is CONTESTED when each of its answer armies can be claimed by a
+    // DISTINCT other faction that only that army answers — the opponent brings
+    // those, we must spend X's armies on them, X is left uncovered. Faction-once
+    // aware (each faction matched to at most one army). Bipartite saturation.
+    const contested = new Set<string>();
+    for (const r of rows) {
+      const AX = maskOf(r);
+      const a = popcount(AX);
+      if (a < 2) continue;
+      const fx = r.c.rep.list.faction;
+      const armyBits: number[] = [];
+      for (let i = 0; i < A; i++) if (AX & (1 << i)) armyBits.push(i);
+      const assign = new Map<string, number>(); // sole-dependent faction → army bit index
+      const tryClaim = (bi: number, seen: Set<string>): boolean => {
+        for (const f of soleFac[armyBits[bi]]) {
+          if (f === fx || seen.has(f)) continue;
+          seen.add(f);
+          const cur = assign.get(f);
+          if (cur === undefined || tryClaim(cur, seen)) { assign.set(f, bi); return true; }
+        }
+        return false;
+      };
+      let claimed = 0;
+      for (let bi = 0; bi < armyBits.length; bi++) if (tryClaim(bi, new Set())) claimed++;
+      if (claimed === a) contested.add(`${r.c.rep.teamSlug}_${r.c.rep.listIdx}`);
+    }
+    return { armyLoad, contested, factionCount: new Set(rows.map((r) => r.c.rep.list.faction)).size };
+  }, [rows, armies]);
+
   const counts = useMemo(() => {
     const n: Record<Category, number> = { problem: 0, even: 0, unknown: 0, single: 0, covered: 0 };
     for (const r of rows) n[r.category]++;
     return n;
   }, [rows]);
+
+  // Covered archetypes whose coverage is fake (answers can all be occupied).
+  const contestedCovered = useMemo(
+    () => rows.filter((r) => r.category === "covered" && coverage.contested.has(`${r.c.rep.teamSlug}_${r.c.rep.listIdx}`)).length,
+    [rows, coverage]
+  );
 
   // Answered archetypes whose answers are ALL still untested guesses.
   const untestedCovered = useMemo(
@@ -237,7 +304,14 @@ export default function MetaPage() {
             <span className="text-[#facc15] font-semibold">{counts.even} lige</span>
             <span className="text-[#8888a0] font-semibold">{counts.unknown} ukendte</span>
             <span className="text-[#fb923c] font-semibold">{counts.single} sårbare</span>
-            <span className="text-[#4ade80] font-semibold">{counts.covered} dækket</span>
+            <span className="text-[#4ade80] font-semibold">
+              {counts.covered} dækket
+              {contestedCovered > 0 && (
+                <span className="text-[#fb923c] font-normal" title="Dækket-arketyper hvis svar-hære alle kan optages af andre factions i samme runde — dækningen er reelt falsk">
+                  {" "}({contestedCovered} falsk)
+                </span>
+              )}
+            </span>
             {untestedCovered > 0 && (
               <span className="text-[#fb923c] font-semibold" title="Arketyper hvor alle vores svar stadig kun er utestede gæt">
                 🧪 {untestedCovered} utestet
@@ -293,8 +367,32 @@ export default function MetaPage() {
           </p>
         )}
         <p className="text-[10px] text-[#8888a0] mt-1">
-          Hver arketype vs alle vores hære — hvem er vores svar, og hvor har vi huller? Målet er mindst to hære med et positivt svar (≥ {ANSWER}) mod hver arketype. Grupperet efter faction (A→Å), derefter prioritet (seedingvægtet udbredelse). Ring om hvert svar ≥ {ANSWER}; 🧪-prik = estimatet skal stadig testes. Hover en række for listen.
+          Hver arketype vs alle vores hære — hvem er vores svar, og hvor har vi huller? Målet er mindst to hære med et positivt svar (≥ {ANSWER}) mod hver arketype. Grupperet efter faction (A→Å), derefter prioritet (seedingvægtet udbredelse). Ring om hvert svar ≥ {ANSWER}; 🧪-prik = estimatet skal stadig testes. ⚠ = falsk dækning: hver svar-hær er også det eneste svar på en anden faction, så modstanderen kan trække dem væk og efterlade arketypen uden svar. Hover en række for listen.
         </p>
+        {armies.length > 0 && (
+          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+            <span className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">Svar-belastning</span>
+            {armies.map((a, i) => {
+              const n = coverage.armyLoad[i];
+              const tone =
+                n === 0
+                  ? "text-[#f87171] border-[rgba(239,68,68,0.4)] bg-[rgba(239,68,68,0.06)]"
+                  : n >= Math.round(coverage.factionCount * 0.75)
+                    ? "text-[#fb923c] border-[rgba(251,146,60,0.4)] bg-[rgba(251,146,60,0.06)]"
+                    : "text-[#8888a0] border-white/[0.1]";
+              return (
+                <span
+                  key={i}
+                  title={`${a.player ? a.player + " — " : ""}${a.faction}: svarer på ${n} af ${coverage.factionCount} factions (≥ ${ANSWER})${n === 0 ? " — bidrager ingen dækning" : n >= Math.round(coverage.factionCount * 0.75) ? " — overtegnet: kan kun spille én kamp pr. runde" : ""}`}
+                  className={`text-[10px] px-1.5 py-0.5 rounded border ${tone}`}
+                >
+                  {(a.player || a.faction).slice(0, 5)} {n}
+                </span>
+              );
+            })}
+            <span className="text-[10px] text-[#8888a0]">= factions hæren svarer på (0 = ingen dækning · højt = overtegnet, spiller kun én kamp/runde)</span>
+          </div>
+        )}
       </header>
 
       <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
@@ -361,6 +459,14 @@ export default function MetaPage() {
                             <span className="text-[9px] font-semibold text-[#a855f7] bg-[rgba(168,85,247,0.1)] px-1 py-0.5 rounded ml-1.5">
                               prio {r.weight}
                             </span>
+                            {cat === "covered" && coverage.contested.has(`${r.c.rep.teamSlug}_${r.c.rep.listIdx}`) && (
+                              <span
+                                className="text-[9px] font-semibold text-[#fb923c] bg-[rgba(251,146,60,0.12)] px-1 py-0.5 rounded ml-1.5"
+                                title="Falsk dækning: hver hær der svarer på denne arketype er også det eneste svar på en anden faction. Bringer modstanderen dem, skal de hære bruges der — og denne arketype står uden svar, selvom den ser dækket ud."
+                              >
+                                ⚠ falsk
+                              </span>
+                            )}
                           </div>
                           <div className="text-[10px] text-[#8888a0] truncate">
                             {(r.c.rep.list.detachments || []).join(", ")} · {r.c.members.length}{" "}
