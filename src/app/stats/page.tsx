@@ -168,7 +168,73 @@ export default function StatsPage() {
       ? Math.round((listsWithUnits.reduce((s, l) => s + (l.units?.length || 0), 0) / listsWithUnits.length) * 10) / 10
       : 0;
 
-    return { teams, listCount, factions, alliance, disp, factionDisp, dispFaction, compositions, detachments, units, clusters, topArchetypes, avgUnits, listsWithUnits: listsWithUnits.length };
+    // --- Meta concentration & diversity ---
+    // Effective number of factions (inverse Simpson): how many *evenly-common*
+    // factions the field plays like — collapses "18 factions but 3 dominate".
+    const p = factions.map(([, n]) => n / listCount);
+    const effFactions = p.length ? Math.round((1 / p.reduce((a, x) => a + x * x, 0)) * 10) / 10 : 0;
+    const top5Share = Math.round((100 * factions.slice(0, 5).reduce((a, [, n]) => a + n, 0)) / (listCount || 1));
+    const singletonFactions = factions.filter(([, n]) => n === 1).length;
+    const clusterSizes = clusters.map((c) => c.members.length).sort((a, b) => b - a);
+    const clusteredTotal = clusterSizes.reduce((a, b) => a + b, 0) || 1;
+    const singletonArchetypes = clusterSizes.filter((n) => n === 1).length;
+    // how many of the biggest archetypes it takes to cover half the field
+    let cum = 0, archsFor50 = 0;
+    for (const sz of clusterSizes) { cum += sz; archsFor50++; if (cum >= clusteredTotal / 2) break; }
+
+    // --- Team "spice": netlisted vs tech ---
+    // For each list, how many OTHER field lists share its archetype (cluster−1).
+    // Averaged over a team's 8 lists → low = brings unique tech, high = all netlists.
+    const sizeByKey = new Map<string, number>();
+    for (const c of clusters) for (const m of c.members) sizeByKey.set(`${m.teamSlug}_${m.listIdx}`, c.members.length);
+    const teamSpice = wtcEntries.map(([slug, t]) => {
+      const armies = t.armies || [];
+      let echoSum = 0, uniq = 0, counted = 0;
+      armies.forEach((_, idx) => {
+        const sz = sizeByKey.get(`${slug}_${idx}`);
+        if (sz == null) return;
+        echoSum += sz - 1;
+        if (sz === 1) uniq++;
+        counted++;
+      });
+      return { name: t.name, tier: t.tier || "", echo: counted ? echoSum / counted : 0, uniq, n: counted };
+    }).filter((x) => x.n > 0);
+    const spiciest = [...teamSpice].sort((a, b) => a.echo - b.echo || b.uniq - a.uniq).slice(0, 6);
+    const chalkiest = [...teamSpice].sort((a, b) => b.echo - a.echo).slice(0, 6);
+    const maxEcho = Math.max(1, ...teamSpice.map((x) => x.echo));
+
+    // --- Signature detachment per faction ---
+    // When you see a faction, which detachment does it most often bring, and how
+    // locked-in is that choice? Predictive prep value.
+    const factionSignature = factions.slice(0, 14).map(([f, total]) => {
+      const fLists = lists.filter((l) => l.faction === f);
+      const dc = new Map<string, number>();
+      for (const l of fLists) for (const d of new Set(l.detachments || [])) dc.set(d, (dc.get(d) || 0) + 1);
+      const top = [...dc.entries()].sort((a, b) => b[1] - a[1])[0];
+      return top ? { faction: f, total, det: top[0], share: Math.round((100 * top[1]) / (fLists.length || 1)), distinct: dc.size } : null;
+    }).filter((x): x is { faction: string; total: number; det: string; share: number; distinct: number } => !!x);
+
+    // --- Top-seed tech: what Tier-1 teams over/under-index on vs the field (lift) ---
+    const tier1Entries = wtcEntries.filter(([, t]) => /tier\s*1\b/i.test(t.tier || ""));
+    const tier1Lists = tier1Entries.flatMap(([, t]) => t.armies || []);
+    const t1Faction = new Map<string, number>();
+    for (const l of tier1Lists) if (l.faction) t1Faction.set(l.faction, (t1Faction.get(l.faction) || 0) + 1);
+    const fieldRate = new Map(factions.map(([f, n]) => [f, n / listCount]));
+    const tier1Lift = tier1Lists.length
+      ? [...t1Faction.entries()]
+          .map(([f, n]) => ({ faction: f, n, share: Math.round((100 * n) / tier1Lists.length), lift: (n / tier1Lists.length) / (fieldRate.get(f) || 1) }))
+          .filter((x) => x.n >= 2)
+          .sort((a, b) => b.lift - a.lift)
+      : [];
+    const tier1Over = tier1Lift.slice(0, 6);
+    const tier1Under = [...tier1Lift].reverse().filter((x) => x.lift < 1).slice(0, 5);
+
+    return {
+      teams, listCount, factions, alliance, disp, factionDisp, dispFaction, compositions, detachments, units, clusters, topArchetypes, avgUnits, listsWithUnits: listsWithUnits.length,
+      effFactions, top5Share, singletonFactions, singletonArchetypes, archsFor50, clusteredTotal,
+      spiciest, chalkiest, maxEcho, factionSignature,
+      tier1Count: tier1Entries.length, tier1Over, tier1Under,
+    };
   }, [opponents, doc]);
 
   const s = stats;
@@ -210,6 +276,28 @@ export default function StatsPage() {
                 </div>
               ))}
             </div>
+
+            <Card title="Metaens koncentration" desc="hvor bredt eller smalt feltet spiller">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {[
+                  { v: s.effFactions, k: "Effektive factions", cap: `af ${s.factions.length} i spil` },
+                  { v: `${s.top5Share}%`, k: "Top-5 factions", cap: "af alle lister" },
+                  { v: s.archsFor50, k: "Arketyper = ½ felt", cap: `af ${s.clusters.length} i alt` },
+                  { v: s.singletonArchetypes, k: "Engangs-arketyper", cap: "kun set én gang" },
+                  { v: s.singletonFactions, k: "Engangs-factions", cap: "kun bragt én gang" },
+                ].map((t) => (
+                  <div key={t.k} className="rounded-lg bg-white/[0.03] p-2.5 text-center">
+                    <div className="text-xl font-bold text-[#e8e8f0] tabular-nums">{t.v}</div>
+                    <div className="text-[9px] text-[#c8c8d4] mt-0.5 leading-tight">{t.k}</div>
+                    <div className="text-[8px] text-[#8888a0] mt-0.5">{t.cap}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-[#8888a0] mt-3 leading-relaxed">
+                Feltet spiller reelt som ~{s.effFactions} jævnt fordelte factions, og blot {s.archsFor50} arketyper dækker halvdelen af alle lister —
+                resten er den lange hale af {s.singletonArchetypes} engangs-lister, som er den tech I kun møder én gang.
+              </p>
+            </Card>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               <Card title="Factions" desc={`${s.factions.length} forskellige · antal lister`}>
@@ -274,6 +362,24 @@ export default function StatsPage() {
               </div>
             </Card>
 
+            <Card title="Signatur-detachment per faction" desc="ser du factionen, hvilket detachment er den så oftest?">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                {s.factionSignature.map((fs) => (
+                  <div key={fs.faction} className="flex items-center gap-2 text-[11px]">
+                    <div className="w-32 shrink-0 truncate text-[#e8e8f0]" title={fs.faction}>{fs.faction}</div>
+                    <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                      <div className="flex-1 h-3.5 rounded bg-white/[0.04] overflow-hidden relative">
+                        <div className="h-full rounded" style={{ width: `${fs.share}%`, background: GROUP_COLORS[getGroupForFaction(fs.faction) || ""] || "#a855f7", opacity: 0.8 }} />
+                        <span className="absolute inset-0 flex items-center px-1.5 text-[9px] text-[#e8e8f0] truncate" title={fs.det}>{fs.det}</span>
+                      </div>
+                      <span className="w-8 shrink-0 text-right tabular-nums text-[#e8e8f0] font-semibold">{fs.share}%</span>
+                      <span className="w-12 shrink-0 text-[8px] text-[#8888a0]" title="antal forskellige detachments factionen kører">{fs.distinct} det.</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
             <Card title="Populære disposition-sammensætninger" desc="hvordan hold fordeler deres 8 lister på dispositioner">
               <div className="space-y-2">
                 {s.compositions.slice(0, 10).map((c, i) => (
@@ -306,6 +412,82 @@ export default function StatsPage() {
                     <Bar key={u} label={u} value={n} max={s.units[0]?.[1] || 1} pct={Math.round((100 * n) / (s.listsWithUnits || 1))} />
                   ))}
                 </div>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <Card title="Krydderi-indeks" desc="bringer holdet tech eller netlister? (gns. felt-ekko pr. liste)">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-[10px] font-semibold text-[#4ade80] mb-1.5 uppercase tracking-wide">Mest unikke · tech</div>
+                    <div className="space-y-1">
+                      {s.spiciest.map((t) => (
+                        <div key={t.name} className="flex items-center gap-2 text-[11px]">
+                          <div className="w-24 shrink-0 truncate text-[#e8e8f0]" title={t.name}>{t.name}</div>
+                          <div className="flex-1 h-3.5 rounded bg-white/[0.04] overflow-hidden">
+                            <div className="h-full rounded" style={{ width: `${(100 * t.echo) / s.maxEcho}%`, background: "#4ade80", opacity: 0.65 }} />
+                          </div>
+                          <span className="w-8 shrink-0 text-right tabular-nums text-[#e8e8f0]">{t.echo.toFixed(1)}</span>
+                          <span className="w-9 shrink-0 text-[8px] text-[#8888a0]" title="antal engangs-lister">{t.uniq} unik</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold text-[#f87171] mb-1.5 uppercase tracking-wide">Mest forudsigelige · netliste</div>
+                    <div className="space-y-1">
+                      {s.chalkiest.map((t) => (
+                        <div key={t.name} className="flex items-center gap-2 text-[11px]">
+                          <div className="w-24 shrink-0 truncate text-[#e8e8f0]" title={t.name}>{t.name}</div>
+                          <div className="flex-1 h-3.5 rounded bg-white/[0.04] overflow-hidden">
+                            <div className="h-full rounded" style={{ width: `${(100 * t.echo) / s.maxEcho}%`, background: "#f87171", opacity: 0.65 }} />
+                          </div>
+                          <span className="w-8 shrink-0 text-right tabular-nums text-[#e8e8f0]">{t.echo.toFixed(1)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[9px] text-[#8888a0] mt-2.5 leading-relaxed">
+                  Felt-ekko = gns. antal andre hold der bringer samme arketype som holdets lister. Lavt = off-meta tech (svært at forberede), højt = konsensus-lister I kender.
+                </p>
+              </Card>
+
+              <Card title="Top-seed-tech" desc={s.tier1Count ? `hvad Tier 1-hold (${s.tier1Count}) over-/undervægter vs feltet` : "ingen Tier 1-hold i feltet"}>
+                {s.tier1Over.length ? (
+                  <>
+                    <div className="text-[10px] font-semibold text-[#60a5fa] mb-1.5 uppercase tracking-wide">Overvægtet af top-seeds</div>
+                    <div className="space-y-1">
+                      {s.tier1Over.map((t) => (
+                        <div key={t.faction} className="flex items-center gap-2 text-[11px]">
+                          <div className="w-32 shrink-0 truncate text-[#e8e8f0]" title={t.faction}>{t.faction}</div>
+                          <div className="flex-1 h-3.5 rounded bg-white/[0.04] overflow-hidden">
+                            <div className="h-full rounded" style={{ width: `${Math.min(100, (t.lift / 3) * 100)}%`, background: GROUP_COLORS[getGroupForFaction(t.faction) || ""] || "#60a5fa", opacity: 0.75 }} />
+                          </div>
+                          <span className="w-9 shrink-0 text-right tabular-nums text-[#e8e8f0] font-semibold">{t.lift.toFixed(1)}×</span>
+                          <span className="w-8 shrink-0 text-[8px] text-[#8888a0]">{t.share}%</span>
+                        </div>
+                      ))}
+                    </div>
+                    {s.tier1Under.length > 0 && (
+                      <>
+                        <div className="text-[10px] font-semibold text-[#8888a0] mt-3 mb-1.5 uppercase tracking-wide">Undervægtet</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {s.tier1Under.map((t) => (
+                            <span key={t.faction} className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] text-[#8888a0]">
+                              {t.faction} <span className="text-[#c8c8d4] tabular-nums">{t.lift.toFixed(1)}×</span>
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    <p className="text-[9px] text-[#8888a0] mt-2.5 leading-relaxed">
+                      Lift = hvor meget oftere Tier 1-hold bringer factionen ift. hele feltet. 2,0× = dobbelt så hyppigt hos top-seeds.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-[#8888a0]">Ikke nok Tier 1-data i feltet.</p>
+                )}
               </Card>
             </div>
 
