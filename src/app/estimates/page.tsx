@@ -10,6 +10,7 @@ import ArmyEditor from "@/components/ArmyEditor";
 import EstimateInput from "@/components/EstimateInput";
 import PlayerEstimates from "@/components/PlayerEstimates";
 import { parseArmyList, parseTeamLists, formatUnits, formatUnitsLines } from "@/lib/list-parser";
+import { dispositionEdgeBP } from "@/lib/disposition-meta";
 import {
   type OpponentMap,
   type OpponentTeam,
@@ -118,6 +119,9 @@ export default function EstimatesPage() {
   const [unitsShown, setUnitsShown] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<{ key: string; text: string } | null>(null);
   const [mode, setMode] = useState<"country" | "player">("country");
+  // Disposition-matchup bias: off = raw manual estimates; on = fold the
+  // disposition win-rate edge (±2 BP) into the shown value. Never writes.
+  const [dispAdj, setDispAdj] = useState(false);
   const [archOpen, setArchOpen] = useState(false);
   const [archText, setArchText] = useState("");
   const [versions, setVersions] = useState<VersionsNode>({
@@ -128,7 +132,16 @@ export default function EstimatesPage() {
   useEffect(() => {
     const saved = localStorage.getItem("wtc-est-mode");
     if (saved === "player" || saved === "country") setMode(saved);
+    if (localStorage.getItem("wtc-est-dispadj") === "1") setDispAdj(true);
   }, []);
+
+  function toggleDispAdj() {
+    setDispAdj((v) => {
+      const nv = !v;
+      localStorage.setItem("wtc-est-dispadj", nv ? "1" : "0");
+      return nv;
+    });
+  }
 
   function switchMode(m: "country" | "player") {
     setMode(m);
@@ -631,6 +644,22 @@ export default function EstimatesPage() {
           <span className="text-[#8888a0]">
             · Celler markeret <span className="italic">a</span> er auto-udfyldt fra lister med ≥{SIMILARITY_THRESHOLD}% lighed
           </span>
+          {mode === "country" && (
+            <>
+              <button
+                onClick={toggleDispAdj}
+                title="Disposition-fordel fra meta-winrates (listhammer): hjørne-tallet på hver celle er ±BP for din dispositions matchup mod deres. Slå til for at lægge det oven i estimatet (justerer kun visningen — dine tal ændres ikke)."
+                className={`px-2 py-0.5 rounded-md border transition-colors ${
+                  dispAdj
+                    ? "border-[#4ade80]/60 text-[#4ade80] bg-[rgba(74,222,128,0.1)]"
+                    : "border-white/[0.1] text-[#8888a0] hover:text-[#e8e8f0]"
+                }`}
+              >
+                {dispAdj ? "Disp-justeret ✓" : "Disp: Rå"}
+              </button>
+              <span className="text-[#8888a0]">· hjørne-tal = disposition-fordel (BP)</span>
+            </>
+          )}
         </div>
       </header>
 
@@ -817,6 +846,8 @@ export default function EstimatesPage() {
                                       cell={team.estimates?.[`${i}_${j}`]}
                                       onChange={(v) => setEstimate(slug, i, j, v)}
                                       locked={locked}
+                                      dispBP={dispositionEdgeBP(army.disposition, oppList.disposition)}
+                                      adjusted={dispAdj}
                                     />
                                   </td>
                                 ))}
