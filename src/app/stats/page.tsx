@@ -35,6 +35,39 @@ function Bar({ label, value, max, pct, color, sub }: { label: string; value: num
   );
 }
 
+// A stacked horizontal bar: total width ∝ total/max, segments coloured by disposition.
+function StackedBar({ label, breakdown, total, max }: { label: string; breakdown: Record<string, number>; total: number; max: number }) {
+  return (
+    <div className="flex items-center gap-2 text-[11px]">
+      <div className="w-40 shrink-0 truncate text-[#e8e8f0]" title={label}>{label}</div>
+      <div className="flex-1 h-4 rounded bg-white/[0.04] overflow-hidden flex" style={{ width: `${max ? (100 * total) / max : 0}%` }}>
+        {DISPOSITIONS.filter((d) => breakdown[d]).map((d) => (
+          <div
+            key={d}
+            className="h-full first:rounded-l last:rounded-r"
+            style={{ width: `${(100 * breakdown[d]) / total}%`, background: DISP_STYLES[d as Disposition].color, opacity: 0.85 }}
+            title={`${breakdown[d]}× ${d}`}
+          />
+        ))}
+      </div>
+      <div className="w-8 shrink-0 text-right tabular-nums text-[#e8e8f0] font-semibold">{total}</div>
+    </div>
+  );
+}
+
+function DispLegend() {
+  return (
+    <div className="flex items-center gap-2 flex-wrap mb-2">
+      {DISPOSITIONS.map((d) => (
+        <span key={d} className="flex items-center gap-1 text-[9px] text-[#8888a0]">
+          <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: DISP_STYLES[d as Disposition].color }} />
+          {d}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function Card({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-white/[0.08] p-4">
@@ -83,6 +116,20 @@ export default function StatsPage() {
     const disp = new Map<string, number>();
     for (const l of lists) if (l.disposition) disp.set(l.disposition, (disp.get(l.disposition) || 0) + 1);
 
+    // faction × disposition: per faction, how its lists split across dispositions
+    const factionDisp = factions.map(([f, total]) => {
+      const b: Record<string, number> = {};
+      for (const l of lists) if (l.faction === f && l.disposition) b[l.disposition] = (b[l.disposition] || 0) + 1;
+      const top = DISPOSITIONS.map((d) => [d, b[d] || 0] as const).sort((a, b2) => b2[1] - a[1])[0];
+      return { faction: f, total, b, topDisp: top && top[1] > 0 ? top[0] : null };
+    });
+    // disposition × faction: top factions running each disposition
+    const dispFaction = DISPOSITIONS.map((d) => {
+      const b = new Map<string, number>();
+      for (const l of lists) if (l.disposition === d && l.faction) b.set(l.faction, (b.get(l.faction) || 0) + 1);
+      return { disp: d, total: disp.get(d) || 0, factions: [...b.entries()].sort((a, b2) => b2[1] - a[1]) };
+    });
+
     // disposition compositions per team (multiset of the team's 8 dispositions)
     const comp = new Map<string, { count: number; breakdown: Record<string, number> }>();
     for (const t of teams) {
@@ -121,7 +168,7 @@ export default function StatsPage() {
       ? Math.round((listsWithUnits.reduce((s, l) => s + (l.units?.length || 0), 0) / listsWithUnits.length) * 10) / 10
       : 0;
 
-    return { teams, listCount, factions, alliance, disp, compositions, detachments, units, clusters, topArchetypes, avgUnits, listsWithUnits: listsWithUnits.length };
+    return { teams, listCount, factions, alliance, disp, factionDisp, dispFaction, compositions, detachments, units, clusters, topArchetypes, avgUnits, listsWithUnits: listsWithUnits.length };
   }, [opponents, doc]);
 
   const s = stats;
@@ -194,6 +241,38 @@ export default function StatsPage() {
                 </Card>
               </div>
             </div>
+
+            <Card title="Faction × disposition" desc="hvilken disposition hver faction typisk bringer (bredde = antal lister)">
+              <DispLegend />
+              <div className="space-y-1">
+                {s.factionDisp.map((fd) => (
+                  <StackedBar key={fd.faction} label={fd.faction} breakdown={fd.b} total={fd.total} max={s.factions[0][1]} />
+                ))}
+              </div>
+            </Card>
+
+            <Card title="Disposition × faction" desc="hvilke factions oftest bringer hver disposition">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {s.dispFaction.map((df) => (
+                  <div key={df.disp}>
+                    <div className="text-[11px] font-semibold mb-1" style={{ color: DISP_STYLES[df.disp as Disposition].color }}>
+                      {df.disp} <span className="text-[#8888a0] font-normal">· {df.total}</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      {df.factions.slice(0, 6).map(([f, n]) => (
+                        <div key={f} className="flex items-center gap-1.5 text-[10px]">
+                          <div className="flex-1 h-3 rounded bg-white/[0.04] overflow-hidden">
+                            <div className="h-full rounded" style={{ width: `${(100 * n) / (df.factions[0]?.[1] || 1)}%`, background: DISP_STYLES[df.disp as Disposition].color, opacity: 0.7 }} />
+                          </div>
+                          <span className="w-28 shrink-0 truncate text-[#8888a0]" title={f}>{f}</span>
+                          <span className="w-5 shrink-0 text-right tabular-nums text-[#e8e8f0]">{n}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
 
             <Card title="Populære disposition-sammensætninger" desc="hvordan hold fordeler deres 8 lister på dispositioner">
               <div className="space-y-2">
