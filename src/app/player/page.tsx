@@ -34,6 +34,7 @@ import {
   type OpponentList,
   type ArchetypeDescriptor,
 } from "@/lib/estimates-db";
+import { archetypeWarmupStats } from "@/lib/forecast";
 import { parseTeamLists, formatUnitsLines } from "@/lib/list-parser";
 import {
   fetchSession,
@@ -218,6 +219,49 @@ export default function PlayerPage() {
     }
     return best?.c ?? null;
   }, [myProfile, clusters]);
+
+  // --- Practice priority: which archetypes to train against next ---
+  // Ranks the WTC field's archetypes for MY army by (a) how common they are —
+  // Tier 2/3 countries weighted slightly higher — (b) how contested/losing my
+  // current estimate is (a crushing win needs no reps; a coin-flip or a loss
+  // does), and (c) whether I still need to test it (no games on my current list,
+  // or flagged 🧪 unsure). Recomputes live as estimates come in, so a handful of
+  // prep games before WTC can be aimed where they move the most.
+  const T23_WEIGHT = 1.35;
+  const practiceTop = useMemo(() => {
+    if (myIdx === null) return [];
+    const ourArchetype = myProfile
+      ? { faction: myProfile.faction, detachments: myProfile.detachments || [], disposition: myProfile.disposition ?? null }
+      : null;
+    const scored = clusters.map((c, ci) => {
+      // Prevalence over REAL WTC opponents only (skip meta-library copies).
+      let wPrev = 0, fieldCount = 0, t23 = 0;
+      const countries: string[] = [];
+      for (const m of c.members) {
+        if (!opponents[m.teamSlug]?.wtc) continue;
+        fieldCount++;
+        countries.push(m.teamName);
+        const is23 = /tier\s*[23]\b/i.test(m.tier || "");
+        wPrev += is23 ? T23_WEIGHT : 1;
+        if (is23) t23++;
+      }
+      if (fieldCount === 0) return null;
+      const est = clusterEstimate(c, myIdx);
+      // Need is highest for draws/losses (est ≤ 10) and decays for comfortable
+      // wins; unestimated archetypes sit at a neutral 0.9 until a number arrives.
+      const matchupNeed = est === null ? 0.9 : Math.max(0.3, Math.min(1.3, 1.3 - Math.max(0, est - 10) * 0.12));
+      const w = archetypeWarmupStats(doc?.warmups, myIdx, c.rep.list, ourArchetype);
+      const gamesOn = w?.onArchetype ?? 0;
+      const repFactor = 1 - Math.min(gamesOn, 3) * 0.25; // already-practiced → lower
+      const unsure = c.members.some((m) => opponents[m.teamSlug]?.estimates?.[`${myIdx}_${m.listIdx}`]?.needsTest);
+      const priority = wPrev * matchupNeed * repFactor * (unsure ? 1.3 : 1);
+      return { c, ci, priority, fieldCount, t23, est, gamesOn, unsure, countries };
+    });
+    return scored
+      .filter((x): x is NonNullable<typeof x> => !!x && x.priority > 0)
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, 10);
+  }, [clusters, myIdx, opponents, doc, myProfile, clusterEstimate]);
 
   const [profCluster, setProfCluster] = useState<string>("");
   const [profPaste, setProfPaste] = useState("");
@@ -665,8 +709,55 @@ export default function PlayerPage() {
               )}
             </div>
 
-            {/* Warmup prep: log practice games vs archetypes, compare to estimates */}
+            {/* Practice priority: what to train against next, ranked live */}
             <div className="rounded-xl border border-white/[0.08] p-4">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h2 className="text-sm font-semibold text-[#e8e8f0]">Prioritér din træning</h2>
+                <span className="text-[10px] text-[#8888a0]">top 10 · {myFaction}</span>
+                <Link href="/stats" className="ml-auto text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors">Feltets stats →</Link>
+              </div>
+              <p className="text-[10px] text-[#8888a0] mb-3">
+                Har du kun ~10 træningskampe før WTC? Her er de arketyper der giver mest igen — vægtet efter hvor udbredt arketypen er (Tier 2/3-lande tæller ekstra), hvor tæt/svær din matchup er, og om du mangler at teste den. Opdateres løbende når estimater kommer ind. Tryk på en for at vælge den i loggen nedenfor.
+              </p>
+              {practiceTop.length === 0 ? (
+                <p className="text-[11px] text-[#8888a0]">Ingen arketyper i feltet endnu — eller vælg din hær ovenfor.</p>
+              ) : (
+                <div className="space-y-1">
+                  {practiceTop.map((p, i) => {
+                    const disp = p.c.rep.list.disposition;
+                    const color = disp ? DISP_STYLES[disp].color : "#8888a0";
+                    const label = `${p.c.rep.list.faction} — ${(p.c.rep.list.detachments || []).join(", ")}`;
+                    const uniqCountries = [...new Set(p.countries)];
+                    return (
+                      <button
+                        key={p.ci}
+                        onClick={() => {
+                          setWuCluster(String(p.ci));
+                          document.getElementById("warmup-log")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }}
+                        title={`${disp ? disp + " · " : ""}${uniqCountries.join(", ")}`}
+                        className={`w-full flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors ${wuCluster === String(p.ci) ? "border-[#a855f7]/60 bg-[#a855f7]/10" : "border-white/[0.05] hover:border-[#a855f7]/40"}`}
+                      >
+                        <span className="text-[11px] font-bold text-[#8888a0] w-4 shrink-0 tabular-nums">{i + 1}</span>
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                        <span className="text-[11px] text-[#e8e8f0] flex-1 min-w-0 truncate">{label}</span>
+                        <span className="text-[10px] text-[#8888a0] shrink-0 tabular-nums whitespace-nowrap" title="lister i feltet · heraf Tier 2/3">
+                          {p.fieldCount}×{p.t23 > 0 && <span className="text-[#c084fc]"> ·{p.t23} T2/3</span>}
+                        </span>
+                        {p.est !== null ? <BPChip v={p.est} /> : <span className="w-8 text-center text-[11px] text-[#44445a]" title="ikke estimeret endnu">?</span>}
+                        <span className="w-11 shrink-0 text-right text-[9px] whitespace-nowrap">
+                          {p.unsure && <span title="markeret usikker (🧪)">🧪 </span>}
+                          {p.gamesOn === 0 ? <span className="text-[#facc15]" title="ingen testkampe på din liste endnu">0 spil</span> : <span className="text-[#4ade80]" title="testkampe spillet på din liste">{p.gamesOn}g</span>}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Warmup prep: log practice games vs archetypes, compare to estimates */}
+            <div id="warmup-log" className="rounded-xl border border-white/[0.08] p-4">
               <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h2 className="text-sm font-semibold text-[#e8e8f0]">Warmup-kampe</h2>
                 <Link href="/warmups" className="text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors ml-auto order-last">
