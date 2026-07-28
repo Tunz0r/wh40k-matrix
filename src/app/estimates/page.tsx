@@ -46,6 +46,14 @@ function shortFaction(name: string): string {
   return name.length > 14 ? name.slice(0, 13) + "…" : name;
 }
 
+// Hover tooltip for an opponent list: faction/detachment/disposition plus the
+// full unit list when one has been pasted — so the matrix can be read at a
+// glance during estimation without opening anything.
+function listTitle(list: OpponentList): string {
+  const base = `${list.faction} — ${(list.detachments || []).join(", ")}${list.disposition ? ` — ${list.disposition}` : ""}`;
+  return list.units?.length ? `${base}\n\n${formatUnitsLines(list.units)}` : `${base}\n\n(ingen liste indsat endnu)`;
+}
+
 // Inline scouting-note field: shows the saved note (or an "add" affordance),
 // expands to a textarea on click, saves on blur.
 function ScoutNote({
@@ -786,8 +794,8 @@ export default function EstimatesPage() {
                               {team.armies.map((list, j) => (
                                 <th
                                   key={j}
-                                  className="text-[9px] text-[#8888a0] font-semibold w-11 max-w-11 truncate px-0.5"
-                                  title={`${list.faction} — ${(list.detachments || []).join(", ")}${list.disposition ? ` — ${list.disposition}` : ""}`}
+                                  className="text-[9px] text-[#8888a0] font-semibold w-11 max-w-11 truncate px-0.5 cursor-help"
+                                  title={listTitle(list)}
                                 >
                                   {j + 1}. {shortFaction(list.faction)}
                                 </th>
@@ -803,8 +811,8 @@ export default function EstimatesPage() {
                                 >
                                   {i + 1}. {shortFaction(army.faction)}
                                 </th>
-                                {team.armies.map((_, j) => (
-                                  <td key={j}>
+                                {team.armies.map((oppList, j) => (
+                                  <td key={j} title={listTitle(oppList)}>
                                     <EstimateInput
                                       cell={team.estimates?.[`${i}_${j}`]}
                                       onChange={(v) => setEstimate(slug, i, j, v)}

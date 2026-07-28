@@ -1566,17 +1566,28 @@ export default function TournamentPage() {
                           const isPlayed = tournament.rounds.some(
                             (r) => r.opponentName.toLowerCase().includes(team.toLowerCase())
                           );
-                          return (
-                            <span
+                          const slug = slugifyTeam(team);
+                          const hasLists = !!opponents[slug]?.armies?.length;
+                          const cls = `text-[11px] px-2 py-0.5 rounded border ${
+                            isUs
+                              ? "border-[rgba(74,222,128,0.3)] bg-[rgba(74,222,128,0.1)] text-[#4ade80] font-medium"
+                              : isPlayed
+                                ? "border-white/[0.06] bg-white/[0.02] text-[#8888a0] line-through"
+                                : "border-white/[0.08] text-[#e8e8f0]"
+                          }`;
+                          // Countries with loaded lists become links to their read-only
+                          // list book — handy at the pairing table.
+                          return !isUs && hasLists ? (
+                            <Link
                               key={j}
-                              className={`text-[11px] px-2 py-0.5 rounded border ${
-                                isUs
-                                  ? "border-[rgba(74,222,128,0.3)] bg-[rgba(74,222,128,0.1)] text-[#4ade80] font-medium"
-                                  : isPlayed
-                                    ? "border-white/[0.06] bg-white/[0.02] text-[#8888a0] line-through"
-                                    : "border-white/[0.08] text-[#e8e8f0]"
-                              }`}
+                              href={`/lists/${slug}`}
+                              title={`Se ${team}s lister`}
+                              className={`${cls} hover:border-[#a855f7]/60 hover:text-[#c084fc] transition-colors`}
                             >
+                              {team}
+                            </Link>
+                          ) : (
+                            <span key={j} className={cls}>
                               {team}
                             </span>
                           );
