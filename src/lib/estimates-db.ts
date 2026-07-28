@@ -510,24 +510,46 @@ export interface ListCluster {
 }
 
 export function clusterLists(opponents: OpponentMap): ListCluster[] {
-  const clusters: ListCluster[] = [];
+  // Flatten every list into a member, preserving encounter order (the first
+  // member of a cluster becomes its rep, so labels stay stable).
+  const members: ClusterMember[] = [];
   for (const [slug, team] of Object.entries(opponents)) {
     (team.armies || []).forEach((list, idx) => {
-      const member: ClusterMember = {
-        teamSlug: slug,
-        teamName: team.name,
-        tier: team.tier || "",
-        listIdx: idx,
-        list,
-      };
-      const home = clusters.find(
-        (c) => listSimilarity(c.rep.list, list) >= SIMILARITY_THRESHOLD
-      );
-      if (home) home.members.push(member);
-      else clusters.push({ rep: member, members: [member] });
+      members.push({ teamSlug: slug, teamName: team.name, tier: team.tier || "", listIdx: idx, list });
     });
   }
-  return clusters;
+
+  // Single-linkage clustering via union-find: any two lists ≥ threshold similar
+  // land in the same archetype. This replaces the old greedy "match only against
+  // the cluster's first-added rep" pass, which spuriously split same-archetype
+  // lists whenever a list resembled a non-rep member but not the rep. Same 75%
+  // bar — no looser merges, just no ordering artifacts.
+  const n = members.length;
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (x: number): number => {
+    while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+    return x;
+  };
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      // listSimilarity is 0 across factions — skip the call entirely.
+      if (members[i].list.faction !== members[j].list.faction) continue;
+      if (find(i) === find(j)) continue;
+      if (listSimilarity(members[i].list, members[j].list) >= SIMILARITY_THRESHOLD) {
+        parent[find(i)] = find(j);
+      }
+    }
+  }
+
+  // Group by root; rep = the lowest-index (first-encountered) member of each set.
+  const byRoot = new Map<number, ListCluster>();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    const existing = byRoot.get(r);
+    if (existing) existing.members.push(members[i]);
+    else byRoot.set(r, { rep: members[i], members: [members[i]] });
+  }
+  return [...byRoot.values()];
 }
 
 // Best current estimate for one of our armies vs an archetype cluster: a manual
