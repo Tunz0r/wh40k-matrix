@@ -67,6 +67,16 @@ export function subscribeToOpponents(
   };
 }
 
+// The full verbatim WTC lists (with wargear/enhancements/points) live in a
+// sibling node, kept OUT of the opponents subscription because they're ~1MB and
+// that stream loads on every estimates/stats/player page. Fetched on demand by
+// the /lists reader. Returns { [armyIdx]: rawListText }.
+export async function fetchRawLists(slug: string): Promise<Record<string, string>> {
+  await authReady();
+  const snap = await get(ref(getDb(), `estimates/${TEAM_SLUG}-lists-raw/${slug}`));
+  return (snap.val() as Record<string, string> | null) || {};
+}
+
 export async function saveOpponentTeam(
   slug: string,
   team: OpponentTeam

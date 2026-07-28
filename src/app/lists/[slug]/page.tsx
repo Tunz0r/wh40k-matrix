@@ -6,9 +6,34 @@ import { DISP_STYLES } from "@/lib/data";
 import { formatUnitsLines } from "@/lib/list-parser";
 import {
   subscribeToOpponents,
+  fetchRawLists,
   type OpponentMap,
   type OpponentList,
 } from "@/lib/estimates-db";
+
+// Render one verbatim WTC list (from the document) with light styling: datasheet
+// headers stand out, enhancements are highlighted amber, model/wargear detail is
+// dimmed. Shown faithfully — this is the actual submitted list, not a summary.
+function RawList({ text }: { text: string }) {
+  return (
+    <div className="text-[12px] leading-[1.55]">
+      {text.split("\n").map((raw, i) => {
+        const line = raw.trimEnd();
+        const bulleted = /^[•*‣·-]/.test(line);
+        let cls = "text-[#c8c8d4]";
+        if (/enhancement/i.test(line)) cls = "text-[#facc15]";
+        else if (/^attached unit/i.test(line)) cls = "text-[#5a5a6a] text-[10px] uppercase tracking-wide mt-1";
+        else if (/\(\d+\s*points?\)/i.test(line) && !bulleted) cls = "text-[#e8e8f0] font-semibold mt-2";
+        else if (bulleted) cls = "text-[#8888a0]";
+        return (
+          <div key={i} className={cls}>
+            {line || " "}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // Read-only reader for one opponent country's 8 lists — a grid of armies that
 // each open a full-size, projector-friendly single-list view. Built for the
@@ -23,12 +48,20 @@ export default function CountryListsPage({
   const [opponents, setOpponents] = useState<OpponentMap>({});
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
+  const [raw, setRaw] = useState<Record<string, string>>({});
 
   useEffect(() => {
     try {
       return subscribeToOpponents((m) => { setOpponents(m); setLoaded(true); });
     } catch {}
   }, []);
+
+  // Verbatim lists live in a sibling node — fetched on demand for this country.
+  useEffect(() => {
+    let live = true;
+    fetchRawLists(slug).then((r) => { if (live) setRaw(r); }).catch(() => {});
+    return () => { live = false; };
+  }, [slug]);
 
   const team = opponents[slug];
   const armies = useMemo(() => team?.armies || [], [team]);
@@ -129,15 +162,20 @@ export default function CountryListsPage({
             )}
 
             <div className="mt-4 pt-4 border-t border-white/[0.06]">
-              {lines.length ? (
-                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5">
-                  {lines.map((u, k) => (
-                    <li key={k} className="flex items-baseline gap-2 text-[14px] text-[#e8e8f0] leading-snug">
-                      <span className="text-[#4b4b5a] shrink-0">▪</span>
-                      <span>{u}</span>
-                    </li>
-                  ))}
-                </ul>
+              {raw[selected] ? (
+                <RawList text={raw[selected]} />
+              ) : lines.length ? (
+                <>
+                  <p className="text-[10px] text-[#8888a0] mb-2">Fuld liste ikke tilgængelig — viser enheds-oversigt.</p>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5">
+                    {lines.map((u, k) => (
+                      <li key={k} className="flex items-baseline gap-2 text-[14px] text-[#e8e8f0] leading-snug">
+                        <span className="text-[#4b4b5a] shrink-0">▪</span>
+                        <span>{u}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               ) : (
                 <p className="text-[12px] text-[#8888a0]">Ingen liste indsat for denne hær endnu.</p>
               )}
