@@ -55,7 +55,7 @@ export default function EstimateInput({
       {cell?.auto && !showAdj && (
         <span className="absolute top-0.5 right-1 text-[8px] text-[#8888a0] pointer-events-none">a</span>
       )}
-      {dispBP !== 0 && (
+      {dispBP !== 0 && !adjusted && (
         <span
           className="absolute -bottom-1 -right-1 text-[8px] font-bold leading-none px-0.5 rounded bg-[#0f0f13] pointer-events-none"
           style={{ color: dispBP > 0 ? "#4ade80" : "#f87171" }}
