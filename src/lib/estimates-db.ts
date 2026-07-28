@@ -31,6 +31,7 @@ export interface OpponentTeam {
   // key `${ourIdx}_${theirIdx}` → cell
   estimates?: Record<string, EstimateCell>;
   notes?: string; // scouting intel about the team / captain / pairing habits
+  wtc?: boolean; // true = a real WTC 2026 roster (loaded from the doc), vs a stale/placeholder team
 }
 
 export type OpponentMap = Record<string, OpponentTeam>;
