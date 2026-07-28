@@ -153,16 +153,30 @@ export default function StatsPage() {
     for (const l of listsWithUnits) for (const u of new Set(l.units)) unit.set(u, (unit.get(u) || 0) + 1);
     const units = [...unit.entries()].sort((a, b) => b[1] - a[1]);
 
-    // archetypes (clusters) over the wtc field only
+    // archetypes (clusters) over the wtc field only, ranked by size with the
+    // running cumulative share — so we can name the core that makes up the field.
     const wtcMap: OpponentMap = Object.fromEntries(wtcEntries);
     const clusters = clusterLists(wtcMap);
-    const topArchetypes = [...clusters]
+    const clusteredTotal = clusters.reduce((a, c) => a + c.members.length, 0) || 1;
+    let cumRun = 0;
+    const rankedArchetypes = [...clusters]
       .sort((a, b) => b.members.length - a.members.length)
-      .map((c) => ({
-        label: `${c.rep.list.faction} — ${(c.rep.list.detachments || []).join(", ")}`,
-        disp: c.rep.list.disposition,
-        n: c.members.length,
-      }));
+      .map((c, i) => {
+        cumRun += c.members.length;
+        return {
+          rank: i + 1,
+          faction: c.rep.list.faction,
+          label: `${c.rep.list.faction} — ${(c.rep.list.detachments || []).join(", ")}`,
+          disp: c.rep.list.disposition,
+          n: c.members.length,
+          pct: Math.round((100 * c.members.length) / clusteredTotal),
+          cumPct: Math.round((100 * cumRun) / clusteredTotal),
+        };
+      });
+    const idx50 = rankedArchetypes.findIndex((a) => a.cumPct >= 50);
+    const archsFor50 = idx50 >= 0 ? idx50 + 1 : rankedArchetypes.length;
+    const coreArchetypes = rankedArchetypes.slice(0, archsFor50);
+    const singletonArchetypes = rankedArchetypes.filter((a) => a.n === 1).length;
 
     const avgUnits = listsWithUnits.length
       ? Math.round((listsWithUnits.reduce((s, l) => s + (l.units?.length || 0), 0) / listsWithUnits.length) * 10) / 10
@@ -175,12 +189,6 @@ export default function StatsPage() {
     const effFactions = p.length ? Math.round((1 / p.reduce((a, x) => a + x * x, 0)) * 10) / 10 : 0;
     const top5Share = Math.round((100 * factions.slice(0, 5).reduce((a, [, n]) => a + n, 0)) / (listCount || 1));
     const singletonFactions = factions.filter(([, n]) => n === 1).length;
-    const clusterSizes = clusters.map((c) => c.members.length).sort((a, b) => b - a);
-    const clusteredTotal = clusterSizes.reduce((a, b) => a + b, 0) || 1;
-    const singletonArchetypes = clusterSizes.filter((n) => n === 1).length;
-    // how many of the biggest archetypes it takes to cover half the field
-    let cum = 0, archsFor50 = 0;
-    for (const sz of clusterSizes) { cum += sz; archsFor50++; if (cum >= clusteredTotal / 2) break; }
 
     // --- Team "spice": netlisted vs tech ---
     // For each list, how many OTHER field lists share its archetype (cluster−1).
@@ -230,7 +238,7 @@ export default function StatsPage() {
     const tier1Under = [...tier1Lift].reverse().filter((x) => x.lift < 1).slice(0, 5);
 
     return {
-      teams, listCount, factions, alliance, disp, factionDisp, dispFaction, compositions, detachments, units, clusters, topArchetypes, avgUnits, listsWithUnits: listsWithUnits.length,
+      teams, listCount, factions, alliance, disp, factionDisp, dispFaction, compositions, detachments, units, clusters, rankedArchetypes, coreArchetypes, avgUnits, listsWithUnits: listsWithUnits.length,
       effFactions, top5Share, singletonFactions, singletonArchetypes, archsFor50, clusteredTotal,
       spiciest, chalkiest, maxEcho, factionSignature,
       tier1Count: tier1Entries.length, tier1Over, tier1Under,
@@ -491,19 +499,42 @@ export default function StatsPage() {
               </Card>
             </div>
 
-            <Card title="Største arketyper" desc="top 20 klynger på tværs af feltet (≥75% lighed)">
-              <div className="space-y-1">
-                {s.topArchetypes.slice(0, 20).map((a, i) => (
-                  <Bar
-                    key={i}
-                    label={a.label}
-                    value={a.n}
-                    max={s.topArchetypes[0]?.n || 1}
-                    color={a.disp ? DISP_STYLES[a.disp as Disposition].color : "#a855f7"}
-                    sub={a.disp ? a.disp.slice(0, 4) : ""}
-                  />
-                ))}
+            <Card
+              title="Feltets rygrad"
+              desc={`de ${s.coreArchetypes.length} arketyper der tilsammen udgør halvdelen af alle ${s.clusters.length} — kernen I skal kunne svare på`}
+            >
+              <DispLegend />
+              <div className="flex items-center gap-2 text-[9px] text-[#8888a0] uppercase tracking-wide mb-1 pb-1 border-b border-white/[0.06]">
+                <span className="w-5 shrink-0 text-right">#</span>
+                <span className="w-48 shrink-0">Arketype</span>
+                <span className="flex-1">Andel af feltet</span>
+                <span className="w-6 shrink-0 text-right">Lst</span>
+                <span className="w-11 shrink-0 text-right">Kumul.</span>
               </div>
+              <div className="space-y-0.5">
+                {s.coreArchetypes.map((a) => {
+                  const color = a.disp ? DISP_STYLES[a.disp as Disposition].color : "#a855f7";
+                  const isLast = a.rank === s.coreArchetypes.length;
+                  return (
+                    <div key={a.rank} className={`flex items-center gap-2 text-[11px] rounded px-1 ${isLast ? "bg-[#4ade80]/[0.08]" : ""}`}>
+                      <span className="w-5 shrink-0 text-right tabular-nums text-[#8888a0]">{a.rank}</span>
+                      <div className="w-48 shrink-0 truncate text-[#e8e8f0] flex items-center gap-1" title={a.disp ? `${a.label} · ${a.disp}` : a.label}>
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
+                        <span className="truncate">{a.label}{a.disp && <span className="text-[#8888a0]"> · {a.disp}</span>}</span>
+                      </div>
+                      <div className="flex-1 h-3.5 rounded bg-white/[0.04] overflow-hidden">
+                        <div className="h-full rounded" style={{ width: `${(100 * a.n) / (s.coreArchetypes[0]?.n || 1)}%`, background: color, opacity: 0.85 }} />
+                      </div>
+                      <span className="w-6 shrink-0 text-right tabular-nums text-[#e8e8f0] font-semibold">{a.n}</span>
+                      <span className={`w-11 shrink-0 text-right tabular-nums font-semibold ${isLast ? "text-[#4ade80]" : "text-[#8888a0]"}`}>{a.cumPct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-[#8888a0] mt-3 leading-relaxed">
+                Disse {s.coreArchetypes.length} arketyper dækker ~{s.coreArchetypes[s.coreArchetypes.length - 1]?.cumPct}% af feltet.
+                De øvrige {s.clusters.length - s.coreArchetypes.length} deles om den anden halvdel — mest engangs-tech I højst møder én gang.
+              </p>
             </Card>
           </>
         )}
