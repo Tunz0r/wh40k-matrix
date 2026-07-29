@@ -18,6 +18,7 @@ import {
   subscribeToOpponents,
   estimateStyle,
   clusterLists,
+  matchClusterByMember,
   lookupEstimate,
   listSimilarity,
   slugifyTeam,
@@ -203,7 +204,8 @@ export default function PlayerPage() {
   const myProfile: PlayerProfile | null =
     myIdx !== null ? doc?.profiles?.[`a${myIdx}`] ?? null : null;
 
-  // The live cluster matching a profile (best similarity ≥ threshold).
+  // The live cluster matching a profile — matched against any member (not just
+  // the rep), so a build merged into a wider cluster still resolves.
   const profileCluster = useMemo(() => {
     if (!myProfile) return null;
     const asList: OpponentList = {
@@ -212,12 +214,7 @@ export default function PlayerPage() {
       disposition: (myProfile.disposition ?? null) as OpponentList["disposition"],
       ...(myProfile.units?.length ? { units: myProfile.units } : {}),
     };
-    let best: { c: ListCluster; sim: number } | null = null;
-    for (const c of clusters) {
-      const sim = listSimilarity(asList, c.rep.list);
-      if (sim >= SIMILARITY_THRESHOLD && (!best || sim > best.sim)) best = { c, sim };
-    }
-    return best?.c ?? null;
+    return matchClusterByMember(clusters, asList);
   }, [myProfile, clusters]);
 
   // --- Practice priority: which archetypes to train against next ---

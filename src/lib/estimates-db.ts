@@ -562,6 +562,28 @@ export function clusterLists(opponents: OpponentMap): ListCluster[] {
   return [...byRoot.values()];
 }
 
+// Best cluster for a loose list, matched against the closest MEMBER of each
+// cluster — not just its representative. Single-linkage picks a low-index rep
+// that can sit below the similarity threshold to a chained-in member, so a
+// profile that IS a member (e.g. a Votann build merged into a wider Votann
+// cluster) would otherwise read as "matches nothing". Used for profile→archetype
+// resolution on /player and /sanity.
+export function matchClusterByMember(
+  clusters: ListCluster[],
+  list: OpponentList
+): ListCluster | null {
+  let best: { c: ListCluster; sim: number } | null = null;
+  for (const c of clusters) {
+    let sim = 0;
+    for (const m of c.members) {
+      const s = listSimilarity(list, m.list);
+      if (s > sim) sim = s;
+    }
+    if (sim >= SIMILARITY_THRESHOLD && (!best || sim > best.sim)) best = { c, sim };
+  }
+  return best?.c ?? null;
+}
+
 // Best current estimate for one of our armies vs an archetype cluster: a manual
 // value wins over an auto one; falls back to any member's cell. Shared by /meta
 // and the coverage analysis so "do we answer this archetype" is computed one way.

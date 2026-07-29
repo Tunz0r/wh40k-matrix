@@ -12,8 +12,8 @@ import {
   subscribeToOpponents,
   estimateStyle,
   clusterLists,
+  matchClusterByMember,
   listSimilarity,
-  SIMILARITY_THRESHOLD,
   type OpponentMap,
   type OpponentList,
   type ListCluster,
@@ -76,12 +76,7 @@ export default function SanityPage() {
           disposition: (profile.disposition ?? null) as OpponentList["disposition"],
           ...(profile.units?.length ? { units: profile.units } : {}),
         };
-        let best: { c: ListCluster; sim: number } | null = null;
-        for (const c of clusters) {
-          const sim = listSimilarity(asList, c.rep.list);
-          if (sim >= SIMILARITY_THRESHOLD && (!best || sim > best.sim)) best = { c, sim };
-        }
-        cluster = best?.c ?? null;
+        cluster = matchClusterByMember(clusters, asList);
       }
       const label = army.player || army.faction;
       const archLabel = profile
