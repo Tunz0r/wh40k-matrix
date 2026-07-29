@@ -43,7 +43,7 @@ import { computeCoverage } from "@/lib/coverage";
 import { computeStandings } from "@/lib/standings";
 import { formatUnits, formatUnitsLines } from "@/lib/list-parser";
 import { uploadActualList } from "@/lib/profile-actions";
-import { matchupForecast, archetypeWarmupStats, type MatchupForecast } from "@/lib/forecast";
+import { matchupForecast, type MatchupForecast } from "@/lib/forecast";
 
 // --- Types ---
 
@@ -1168,54 +1168,31 @@ export default function TournamentPage() {
     resetModuleState();
   }
 
-  // Test tools use our REAL roster from the database — they only fake the opponent.
-  // A demo opponent built from the LIVE field to showcase the new pairing tools:
-  // its 8 lists (distinct factions) are chosen to prefer archetypes we've warmed
-  // up against with our current lists (→ warmup-adjusted cells, w·N) and ones that
-  // are falsely covered (→ ⚠ in the matrix). Falls back to any archetypes if the
-  // field is thin.
-  function testOpponent(): RosterExport {
-    const ourArmies = tournament.roster?.armies || [];
-    const scored = clusters
-      .map((c) => {
-        const warm = ourArmies.some((a, i) => archetypeWarmupStats(fbDoc?.warmups, i, c.rep.list, a));
-        const fake = contested.has(`${c.rep.teamSlug}_${c.rep.listIdx}`);
-        return { c, score: (warm ? 2 : 0) + (fake ? 1 : 0) };
-      })
-      .sort((a, b) => b.score - a.score);
-    const picked: ListCluster[] = [];
-    const seen = new Set<string>();
-    // First the feature-rich ones, then pad with any distinct faction.
-    for (const pass of [scored.filter((x) => x.score > 0), scored]) {
-      for (const { c } of pass) {
-        const f = c.rep.list.faction;
-        if (seen.has(f)) continue;
-        seen.add(f);
-        picked.push(c);
-        if (picked.length === 8) break;
-      }
-      if (picked.length === 8) break;
-    }
-    return {
-      v: 1,
-      name: "Demo (nye værktøjer)",
-      armies: picked.map((c) => ({
-        faction: c.rep.list.faction,
-        detachments: c.rep.list.detachments || [],
-        disposition: c.rep.list.disposition ?? null,
-      })),
-    };
-  }
-
-  // "Test coaching" now drops you straight into the pairing view against the demo
-  // opponent, so the Estimat-matrix shows warmup-adjusted estimates (w·N) and ⚠
-  // false-coverage flags in action. No round status is written — it's a local
-  // demo; pair on through to reach the coaching dashboard if you want.
+  // Tonight's practice pairing: load a real opponent's lists and pair against
+  // them, then start the team room via "Start coaching session" as normal.
+  // Slug of the practice opponent — Iceland for the session on 2026-07-28.
+  const PRACTICE_SLUG = "iceland";
   function testCoaching() {
     if (!tournament.roster) { alert("Intet roster fundet — opdater roster først."); return; }
-    const demo = testOpponent();
-    if (demo.armies.length === 0) { alert("Ingen arketyper i feltet endnu — tilføj lister under Estimater."); return; }
-    setOpponentRoster(demo);
+    const opp = opponents[PRACTICE_SLUG];
+    if (!opp?.armies?.length) {
+      alert("Ingen lister fundet for øve-modstanderen — indlæs dem under Estimater → Pr. land først.");
+      return;
+    }
+    // Labeled "(øvelse)" on purpose: the live round that "Start coaching session"
+    // creates is keyed by this name, and "Iceland (øvelse)" doesn't slugify to
+    // "iceland" — so Iceland's real estimates stay unlocked/editable. Reset the
+    // practice round afterwards to clear it from the tournament history.
+    const roster: RosterExport = {
+      v: 1,
+      name: `${opp.name} (øvelse)`,
+      armies: opp.armies.map((a) => ({
+        faction: a.faction,
+        detachments: a.detachments || [],
+        disposition: a.disposition ?? null,
+      })),
+    };
+    setOpponentRoster(roster);
     setMatchups([]);
     setPairingPhase("skirmish1-defender");
     resetModuleState();
@@ -1743,10 +1720,10 @@ export default function TournamentPage() {
             <div className="text-center flex justify-center gap-2">
               <button
                 onClick={testCoaching}
-                title="Åbner parringsvisningen mod en demo-modstander bygget af feltet — vis warmup-justerede estimater (w·N) og ⚠ falsk dækning i praksis. Ingen runde-status ændres."
+                title="Øve-parring mod Islands rigtige lister. Par igennem og tryk 'Start coaching session' for at åbne team room (live for coaches). Runden hedder 'Iceland (øvelse)', så Islands rigtige estimater IKKE låses — nulstil runden bagefter."
                 className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
               >
-                Test coaching (demo-parring)
+                Øve-parring mod Island → team room
               </button>
             </div>
           </div>
