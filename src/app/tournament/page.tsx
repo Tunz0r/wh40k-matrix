@@ -540,6 +540,10 @@ export default function TournamentPage() {
   // Active round state
   const [opponentImportText, setOpponentImportText] = useState("");
   const [opponentRoster, setOpponentRoster] = useState<RosterExport | null>(null);
+  // True when the current pairing is a practice (e.g. tonight's Iceland run):
+  // the opponent keeps its real name so estimates resolve to the real team, but
+  // the round it creates is labeled "(øvelse)" so it never locks the real team.
+  const [practiceMode, setPracticeMode] = useState(false);
   const [pairingPhase, setPairingPhase] = useState<PairingPhase>("skirmish1-defender");
   const [matchups, setMatchups] = useState<Matchup[]>([]);
   const [creatingSession, setCreatingSession] = useState(false);
@@ -799,6 +803,7 @@ export default function TournamentPage() {
   }, [tournament.seedingTiers, opponents, fbRounds]);
 
   function pickOpponent(team: OpponentTeam) {
+    setPracticeMode(false);
     setOpponentRoster({
       v: 1,
       name: team.name,
@@ -1088,6 +1093,12 @@ export default function TournamentPage() {
   const startCoachingSession = useCallback(async () => {
     if (!tournament.roster || !opponentRoster || matchups.length === 0) return;
     setCreatingSession(true);
+    // A practice pairing keeps the opponent's real name for estimate lookups but
+    // labels the ROUND "(øvelse)" so it never slugifies to the real team → the
+    // real team's estimates stay unlocked. Reset the practice round afterwards.
+    const roundName = practiceMode
+      ? `${opponentRoster.name || "Modstander"} (øvelse)`
+      : opponentRoster.name || "Modstander";
     try {
       const matchupData: MatchupData[] = matchups.map((m) => ({
         aFaction: m.a.faction,
@@ -1108,7 +1119,7 @@ export default function TournamentPage() {
       }));
       const id = await createSession({
         teamAName: tournament.teamName,
-        teamBName: opponentRoster.name || "Modstander",
+        teamBName: roundName,
         createdAt: Date.now(),
         matchups: matchupData,
       });
@@ -1116,12 +1127,12 @@ export default function TournamentPage() {
       setSessionUrl(url);
 
       // Update team room in Firebase
-      await setActiveSession(TEAM_SLUG, id, currentRoundNumber, opponentRoster.name || "Modstander");
+      await setActiveSession(TEAM_SLUG, id, currentRoundNumber, roundName);
 
       // Save round to tournament
       const completedRound: CompletedRound = {
         number: currentRoundNumber,
-        opponentName: opponentRoster.name || "Modstander",
+        opponentName: roundName,
         opponentRoster,
         matchups,
         sessionId: id,
@@ -1134,7 +1145,7 @@ export default function TournamentPage() {
     } finally {
       setCreatingSession(false);
     }
-  }, [tournament, opponentRoster, matchups, currentRoundNumber]);
+  }, [tournament, opponentRoster, matchups, currentRoundNumber, practiceMode]);
 
   function resetTournament() {
     if (!confirm("Nulstil turneringen? Runder og aktive kampe slettes — roster og seeding bevares.")) return;
@@ -1142,6 +1153,7 @@ export default function TournamentPage() {
     updateTournament({ rounds: [] });
     setView("overview");
     setOpponentRoster(null);
+    setPracticeMode(false);
     setMatchups([]);
     setSessionUrl(null);
   }
@@ -1155,6 +1167,7 @@ export default function TournamentPage() {
     if (n === currentRoundNumber) {
       setView("overview");
       setOpponentRoster(null);
+      setPracticeMode(false);
       setMatchups([]);
       setSessionUrl(null);
     }
@@ -1163,6 +1176,7 @@ export default function TournamentPage() {
   function backToOverview() {
     setView("overview");
     setOpponentRoster(null);
+    setPracticeMode(false);
     setMatchups([]);
     setSessionUrl(null);
     resetModuleState();
@@ -1179,13 +1193,13 @@ export default function TournamentPage() {
       alert("Ingen lister fundet for øve-modstanderen — indlæs dem under Estimater → Pr. land først.");
       return;
     }
-    // Labeled "(øvelse)" on purpose: the live round that "Start coaching session"
-    // creates is keyed by this name, and "Iceland (øvelse)" doesn't slugify to
-    // "iceland" — so Iceland's real estimates stay unlocked/editable. Reset the
-    // practice round afterwards to clear it from the tournament history.
+    // Keep the REAL name so the Estimat-matrix resolves to Iceland's actual
+    // stored estimates (lookupEstimate prefers the matching team). practiceMode
+    // makes the round it later creates use an "(øvelse)" label instead, so
+    // Iceland's real estimates never get locked.
     const roster: RosterExport = {
       v: 1,
-      name: `${opp.name} (øvelse)`,
+      name: opp.name,
       armies: opp.armies.map((a) => ({
         faction: a.faction,
         detachments: a.detachments || [],
@@ -1193,6 +1207,7 @@ export default function TournamentPage() {
       })),
     };
     setOpponentRoster(roster);
+    setPracticeMode(true);
     setMatchups([]);
     setPairingPhase("skirmish1-defender");
     resetModuleState();
