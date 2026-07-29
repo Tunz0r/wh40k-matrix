@@ -74,11 +74,25 @@ export function projectGame(m: {
 // VP become known and the spread shrinks toward 0.
 const GAME_BP_SIGMA = 5;
 
-function randNormal(): number {
+// Deterministic PRNG so the Monte-Carlo is a pure function of its input: the same
+// matchup state always yields the same probabilities. Without this the estimate
+// re-rolled on every render (and the dashboard re-renders on a clock tick), so
+// the win/draw/loss % visibly jittered even when nothing had changed.
+function mulberry32(seed: number): () => number {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function normalFrom(rng: () => number): number {
   let u = 0;
   let v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
+  while (u === 0) u = rng();
+  while (v === 0) v = rng();
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
@@ -108,6 +122,10 @@ export function teamWinProbability(
     const w = started ? Math.min(1, (m.round ?? 1) / 5) : 0;
     return { mean, sigma: m.final ? 0 : GAME_BP_SIGMA * (1 - w) };
   });
+  // Seed the PRNG from the game state so the result is stable across re-renders.
+  let seed = matchups.length + 1;
+  for (const g of games) seed = (Math.imul(seed, 31) + Math.round(g.mean * 100) + Math.round(g.sigma * 100)) | 0;
+  const rng = mulberry32(seed);
   const total = 20 * matchups.length;
   const margin = 12;
   let win = 0;
@@ -116,7 +134,7 @@ export function teamWinProbability(
   for (let s = 0; s < samples; s++) {
     let teamA = 0;
     for (const g of games) {
-      const a = g.sigma > 0 ? g.mean + g.sigma * randNormal() : g.mean;
+      const a = g.sigma > 0 ? g.mean + g.sigma * normalFrom(rng) : g.mean;
       teamA += Math.max(0, Math.min(20, Math.round(a)));
     }
     const diff = 2 * teamA - total;

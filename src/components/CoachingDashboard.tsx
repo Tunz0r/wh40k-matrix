@@ -190,7 +190,8 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
   );
   const projDiff = proj.a - proj.b;
   // Win probability: treats each unfinished game as a distribution, not a point
-  // — the honest read for a dice game. Recomputed cheaply each render.
+  // — the honest read for a dice game. Now deterministic (seeded from the matchup
+  // state), so clock-tick re-renders yield the same numbers instead of jittering.
   const winProb = teamWinProbability(session.matchups);
   const pct = (x: number) => Math.round(x * 100);
 
