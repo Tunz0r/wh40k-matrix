@@ -350,6 +350,10 @@ function EstimateMatrix({
   isContested,
   needsTest,
   playedInTournament,
+  defenderOur,
+  defenderTheir,
+  attackersOur,
+  attackersTheir,
 }: {
   opponents: OpponentMap;
   warmups?: WarmupsNode;
@@ -361,10 +365,22 @@ function EstimateMatrix({
   isContested?: (list: RosterArmy) => boolean;
   needsTest?: (ourIdx: number, list: RosterArmy) => boolean;
   playedInTournament?: (ourFaction: string, list: RosterArmy) => boolean;
+  // Live pairing selection — highlights the active defender/attacker rows & cols.
+  defenderOur?: number | null;
+  defenderTheir?: number | null;
+  attackersOur?: number[];
+  attackersTheir?: number[];
 }) {
   const short = (s: string) => (s.length > 15 ? s.slice(0, 14) + "…" : s);
   const ourIdxs = ourArmies.map((_, i) => i).filter((i) => !hiddenOur?.has(i));
   const theirIdxs = theirArmies.map((_, j) => j).filter((j) => !hiddenTheir?.has(j));
+  // Active-selection helpers: which rows/cols are the defender / an attacker.
+  const atkOur = new Set(attackersOur ?? []);
+  const atkTheir = new Set(attackersTheir ?? []);
+  const hasActive =
+    defenderOur != null || defenderTheir != null || atkOur.size > 0 || atkTheir.size > 0;
+  const rowActive = (i: number) => i === defenderOur || atkOur.has(i);
+  const colActive = (j: number) => j === defenderTheir || atkTheir.has(j);
   const hiddenCount = ourArmies.length - ourIdxs.length + (theirArmies.length - theirIdxs.length);
   // Each cell is an archetype-specific forecast: raw library estimate, shifted to
   // our measured result when we've warmed up vs that archetype (n > 0).
@@ -391,6 +407,11 @@ function EstimateMatrix({
         {hiddenCount > 0 && (
           <span className="text-[#8888a0] font-normal ml-2">— parrede hære er skjult</span>
         )}
+        {hasActive && (
+          <span className="font-normal ml-2 text-[11px]">
+            · <span className="text-amber-300">🛡 forsvarer</span> · <span className="text-sky-300">⚔ angriber</span> — aktive rækker/kolonner fremhævet
+          </span>
+        )}
         <span className="text-[#8888a0] font-normal ml-2">· hold musen over en modstander for at se listen · <span className="text-[#4ade80]">w</span>N = warmup-justeret ud fra N kampe med vores nuværende liste vs den arketype · <span className="text-[#4ade80]">±N</span> = disposition-fordel fra meta-winrates lagt oveni · 🧪 = usikkert estimat uden warmup/turneringskamp til at bekræfte det</span>
         {!hasAny && (
           <span className="text-[#8888a0] font-normal ml-2">
@@ -408,15 +429,22 @@ function EstimateMatrix({
               </th>
               {theirIdxs.map((j) => {
                 const fake = isContested?.(theirArmies[j]);
+                const isDef = j === defenderTheir;
+                const isAtk = atkTheir.has(j);
                 return (
                   <th
                     key={j}
-                    className="text-[10px] text-[#c084fc] font-semibold w-16 max-w-16 truncate px-0.5 cursor-help underline decoration-dotted decoration-[#8888a0]/40 underline-offset-2"
+                    className={`text-[10px] font-semibold w-16 max-w-16 truncate px-0.5 cursor-help underline decoration-dotted decoration-[#8888a0]/40 underline-offset-2 rounded ${
+                      isDef ? "text-amber-300 bg-amber-500/20" : isAtk ? "text-sky-300 bg-sky-500/15" : "text-[#c084fc]"
+                    } ${hasActive && !colActive(j) ? "opacity-40" : ""}`}
                     title={
+                      (isDef ? "🛡 Forsvarer\n" : isAtk ? "⚔ Angriber\n" : "") +
                       theirTooltip(j) +
                       (fake ? "\n\n⚠ Falsk dækning: vores svar mod denne arketype kan optages af andre factions samme runde — se Meta." : "")
                     }
                   >
+                    {isDef && <span title="Forsvarer">🛡 </span>}
+                    {isAtk && <span title="Angriber">⚔ </span>}
                     {fake && <span className="text-[#fb923c] mr-0.5" title="Falsk dækning">⚠</span>}
                     {j + 1}. {short(theirArmies[j].faction)}
                   </th>
@@ -428,9 +456,16 @@ function EstimateMatrix({
             {ourIdxs.map((i) => (
               <tr key={i}>
                 <th
-                  className="text-left text-[11px] text-[#e8e8f0] font-medium pr-2 whitespace-nowrap"
-                  title={`${ourArmies[i].faction} — ${(ourArmies[i].detachments || []).join(", ")}`}
+                  className={`text-left text-[11px] font-medium pr-2 whitespace-nowrap rounded ${
+                    i === defenderOur ? "text-amber-300 bg-amber-500/20" : atkOur.has(i) ? "text-sky-300 bg-sky-500/15" : "text-[#e8e8f0]"
+                  } ${hasActive && !rowActive(i) ? "opacity-40" : ""}`}
+                  title={
+                    (i === defenderOur ? "🛡 Forsvarer\n" : atkOur.has(i) ? "⚔ Angriber\n" : "") +
+                    `${ourArmies[i].faction} — ${(ourArmies[i].detachments || []).join(", ")}`
+                  }
                 >
+                  {i === defenderOur && <span title="Forsvarer">🛡 </span>}
+                  {atkOur.has(i) && <span title="Angriber">⚔ </span>}
                   {i + 1}. {short(ourArmies[i].faction)}
                 </th>
                 {theirIdxs.map((j) => {
@@ -460,10 +495,17 @@ function EstimateMatrix({
                         (unverified
                           ? "\n\n🧪 Usikkert estimat — ingen warmup- eller turneringskampe med denne liste mod arketypen til at bekræfte tallet."
                           : "");
+                  // Live-pairing emphasis: dim cells outside every active row/col,
+                  // and ring the defender's row+column so "who's defending" reads
+                  // at a glance.
+                  const cellDim = hasActive && !rowActive(i) && !colActive(j);
+                  const onDefenderLine = i === defenderOur || j === defenderTheir;
                   return (
                     <td key={j}>
                       <div
-                        className={`relative w-16 h-11 rounded-md border flex items-center justify-center text-[17px] font-bold ${unverified ? "ring-1 ring-[#fb923c]" : ""}`}
+                        className={`relative w-16 h-11 rounded-md border flex items-center justify-center text-[17px] font-bold ${
+                          cellDim ? "opacity-25" : ""
+                        } ${onDefenderLine ? "ring-2 ring-amber-400/70" : unverified ? "ring-1 ring-[#fb923c]" : ""}`}
                         style={
                           s
                             ? { background: s.bg, color: s.fg, borderColor: s.border }
@@ -1913,6 +1955,10 @@ export default function TournamentPage() {
               isContested={isContestedList}
               needsTest={matchupNeedsTest}
               playedInTournament={playedInTournament}
+              defenderOur={defenderA}
+              defenderTheir={defenderB}
+              attackersOur={attackersA}
+              attackersTheir={attackersB}
             />
 
             {/* Defender selection */}
