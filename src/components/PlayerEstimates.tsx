@@ -14,6 +14,7 @@ import {
   clusterLists,
   versionOf,
 } from "@/lib/estimates-db";
+import { dispositionEdgeBP } from "@/lib/disposition-meta";
 import { formatUnits, formatUnitsLines } from "@/lib/list-parser";
 import EstimateInput from "./EstimateInput";
 
@@ -55,6 +56,7 @@ export default function PlayerEstimates({
   playedRounds,
   profiles,
   versions,
+  dispAdj,
   onSet,
   onNeedsTest,
 }: {
@@ -63,6 +65,7 @@ export default function PlayerEstimates({
   playedRounds: Map<string, number>;
   profiles?: ProfilesNode;
   versions: VersionsNode;
+  dispAdj?: boolean;
   onSet: (
     teamSlug: string,
     ourIdx: number,
@@ -200,6 +203,8 @@ export default function PlayerEstimates({
 
   const myProgress = myIdx !== null ? progress[myIdx] : null;
   const clustersDone = annotated.filter((a) => a.filledCount === a.cluster.members.length).length;
+  // Our army's disposition drives the per-cell disposition edge shown/folded in.
+  const ourDisp = myIdx !== null ? ourArmies[myIdx]?.disposition ?? null : null;
 
   return (
     <div className="space-y-4">
@@ -405,6 +410,8 @@ export default function PlayerEstimates({
                     <EstimateInput
                       cell={displayCell}
                       locked={!anchor}
+                      dispBP={dispositionEdgeBP(ourDisp, cluster.rep.list.disposition)}
+                      adjusted={dispAdj}
                       onChange={(v) =>
                         anchor &&
                         onSet(
@@ -448,6 +455,8 @@ export default function PlayerEstimates({
                               <EstimateInput
                                 cell={cellFor(m, myIdx)}
                                 locked={locked}
+                                dispBP={dispositionEdgeBP(ourDisp, m.list.disposition)}
+                                adjusted={dispAdj}
                                 onChange={(v) => onSet(m.teamSlug, myIdx, m.listIdx, v)}
                               />
                             </div>

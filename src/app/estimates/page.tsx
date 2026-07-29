@@ -644,22 +644,18 @@ export default function EstimatesPage() {
           <span className="text-[#8888a0]">
             · Celler markeret <span className="italic">a</span> er auto-udfyldt fra lister med ≥{SIMILARITY_THRESHOLD}% lighed
           </span>
-          {mode === "country" && (
-            <>
-              <button
-                onClick={toggleDispAdj}
-                title="Disposition-fordel fra meta-winrates (listhammer): hjørne-tallet på hver celle er ±BP for din dispositions matchup mod deres. Slå til for at lægge det oven i estimatet (justerer kun visningen — dine tal ændres ikke)."
-                className={`px-2 py-0.5 rounded-md border transition-colors ${
-                  dispAdj
-                    ? "border-[#4ade80]/60 text-[#4ade80] bg-[rgba(74,222,128,0.1)]"
-                    : "border-white/[0.1] text-[#8888a0] hover:text-[#e8e8f0]"
-                }`}
-              >
-                {dispAdj ? "Disp-justeret ✓" : "Disp: Rå"}
-              </button>
-              <span className="text-[#8888a0]">· hjørne-tal = disposition-fordel (BP)</span>
-            </>
-          )}
+          <button
+            onClick={toggleDispAdj}
+            title="Disposition-fordel fra meta-winrates (listhammer): hjørne-tallet på hver celle er ±BP for din dispositions matchup mod deres. Slå til for at lægge det oven i estimatet (justerer kun visningen — dine tal ændres ikke)."
+            className={`px-2 py-0.5 rounded-md border transition-colors ${
+              dispAdj
+                ? "border-[#4ade80]/60 text-[#4ade80] bg-[rgba(74,222,128,0.1)]"
+                : "border-white/[0.1] text-[#8888a0] hover:text-[#e8e8f0]"
+            }`}
+          >
+            {dispAdj ? "Disp-justeret ✓" : "Disp: Rå"}
+          </button>
+          <span className="text-[#8888a0]">· hjørne-tal = disposition-fordel (BP)</span>
         </div>
       </header>
 
@@ -709,6 +705,7 @@ export default function EstimatesPage() {
             playedRounds={playedRounds}
             profiles={fbDoc?.profiles}
             versions={versions}
+            dispAdj={dispAdj}
             onSet={setEstimate}
             onNeedsTest={(keys, flag) => setNeedsTestCells(keys, flag).catch(() => {})}
           />

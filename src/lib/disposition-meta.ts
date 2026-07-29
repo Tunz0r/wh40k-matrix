@@ -22,19 +22,21 @@ export const DISP_BP_PER_PCT = 0.35;
 export const DISP_BP_CAP = 2;
 
 // Win-rate edge (percentage points above/below 50) of OUR disposition vs THEIRS.
+// Accepts loose strings (forecast passes roster/archetype dispositions typed as
+// plain string | null); unknown values fall through to 0.
 export function dispositionEdgeWR(
-  ours?: Disposition | null,
-  theirs?: Disposition | null
+  ours?: string | null,
+  theirs?: string | null
 ): number {
   if (!ours || !theirs) return 0;
-  const wr = DISP_MATCHUP_WR[ours]?.[theirs];
+  const wr = DISP_MATCHUP_WR[ours as Disposition]?.[theirs as Disposition];
   return wr == null ? 0 : wr - 50;
 }
 
 // The edge converted to a bounded, signed BP nudge (−2…+2). Small edges round to 0.
 export function dispositionEdgeBP(
-  ours?: Disposition | null,
-  theirs?: Disposition | null
+  ours?: string | null,
+  theirs?: string | null
 ): number {
   const bp = Math.round(dispositionEdgeWR(ours, theirs) * DISP_BP_PER_PCT);
   return Math.max(-DISP_BP_CAP, Math.min(DISP_BP_CAP, bp));

@@ -391,7 +391,7 @@ function EstimateMatrix({
         {hiddenCount > 0 && (
           <span className="text-[#8888a0] font-normal ml-2">— parrede hære er skjult</span>
         )}
-        <span className="text-[#8888a0] font-normal ml-2">· hold musen over en modstander for at se listen · <span className="text-[#4ade80]">w</span>N = warmup-justeret ud fra N kampe med vores nuværende liste vs den arketype · 🧪 = usikkert estimat uden warmup/turneringskamp til at bekræfte det</span>
+        <span className="text-[#8888a0] font-normal ml-2">· hold musen over en modstander for at se listen · <span className="text-[#4ade80]">w</span>N = warmup-justeret ud fra N kampe med vores nuværende liste vs den arketype · <span className="text-[#4ade80]">±N</span> = disposition-fordel fra meta-winrates lagt oveni · 🧪 = usikkert estimat uden warmup/turneringskamp til at bekræfte det</span>
         {!hasAny && (
           <span className="text-[#8888a0] font-normal ml-2">
             — ingen estimater fundet. Udfyld dem under{" "}
@@ -436,11 +436,12 @@ function EstimateMatrix({
                 {theirIdxs.map((j) => {
                   const f = values.get(`${i}_${j}`);
                   const hasWarmup = !!f && f.n > 0;
-                  // Show the warmup-adjusted forecast when we have games vs this
-                  // archetype, otherwise the raw estimate.
-                  const v = f ? (hasWarmup ? f.adjusted : f.base) : null;
-                  const hasV = v !== null && v !== undefined;
-                  const s = hasV ? estimateStyle(v) : null;
+                  const hasV = !!f && (f.base !== null || f.n > 0);
+                  // f.adjusted folds in warmup AND the disposition edge, so the
+                  // matrix always shows the disposition-aware forecast.
+                  const v = hasV ? f!.adjusted : null;
+                  const dispBP = hasV ? f!.dispBP : 0;
+                  const s = hasV ? estimateStyle(v!) : null;
                   // Unverified guess: estimate marked "unsure" (🧪) with no warmup
                   // and no earlier tournament game to back the number up.
                   const played = hasV ? playedInTournament?.(ourArmies[i].faction, theirArmies[j]) ?? false : false;
@@ -453,6 +454,9 @@ function EstimateMatrix({
                             `Warmup-justeret, vægtet mod ${f!.n} kamp${f!.n === 1 ? "" : "e"} med din NUVÆRENDE liste vs denne arketype` +
                             (f!.base !== null ? ` (rå estimat ${f!.base} → ${v})` : ` (intet rå estimat — snit af faktiske resultater)`)
                           : `${ourArmies[i].faction} vs ${theirArmies[j].faction}: ${v} — ${s!.label}`) +
+                        (dispBP !== 0
+                          ? `\nDisposition-fordel ${dispBP > 0 ? "+" : ""}${dispBP} BP (${ourArmies[i].disposition ?? "?"} vs ${theirArmies[j].disposition ?? "?"}) er lagt oveni`
+                          : "") +
                         (unverified
                           ? "\n\n🧪 Usikkert estimat — ingen warmup- eller turneringskampe med denne liste mod arketypen til at bekræfte tallet."
                           : "");
@@ -482,6 +486,15 @@ function EstimateMatrix({
                             title="Usikkert & ubekræftet estimat"
                           >
                             🧪
+                          </span>
+                        )}
+                        {dispBP !== 0 && (
+                          <span
+                            className="absolute bottom-0.5 right-1 text-[8px] font-bold leading-none"
+                            style={{ color: dispBP > 0 ? "#4ade80" : "#f87171" }}
+                            title={`Disposition-fordel ${dispBP > 0 ? "+" : ""}${dispBP} BP lagt oveni`}
+                          >
+                            {dispBP > 0 ? `+${dispBP}` : dispBP}
                           </span>
                         )}
                       </div>
@@ -1011,7 +1024,9 @@ export default function TournamentPage() {
     // archetype, else the raw estimate. This is the number coaching then tracks.
     const prefill = (ourIdx: number, theirIdx: number) => {
       const f = matchupForecast(opponents, fbDoc?.warmups, ourIdx, armiesB[theirIdx], armiesA[ourIdx], opponentRoster.name);
-      return f.n > 0 ? f.adjusted : f.base ?? 0;
+      // f.adjusted now folds in both warmup and the disposition edge; it equals
+      // base when neither applies. Coaching tracks this number.
+      return f.base !== null || f.n > 0 ? f.adjusted : 0;
     };
 
     const m1: Matchup = {

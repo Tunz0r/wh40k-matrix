@@ -5,6 +5,7 @@ import {
   lookupEstimate,
   SIMILARITY_THRESHOLD,
 } from "./estimates-db";
+import { dispositionEdgeBP } from "./disposition-meta";
 import type { WarmupsNode } from "./tournament-db";
 
 // A minimal archetype descriptor — our current roster army, or a warmup's own
@@ -16,10 +17,11 @@ export interface ArchetypeRef {
 }
 
 export interface MatchupForecast {
-  base: number | null; // library estimate (raw), before any warmup adjustment
-  adjusted: number; // forecast after archetype-specific warmup correction
+  base: number | null; // library estimate (raw), before any adjustment
+  adjusted: number; // forecast after warmup correction AND disposition edge
   n: number; // warmup games ON our current archetype vs this opponent archetype
   avgActual: number | null; // weighted avg actual BP
+  dispBP: number; // disposition-matchup edge (±2) folded into `adjusted`
 }
 
 export interface ArchetypeWarmup {
@@ -114,6 +116,12 @@ export function matchupForecast(
 ): MatchupForecast {
   const base = lookupEstimate(opponents, opponentName ?? null, ourIdx, theirList);
   const w = archetypeWarmupStats(warmups, ourIdx, theirList, ourArchetype);
-  if (!w) return { base, adjusted: base ?? 0, n: 0, avgActual: null };
-  return { base, adjusted: shrunkForecast(base, w) ?? base ?? 0, n: w.onArchetype, avgActual: w.avgActual };
+  // Disposition-matchup edge (our disposition vs theirs), folded on top of the
+  // warmup-corrected value. Only applied when there's actually an estimate to
+  // adjust, so an empty cell doesn't sprout a phantom ±2.
+  const dispBP = dispositionEdgeBP(ourArchetype?.disposition, theirList.disposition);
+  const hasEstimate = base !== null || !!w;
+  const warm = w ? (shrunkForecast(base, w) ?? base ?? 0) : (base ?? 0);
+  const adjusted = hasEstimate ? Math.max(0, Math.min(20, warm + dispBP)) : 0;
+  return { base, adjusted, n: w?.onArchetype ?? 0, avgActual: w?.avgActual ?? null, dispBP: hasEstimate ? dispBP : 0 };
 }
