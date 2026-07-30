@@ -47,6 +47,7 @@ function BPChip({ v }: { v: number }) {
 interface Finding {
   severity: number; // how far outside tolerance
   text: React.ReactNode;
+  players: number[]; // army indices this conflict involves (for player grouping)
 }
 
 export default function SanityPage() {
@@ -142,6 +143,7 @@ export default function SanityPage() {
         if (Math.abs(dev) > TOLERANCE) {
           findings.push({
             severity: Math.abs(dev) - TOLERANCE,
+            players: [A.idx, B.idx],
             text: (
               <>
                 <span className="font-semibold text-[#e8e8f0]">{A.label}</span>
@@ -170,6 +172,7 @@ export default function SanityPage() {
       if (Math.abs(dev) > TOLERANCE) {
         findings.push({
           severity: Math.abs(dev) - TOLERANCE,
+          players: [r.idx],
           text: (
             <>
               <span className="font-semibold text-[#e8e8f0]">{r.label}</span>
@@ -195,6 +198,7 @@ export default function SanityPage() {
         if (diff > DIVERGENCE_MAX) {
           findings.push({
             severity: diff - DIVERGENCE_MAX,
+            players: [r.idx],
             text: (
               <>
                 <span className="font-semibold text-[#e8e8f0]">{r.label}</span>
@@ -216,9 +220,6 @@ export default function SanityPage() {
     return { findings, checkedPairs, checkedSelfs, checkedSimilar };
   }, [resolved, clusterEstimate, similarPairs]);
 
-  const missing = resolved.filter((r) => !r.profile);
-  const unmatched = resolved.filter((r) => r.profile && !r.cluster);
-
   return (
     <>
       <header className="px-4 sm:px-6 py-4 border-b border-white/[0.08] sticky top-12 bg-[#0f0f13] z-20">
@@ -237,62 +238,83 @@ export default function SanityPage() {
       </header>
 
       <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4">
-        {findings.length > 0 ? (
-          <div className="rounded-xl border border-[rgba(239,68,68,0.25)] bg-[rgba(239,68,68,0.03)] p-4">
-            <h2 className="text-sm font-semibold text-[#f87171] mb-3">
-              {findings.length} {findings.length === 1 ? "konflikt" : "konflikter"}
-            </h2>
-            <div className="space-y-1.5">
-              {findings.map((f, i) => (
-                <div key={i} className="rounded-lg border border-white/[0.06] px-3 py-2 text-[12px] leading-relaxed">
-                  {f.text}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : checkedPairs + checkedSelfs + checkedSimilar > 0 ? (
-          <div className="rounded-xl border border-[rgba(34,197,94,0.25)] bg-[rgba(34,197,94,0.03)] p-4">
-            <p className="text-[12px] text-[#4ade80]">
-              Ingen konflikter fundet — alle tjekkede estimater er konsistente.
-            </p>
-          </div>
-        ) : (
+        {checkedPairs + checkedSelfs + checkedSimilar === 0 ? (
           <div className="rounded-xl border border-white/[0.08] p-4">
             <p className="text-[12px] text-[#8888a0]">
               Intet at tjekke endnu — spillerne skal vælge deres arketype under{" "}
               <Link href="/player" className="text-[#a855f7] underline">Min side</Link>, og der skal være estimater mod hinandens arketyper.
             </p>
           </div>
-        )}
-
-        {unmatched.length > 0 && (
-          <div className="rounded-xl border border-[rgba(250,204,21,0.25)] p-4">
-            <h2 className="text-xs font-semibold text-[#facc15] uppercase tracking-wider mb-2">
-              Arketype matcher ikke feltet længere
-            </h2>
-            <p className="text-[11px] text-[#8888a0]">
-              {unmatched.map((r) => r.label).join(", ")} — bed dem vælge en ny arketype på{" "}
-              <Link href="/player" className="text-[#a855f7] underline">Min side</Link>.
-            </p>
-          </div>
-        )}
-
-        {missing.length > 0 && (
-          <div className="rounded-xl border border-white/[0.08] p-4">
-            <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-2">
-              Mangler arketype ({missing.length}/8)
-            </h2>
-            <div className="flex flex-wrap gap-1.5">
-              {missing.map((r) => (
-                <span key={r.idx} className="text-[11px] text-[#8888a0] bg-[#22222e] px-2 py-0.5 rounded">
-                  {r.label}
-                </span>
-              ))}
+        ) : (
+          <>
+            <div className="flex items-center gap-2 flex-wrap text-[11px]">
+              <span className={findings.length ? "text-[#f87171] font-semibold" : "text-[#4ade80] font-semibold"}>
+                {findings.length === 0
+                  ? "Ingen konflikter — alle estimater er konsistente"
+                  : `${findings.length} ${findings.length === 1 ? "konflikt" : "konflikter"}`}
+              </span>
+              <span className="text-[#8888a0]">· gennemgå spiller for spiller</span>
             </div>
-            <p className="text-[10px] text-[#8888a0] mt-2">
-              Jo flere der har valgt deres arketype under <Link href="/player" className="text-[#a855f7] underline">Min side</Link>, jo flere estimater kan krydstjekkes. Flere regler kommer til.
-            </p>
-          </div>
+            {resolved.map((r) => {
+              const pf = findings
+                .filter((f) => f.players.includes(r.idx))
+                .sort((a, b) => b.severity - a.severity);
+              return (
+                <div
+                  key={r.idx}
+                  className={`rounded-xl border p-4 ${
+                    pf.length
+                      ? "border-[rgba(239,68,68,0.25)] bg-[rgba(239,68,68,0.03)]"
+                      : "border-white/[0.08]"
+                  }`}
+                >
+                  <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+                    <span className="text-[11px] text-[#8888a0]">{r.idx + 1}.</span>
+                    <h2 className="text-sm font-semibold text-[#e8e8f0]">{r.label}</h2>
+                    {r.archLabel && <span className="text-[10px] text-[#8888a0]">{r.archLabel}</span>}
+                    <span
+                      className={`ml-auto text-[10px] font-semibold ${
+                        !r.profile || !r.cluster
+                          ? "text-[#facc15]"
+                          : pf.length
+                            ? "text-[#f87171]"
+                            : "text-[#4ade80]"
+                      }`}
+                    >
+                      {!r.profile
+                        ? "mangler arketype"
+                        : !r.cluster
+                          ? "matcher ikke feltet"
+                          : pf.length
+                            ? `${pf.length} konflikt${pf.length === 1 ? "" : "er"}`
+                            : "✓ ingen konflikter"}
+                    </span>
+                  </div>
+                  {!r.profile ? (
+                    <p className="text-[11px] text-[#facc15]">
+                      ⚠ Har ikke valgt sin arketype — vælg den på{" "}
+                      <Link href="/player" className="underline">Min side</Link>.
+                    </p>
+                  ) : !r.cluster ? (
+                    <p className="text-[11px] text-[#facc15]">
+                      ⚠ Arketypen matcher ikke feltet længere — vælg en ny på{" "}
+                      <Link href="/player" className="underline">Min side</Link>.
+                    </p>
+                  ) : pf.length === 0 ? (
+                    <p className="text-[11px] text-[#8888a0]">Alle tjekkede estimater er konsistente.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {pf.map((f, i) => (
+                        <div key={i} className="rounded-lg border border-white/[0.06] px-3 py-2 text-[12px] leading-relaxed">
+                          {f.text}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </>
         )}
       </div>
     </>
