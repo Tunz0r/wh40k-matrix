@@ -411,14 +411,18 @@ export default function EstimatesPage() {
         }
       }
     }
-    // Explicit cluster members: fill (or clear) regardless of similarity, but
-    // never overwrite a manual estimate or touch a played opponent.
+    // Explicit cluster members (the archetype card in Min hær): set/clear EVERY
+    // list in the archetype for this army — including cells that already carry a
+    // manual value. Setting an archetype's estimate is meant to reconcile the
+    // whole cluster, so it must win over stale per-list manuals; otherwise a
+    // cluster that ended up with two different manual values (e.g. an over-merged
+    // archetype) becomes uneditable — the card reads one manual while the write
+    // lands on a different cell. The anchor keeps the manual flag (set above);
+    // the rest become auto copies. Played opponents stay locked.
     for (const t of clusterTargets || []) {
       if (playedRounds.has(t.teamSlug)) continue;
       const key = `${t.teamSlug}/${ourIdx}_${t.listIdx}`;
       if (key in updates) continue;
-      const existing = opponents[t.teamSlug]?.estimates?.[`${ourIdx}_${t.listIdx}`];
-      if (existing && !existing.auto) continue;
       updates[key] = value === null ? null : stampVersion({ v: value, auto: true }, currentVersion);
     }
     writeEstimateCells(updates).catch(() => {});
