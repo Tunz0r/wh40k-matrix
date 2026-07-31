@@ -529,11 +529,17 @@ export function clusterLists(opponents: OpponentMap): ListCluster[] {
     });
   }
 
-  // Single-linkage clustering via union-find: any two lists ≥ threshold similar
-  // land in the same archetype. This replaces the old greedy "match only against
-  // the cluster's first-added rep" pass, which spuriously split same-archetype
-  // lists whenever a list resembled a non-rep member but not the rep. Same 75%
-  // bar — no looser merges, just no ordering artifacts.
+  // Single-linkage clustering via union-find, gated on the DETACHMENT SET: two
+  // lists merge only if they share the same faction, the same (order-independent)
+  // set of detachments, AND are ≥ threshold similar. The detachment gate stops
+  // cross-build chaining — units + a shared secondary detachment used to drag,
+  // say, Votann Farseekers/Recon into the same cluster as Hearthguard/Priority,
+  // producing 20-list mega-archetypes that blurred estimates and couldn't be
+  // edited. Similarity still applies WITHIN a detachment set, so key-unit builds
+  // (e.g. 1-C'tan vs 3-C'tan Necrons) stay distinct.
+  const detKey = (l: OpponentList) =>
+    [...(l.detachments || [])].map((d) => d.trim().toLowerCase()).sort().join("|");
+  const keys = members.map((m) => detKey(m.list));
   const n = members.length;
   const parent = Array.from({ length: n }, (_, i) => i);
   const find = (x: number): number => {
@@ -542,8 +548,9 @@ export function clusterLists(opponents: OpponentMap): ListCluster[] {
   };
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      // listSimilarity is 0 across factions — skip the call entirely.
+      // listSimilarity is 0 across factions; different detachment sets never merge.
       if (members[i].list.faction !== members[j].list.faction) continue;
+      if (keys[i] !== keys[j]) continue;
       if (find(i) === find(j)) continue;
       if (listSimilarity(members[i].list, members[j].list) >= SIMILARITY_THRESHOLD) {
         parent[find(i)] = find(j);
