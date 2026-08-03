@@ -12,17 +12,22 @@ import {
   subscribeToOpponents,
   subscribeToSanityAcks,
   setSanityAck,
+  subscribeToVersions,
+  writeClusterEstimate,
+  slugifyTeam,
   estimateStyle,
   clusterLists,
   matchClusterByMember,
   listSimilarity,
   archetypeId,
+  BASE_VERSION_ID,
   type OpponentMap,
   type OpponentList,
   type ListCluster,
   type ClusterMember,
   type EstimateCell,
   type SanityAckMap,
+  type VersionsNode,
 } from "@/lib/estimates-db";
 
 // How far a mirror-pair sum may drift from 20 (or a self-mirror from 10)
@@ -63,29 +68,113 @@ function BPChip({ v }: { v: number }) {
   );
 }
 
+// Inline-editable estimate value, styled like a BPChip. Commits on blur or
+// Enter (only when the number actually changed), so fixing a flagged conflict
+// never leaves the /sanity page. Locked = the opponent has been played.
+function EditableBP({
+  value,
+  locked,
+  onSave,
+}: {
+  value: number;
+  locked?: boolean;
+  onSave: (v: number | null) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  // Re-sync the draft when the underlying value changes (e.g. a live save lands)
+  // without an effect — React's recommended "adjust state during render".
+  const [lastValue, setLastValue] = useState(value);
+  if (lastValue !== value) {
+    setLastValue(value);
+    setDraft(String(value));
+  }
+  const shown = draft === "" ? 0 : Math.max(0, Math.min(20, Number(draft) || 0));
+  const s = estimateStyle(shown);
+  const commit = () => {
+    const next = draft === "" ? null : Math.max(0, Math.min(20, Number(draft) || 0));
+    if (next !== value) onSave(next);
+  };
+  return (
+    <input
+      type="number"
+      min={0}
+      max={20}
+      value={draft}
+      disabled={locked}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      title={locked ? "Låst — holdet er allerede spillet" : "Ret estimatet — gemmes for hele arketypen"}
+      className={`w-9 h-6 text-center text-[11px] font-bold rounded border outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${locked ? "cursor-not-allowed opacity-60" : ""}`}
+      style={{ background: s.bg, color: s.fg, borderColor: s.border }}
+    />
+  );
+}
+
+// An estimate value a conflict is about, made editable inline. `armyIdx` vs the
+// archetype `cluster` — writing reconciles the whole cluster.
+interface EditableCell {
+  armyIdx: number;
+  cluster: ListCluster;
+  label: string;
+  value: number;
+  locked: boolean;
+}
+
 interface Finding {
   severity: number; // how far outside tolerance
   sig: string; // stable, value-bearing key for check-offs (see sanitySig)
   text: React.ReactNode;
   players: number[]; // army indices this conflict involves (for player grouping)
+  cells: EditableCell[]; // the estimate values in play, for inline editing
 }
 
 export default function SanityPage() {
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
   const [opponents, setOpponents] = useState<OpponentMap>({});
   const [acks, setAcks] = useState<SanityAckMap>({});
+  const [versions, setVersions] = useState<VersionsNode | null>(null);
 
   useEffect(() => {
     try {
       const u1 = subscribeToTournament(TEAM_SLUG, setDoc);
       const u2 = subscribeToOpponents(setOpponents);
       const u3 = subscribeToSanityAcks(setAcks);
-      return () => { u1(); u2(); u3(); };
+      const u4 = subscribeToVersions(setVersions);
+      return () => { u1(); u2(); u3(); u4(); };
     } catch {}
   }, []);
 
   const clusters = useMemo(() => clusterLists(opponents), [opponents]);
   const armies = useMemo(() => doc?.roster?.armies || [], [doc]);
+
+  // Opponents already played this tournament are locked (their lists/estimates
+  // are frozen), so a quick edit must skip them — same rule as /estimates.
+  const playedSlugs = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of doc?.rounds || []) {
+      if ((r.status === "live" || r.status === "completed") && r.opponentName) {
+        set.add(slugifyTeam(r.opponentName));
+      }
+    }
+    return set;
+  }, [doc]);
+
+  // Save a corrected estimate for one army vs an archetype — reconciles the
+  // whole cluster and version-stamps, so the fix behaves exactly like editing on
+  // /estimates. The live subscription re-flows findings, so the conflict clears
+  // on its own.
+  const saveEstimate = (armyIdx: number, cluster: ListCluster, value: number | null) => {
+    writeClusterEstimate({
+      ourIdx: armyIdx,
+      cluster,
+      value,
+      currentVersion: versions?.current ?? BASE_VERSION_ID,
+      playedSlugs,
+    }).catch(() => {});
+  };
 
   // Each army's profile resolved to its live cluster in the field.
   const resolved = useMemo(() => {
@@ -178,6 +267,10 @@ export default function SanityPage() {
             severity: Math.abs(dev) - TOLERANCE,
             sig: sanitySig(["mirror", A.idx, B.idx, a, b]),
             players: [A.idx, B.idx],
+            cells: [
+              { armyIdx: A.idx, cluster: B.cluster!, label: `${A.label} → ${B.archLabel}`, value: a, locked: B.cluster!.members.every((m) => playedSlugs.has(m.teamSlug)) },
+              { armyIdx: B.idx, cluster: A.cluster!, label: `${B.label} → ${A.archLabel}`, value: b, locked: A.cluster!.members.every((m) => playedSlugs.has(m.teamSlug)) },
+            ],
             text: (
               <>
                 <span className="font-semibold text-[#e8e8f0]">{A.label}</span>
@@ -208,6 +301,9 @@ export default function SanityPage() {
           severity: Math.abs(dev) - TOLERANCE,
           sig: sanitySig(["self", r.idx, v]),
           players: [r.idx],
+          cells: [
+            { armyIdx: r.idx, cluster: r.cluster!, label: `${r.label} → egen arketype`, value: v, locked: r.cluster!.members.every((m) => playedSlugs.has(m.teamSlug)) },
+          ],
           text: (
             <>
               <span className="font-semibold text-[#e8e8f0]">{r.label}</span>
@@ -234,10 +330,15 @@ export default function SanityPage() {
           // Order-independent over the two archetypes so the key is stable
           // regardless of how the live clustering orders them.
           const pairKey = [`${clusterArchId(p.a)}=${a}`, `${clusterArchId(p.b)}=${b}`].sort();
+          const shortArch = (c: ListCluster) => `${c.rep.list.faction} ${(c.rep.list.detachments || []).join(", ")}`.trim();
           findings.push({
             severity: diff - DIVERGENCE_MAX,
             sig: sanitySig(["similar", r.idx, ...pairKey]),
             players: [r.idx],
+            cells: [
+              { armyIdx: r.idx, cluster: p.a, label: `${r.label} → ${shortArch(p.a)}`, value: a, locked: p.a.members.every((m) => playedSlugs.has(m.teamSlug)) },
+              { armyIdx: r.idx, cluster: p.b, label: `${r.label} → ${shortArch(p.b)}`, value: b, locked: p.b.members.every((m) => playedSlugs.has(m.teamSlug)) },
+            ],
             text: (
               <>
                 <span className="font-semibold text-[#e8e8f0]">{r.label}</span>
@@ -257,7 +358,7 @@ export default function SanityPage() {
 
     findings.sort((a, b) => b.severity - a.severity);
     return { findings, checkedPairs, checkedSelfs, checkedSimilar };
-  }, [resolved, clusterEstimate, similarPairs]);
+  }, [resolved, clusterEstimate, similarPairs, playedSlugs]);
 
   // A conflict is "checked off" when its signature is present in the shared acks
   // node. Acks are kept out of the findings memo so toggling one doesn't recompute
@@ -388,7 +489,23 @@ export default function SanityPage() {
                                   ✓
                                 </span>
                               )}
-                              <div className={acked ? "opacity-60" : ""}>{f.text}</div>
+                              <div className={acked ? "opacity-60" : ""}>
+                                {f.text}
+                                {f.cells.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                                    {f.cells.map((c, i) => (
+                                      <span key={i} className="inline-flex items-center gap-1.5 text-[10px] text-[#8888a0]">
+                                        <span className="whitespace-nowrap">{c.label}</span>
+                                        <EditableBP
+                                          value={c.value}
+                                          locked={c.locked}
+                                          onSave={(v) => saveEstimate(c.armyIdx, c.cluster, v)}
+                                        />
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             <button
                               type="button"

@@ -139,6 +139,37 @@ export async function writeEstimateCells(
   await update(ref(getDb()), updates);
 }
 
+// Write ONE archetype's estimate for a given army across every list in the
+// cluster — a quick, cluster-correct edit usable from anywhere (e.g. /sanity),
+// mirroring the "archetype card" write on /estimates. The manual value lands on
+// a durable anchor (a permanent meta-reference member — tier "Meta …" — if the
+// cluster has one, so it survives country rebuilds; else the rep/first unlocked
+// list); the other members become auto copies. Played opponents stay locked.
+// `value: null` clears the whole cluster.
+export async function writeClusterEstimate(opts: {
+  ourIdx: number;
+  cluster: ListCluster;
+  value: number | null;
+  currentVersion: string;
+  playedSlugs?: Set<string>;
+}): Promise<void> {
+  const { ourIdx, cluster, value, currentVersion, playedSlugs } = opts;
+  const locked = (slug: string) => Boolean(playedSlugs?.has(slug));
+  const unlocked = cluster.members.filter((m) => !locked(m.teamSlug));
+  if (unlocked.length === 0) return;
+  const anchor =
+    unlocked.find((m) => /^meta/i.test(m.tier)) ??
+    (!locked(cluster.rep.teamSlug) ? cluster.rep : unlocked[0]);
+  const updates: Record<string, EstimateCell | null> = {};
+  for (const m of unlocked) {
+    updates[`${m.teamSlug}/${ourIdx}_${m.listIdx}`] =
+      value === null
+        ? null
+        : stampVersion(m === anchor ? { v: value } : { v: value, auto: true }, currentVersion);
+  }
+  await writeEstimateCells(updates);
+}
+
 // Toggle the "needs testing" flag on existing estimate cells without touching
 // their value/auto. Keys are `${teamSlug}/${ourIdx}_${theirIdx}`. Only writes
 // the subfield, so cells that don't exist are left alone (nothing to flag).
