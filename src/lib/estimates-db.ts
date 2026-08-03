@@ -253,6 +253,44 @@ export async function setCurrentVersion(id: string): Promise<void> {
   await set(ref(getDb(), `${VERSIONS}/current`), id);
 }
 
+// --- Sanity check-offs ---
+// The /sanity page flags estimate conflicts by cross-checking the team's numbers.
+// A flagged conflict can be a real, deliberate asymmetry the team has looked at
+// and judged fine — so it can be "checked off" to clear it from the outstanding
+// list. The check-off is keyed by a SIGNATURE that includes the conflicting
+// values (see sanitySig on /sanity), so if any of those estimates later changes
+// the conflict re-surfaces for a fresh look instead of staying silently
+// dismissed. Lives next to the team node so subscribeToOpponents never streams it.
+const SANITY_OK = `estimates/${TEAM_SLUG}-sanity-ok`;
+
+export interface SanityAck {
+  at: number; // when it was checked off
+}
+export type SanityAckMap = Record<string, SanityAck>;
+
+export function subscribeToSanityAcks(
+  callback: (acks: SanityAckMap) => void
+): () => void {
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const r = ref(getDb(), SANITY_OK);
+    onValue(r, (snap) => callback((snap.val() as SanityAckMap) || {}));
+    cleanup = () => off(r);
+  });
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
+}
+
+// Check off (ok=true) or un-check (ok=false) a single conflict by signature.
+export async function setSanityAck(sig: string, ok: boolean): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `${SANITY_OK}/${sig}`), ok ? { at: Date.now() } : null);
+}
+
 // --- Archetype estimate bank ---
 // An estimate is a statement about "my archetype vs theirs" — it belongs to
 // the archetype, not to a roster slot. When a slot's chosen archetype is set,

@@ -10,15 +10,19 @@ import {
 } from "@/lib/tournament-db";
 import {
   subscribeToOpponents,
+  subscribeToSanityAcks,
+  setSanityAck,
   estimateStyle,
   clusterLists,
   matchClusterByMember,
   listSimilarity,
+  archetypeId,
   type OpponentMap,
   type OpponentList,
   type ListCluster,
   type ClusterMember,
   type EstimateCell,
+  type SanityAckMap,
 } from "@/lib/estimates-db";
 
 // How far a mirror-pair sum may drift from 20 (or a self-mirror from 10)
@@ -31,6 +35,21 @@ const TOLERANCE = 2;
 // differently.
 const SIMILAR_PAIR_MIN = 60;
 const DIVERGENCE_MAX = 4;
+
+// Stable, value-bearing key for a conflict so a check-off can be persisted and
+// shared. Including the conflicting values means that if any of them later
+// changes, the signature changes too and the conflict re-surfaces for a fresh
+// look rather than staying dismissed against numbers that no longer hold.
+function sanitySig(parts: (string | number)[]): string {
+  return parts.join(":").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+const clusterArchId = (c: ListCluster): string =>
+  archetypeId({
+    faction: c.rep.list.faction,
+    detachments: c.rep.list.detachments || [],
+    disposition: (c.rep.list.disposition ?? null) as string | null,
+  });
 
 function BPChip({ v }: { v: number }) {
   const s = estimateStyle(v);
@@ -46,6 +65,7 @@ function BPChip({ v }: { v: number }) {
 
 interface Finding {
   severity: number; // how far outside tolerance
+  sig: string; // stable, value-bearing key for check-offs (see sanitySig)
   text: React.ReactNode;
   players: number[]; // army indices this conflict involves (for player grouping)
 }
@@ -53,12 +73,14 @@ interface Finding {
 export default function SanityPage() {
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
   const [opponents, setOpponents] = useState<OpponentMap>({});
+  const [acks, setAcks] = useState<SanityAckMap>({});
 
   useEffect(() => {
     try {
       const u1 = subscribeToTournament(TEAM_SLUG, setDoc);
       const u2 = subscribeToOpponents(setOpponents);
-      return () => { u1(); u2(); };
+      const u3 = subscribeToSanityAcks(setAcks);
+      return () => { u1(); u2(); u3(); };
     } catch {}
   }, []);
 
@@ -143,6 +165,7 @@ export default function SanityPage() {
         if (Math.abs(dev) > TOLERANCE) {
           findings.push({
             severity: Math.abs(dev) - TOLERANCE,
+            sig: sanitySig(["mirror", A.idx, B.idx, a, b]),
             players: [A.idx, B.idx],
             text: (
               <>
@@ -172,6 +195,7 @@ export default function SanityPage() {
       if (Math.abs(dev) > TOLERANCE) {
         findings.push({
           severity: Math.abs(dev) - TOLERANCE,
+          sig: sanitySig(["self", r.idx, v]),
           players: [r.idx],
           text: (
             <>
@@ -196,8 +220,12 @@ export default function SanityPage() {
         checkedSimilar++;
         const diff = Math.abs(a - b);
         if (diff > DIVERGENCE_MAX) {
+          // Order-independent over the two archetypes so the key is stable
+          // regardless of how the live clustering orders them.
+          const pairKey = [`${clusterArchId(p.a)}=${a}`, `${clusterArchId(p.b)}=${b}`].sort();
           findings.push({
             severity: diff - DIVERGENCE_MAX,
+            sig: sanitySig(["similar", r.idx, ...pairKey]),
             players: [r.idx],
             text: (
               <>
@@ -219,6 +247,17 @@ export default function SanityPage() {
     findings.sort((a, b) => b.severity - a.severity);
     return { findings, checkedPairs, checkedSelfs, checkedSimilar };
   }, [resolved, clusterEstimate, similarPairs]);
+
+  // A conflict is "checked off" when its signature is present in the shared acks
+  // node. Acks are kept out of the findings memo so toggling one doesn't recompute
+  // every conflict — it only re-styles.
+  const isAcked = (f: Finding) => Boolean(acks[f.sig]);
+  const outstandingCount = findings.filter((f) => !isAcked(f)).length;
+  const ackedCount = findings.length - outstandingCount;
+
+  const toggleAck = (f: Finding) => {
+    setSanityAck(f.sig, !isAcked(f)).catch(() => {});
+  };
 
   return (
     <>
@@ -248,22 +287,33 @@ export default function SanityPage() {
         ) : (
           <>
             <div className="flex items-center gap-2 flex-wrap text-[11px]">
-              <span className={findings.length ? "text-[#f87171] font-semibold" : "text-[#4ade80] font-semibold"}>
-                {findings.length === 0
-                  ? "Ingen konflikter — alle estimater er konsistente"
-                  : `${findings.length} ${findings.length === 1 ? "konflikt" : "konflikter"}`}
+              <span className={outstandingCount ? "text-[#f87171] font-semibold" : "text-[#4ade80] font-semibold"}>
+                {outstandingCount === 0
+                  ? "Ingen udestående konflikter — alle estimater er konsistente eller afkrydset"
+                  : `${outstandingCount} ${outstandingCount === 1 ? "udestående konflikt" : "udestående konflikter"}`}
               </span>
+              {ackedCount > 0 && (
+                <span className="text-[#4ade80]/70">· {ackedCount} afkrydset</span>
+              )}
               <span className="text-[#8888a0]">· gennemgå spiller for spiller</span>
             </div>
             {resolved.map((r) => {
+              // Unchecked conflicts first (by severity), then checked-off ones.
               const pf = findings
                 .filter((f) => f.players.includes(r.idx))
-                .sort((a, b) => b.severity - a.severity);
+                .sort((a, b) => {
+                  const aAck = isAcked(a) ? 1 : 0;
+                  const bAck = isAcked(b) ? 1 : 0;
+                  if (aAck !== bAck) return aAck - bAck;
+                  return b.severity - a.severity;
+                });
+              const outCount = pf.filter((f) => !isAcked(f)).length;
+              const ackHere = pf.length - outCount;
               return (
                 <div
                   key={r.idx}
                   className={`rounded-xl border p-4 ${
-                    pf.length
+                    outCount
                       ? "border-[rgba(239,68,68,0.25)] bg-[rgba(239,68,68,0.03)]"
                       : "border-white/[0.08]"
                   }`}
@@ -276,7 +326,7 @@ export default function SanityPage() {
                       className={`ml-auto text-[10px] font-semibold ${
                         !r.profile || !r.cluster
                           ? "text-[#facc15]"
-                          : pf.length
+                          : outCount
                             ? "text-[#f87171]"
                             : "text-[#4ade80]"
                       }`}
@@ -285,9 +335,11 @@ export default function SanityPage() {
                         ? "mangler arketype"
                         : !r.cluster
                           ? "matcher ikke feltet"
-                          : pf.length
-                            ? `${pf.length} konflikt${pf.length === 1 ? "" : "er"}`
-                            : "✓ ingen konflikter"}
+                          : outCount
+                            ? `${outCount} konflikt${outCount === 1 ? "" : "er"}${ackHere ? ` · ${ackHere} afkrydset` : ""}`
+                            : ackHere
+                              ? `✓ ${ackHere} afkrydset`
+                              : "✓ ingen konflikter"}
                     </span>
                   </div>
                   {!r.profile ? (
@@ -304,11 +356,33 @@ export default function SanityPage() {
                     <p className="text-[11px] text-[#8888a0]">Alle tjekkede estimater er konsistente.</p>
                   ) : (
                     <div className="space-y-1.5">
-                      {pf.map((f, i) => (
-                        <div key={i} className="rounded-lg border border-white/[0.06] px-3 py-2 text-[12px] leading-relaxed">
-                          {f.text}
-                        </div>
-                      ))}
+                      {pf.map((f) => {
+                        const acked = isAcked(f);
+                        return (
+                          <div
+                            key={f.sig}
+                            className={`rounded-lg border px-3 py-2 text-[12px] leading-relaxed flex items-start gap-3 ${
+                              acked
+                                ? "border-white/[0.06] bg-[rgba(74,222,128,0.04)]"
+                                : "border-white/[0.06]"
+                            }`}
+                          >
+                            <div className={`flex-1 min-w-0 ${acked ? "opacity-55" : ""}`}>{f.text}</div>
+                            <button
+                              type="button"
+                              onClick={() => toggleAck(f)}
+                              title={acked ? "Fjern afkrydsning — vis som konflikt igen" : "Set og OK — kryds af, så den ikke tælles som konflikt"}
+                              className={`shrink-0 self-start rounded border px-2 py-1 text-[10px] font-semibold whitespace-nowrap transition-colors ${
+                                acked
+                                  ? "border-white/[0.12] text-[#8888a0] hover:text-[#e8e8f0] hover:border-white/25"
+                                  : "border-[rgba(74,222,128,0.35)] text-[#4ade80] hover:bg-[rgba(74,222,128,0.12)]"
+                              }`}
+                            >
+                              {acked ? "✓ afkrydset — fortryd" : "Ser rigtigt ud ✓"}
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
