@@ -121,17 +121,28 @@ export default function SanityPage() {
     };
   }, [opponents]);
 
-  // Archetype pairs similar enough that their estimates should agree.
+  // Only archetypes that actually exist at the WTC matter — a cluster is
+  // WTC-relevant if any member comes from a real WTC 2026 roster (`wtc: true`).
+  // Meta reference lists (ATC/PtG/Listhammer) are prep material, not opponents
+  // we'll face, so conflicts involving them are noise.
+  const isWtcCluster = useMemo(
+    () => (c: ListCluster) => c.members.some((m) => opponents[m.teamSlug]?.wtc),
+    [opponents]
+  );
+
+  // Archetype pairs similar enough that their estimates should agree. Both sides
+  // must be WTC archetypes — we don't care if a meta-only list diverges.
   const similarPairs = useMemo(() => {
+    const wtcClusters = clusters.filter(isWtcCluster);
     const pairs: { a: ListCluster; b: ListCluster; sim: number }[] = [];
-    for (let i = 0; i < clusters.length; i++) {
-      for (let j = i + 1; j < clusters.length; j++) {
-        const sim = listSimilarity(clusters[i].rep.list, clusters[j].rep.list);
-        if (sim >= SIMILAR_PAIR_MIN) pairs.push({ a: clusters[i], b: clusters[j], sim });
+    for (let i = 0; i < wtcClusters.length; i++) {
+      for (let j = i + 1; j < wtcClusters.length; j++) {
+        const sim = listSimilarity(wtcClusters[i].rep.list, wtcClusters[j].rep.list);
+        if (sim >= SIMILAR_PAIR_MIN) pairs.push({ a: wtcClusters[i], b: wtcClusters[j], sim });
       }
     }
     return pairs;
-  }, [clusters]);
+  }, [clusters, isWtcCluster]);
 
   // Rule 1 — mirror pairs: if our player A (archetype X) estimates 14 vs
   // archetype Y, then our player B (archetype Y) should estimate ~6 vs X;
