@@ -363,22 +363,37 @@ export default function SanityPage() {
                             key={f.sig}
                             className={`rounded-lg border px-3 py-2 text-[12px] leading-relaxed flex items-start gap-3 ${
                               acked
-                                ? "border-white/[0.06] bg-[rgba(74,222,128,0.04)]"
-                                : "border-white/[0.06]"
+                                ? "border-l-2 border-l-[#4ade80] border-y border-r border-y-[rgba(74,222,128,0.2)] border-r-[rgba(74,222,128,0.2)] bg-[rgba(74,222,128,0.06)]"
+                                : "border border-white/[0.06]"
                             }`}
                           >
-                            <div className={`flex-1 min-w-0 ${acked ? "opacity-55" : ""}`}>{f.text}</div>
+                            <div className="flex-1 min-w-0 flex items-start gap-2">
+                              {acked && (
+                                <span
+                                  className="shrink-0 mt-[1px] text-[10px] font-bold text-[#4ade80]"
+                                  aria-label="Afkrydset som OK"
+                                  title="Afkrydset som OK"
+                                >
+                                  ✓
+                                </span>
+                              )}
+                              <div className={acked ? "opacity-60" : ""}>{f.text}</div>
+                            </div>
                             <button
                               type="button"
                               onClick={() => toggleAck(f)}
-                              title={acked ? "Fjern afkrydsning — vis som konflikt igen" : "Set og OK — kryds af, så den ikke tælles som konflikt"}
+                              title={
+                                acked
+                                  ? "Afkrydset som OK — klik for at vise som konflikt igen"
+                                  : "Marker konflikten som set og i orden"
+                              }
                               className={`shrink-0 self-start rounded border px-2 py-1 text-[10px] font-semibold whitespace-nowrap transition-colors ${
                                 acked
-                                  ? "border-white/[0.12] text-[#8888a0] hover:text-[#e8e8f0] hover:border-white/25"
-                                  : "border-[rgba(74,222,128,0.35)] text-[#4ade80] hover:bg-[rgba(74,222,128,0.12)]"
+                                  ? "border-[rgba(74,222,128,0.4)] bg-[rgba(74,222,128,0.12)] text-[#4ade80] hover:bg-transparent hover:border-white/20 hover:text-[#8888a0]"
+                                  : "border-white/[0.14] text-[#a8a8b8] hover:border-white/30 hover:text-[#e8e8f0] hover:bg-white/[0.04]"
                               }`}
                             >
-                              {acked ? "✓ afkrydset — fortryd" : "Ser rigtigt ud ✓"}
+                              {acked ? "✓ OK · fortryd" : "Ser rigtigt ud"}
                             </button>
                           </div>
                         );
