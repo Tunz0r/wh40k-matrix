@@ -13,8 +13,13 @@ export interface MatchupData {
   layoutPage: number | null;
   estimate: number; // pairing estimate (0-20 WTC scale), set when the matchup is created
   tableAdj?: number; // live per-game adjustment once the defender's table is known; effective = estimate + tableAdj
-  aVP: number; // Team A victory points
-  bVP: number; // Team B victory points
+  aVP: number; // Team A victory points (sum of aTurns once per-turn scoring is used)
+  bVP: number; // Team B victory points (sum of bTurns)
+  // Per-battle-round VP breakdown (index 0 = round 1). Optional: games scored
+  // before per-turn entry existed (e.g. round 1) have no turns and keep their
+  // aVP/bVP totals as-is. When present, aVP/bVP are kept equal to their sums.
+  aTurns?: number[];
+  bTurns?: number[];
   round: number; // current game round (1-5)
   notes: string;
   final: boolean; // true when game is done
@@ -103,6 +108,31 @@ export async function updateMatchupVP(
     set(ref(getDb(), `${base}/aVP`), aVP),
     set(ref(getDb(), `${base}/bVP`), bVP),
   ]);
+}
+
+// Per-turn scoring: write the two per-battle-round VP arrays and keep the game
+// totals aVP/bVP equal to their sums, in one atomic multi-path update so the
+// breakdown and totals never diverge. Arrays are padded to 5 and floored to
+// non-negative ints, so Firebase stores a dense array (never a sparse object).
+export async function updateMatchupTurns(
+  sessionId: string,
+  matchupIndex: number,
+  aTurns: number[],
+  bTurns: number[]
+): Promise<void> {
+  await authReady();
+  const pad = (arr: number[]) =>
+    Array.from({ length: 5 }, (_, i) => Math.max(0, Math.floor(Number(arr[i]) || 0)));
+  const a = pad(aTurns);
+  const b = pad(bTurns);
+  const sum = (x: number[]) => x.reduce((s, v) => s + v, 0);
+  const base = `sessions/${sessionId}/matchups/${matchupIndex}`;
+  await update(ref(getDb()), {
+    [`${base}/aTurns`]: a,
+    [`${base}/bTurns`]: b,
+    [`${base}/aVP`]: sum(a),
+    [`${base}/bVP`]: sum(b),
+  });
 }
 
 export async function updateMatchupFinal(

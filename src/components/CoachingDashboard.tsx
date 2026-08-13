@@ -12,7 +12,7 @@ import {
   subscribeToConnection,
   setSessionTimer,
   updateMatchupClock,
-  updateMatchupVP,
+  updateMatchupTurns,
   updateMatchupRound,
   updateMatchupNotes,
   updateMatchupFinal,
@@ -94,10 +94,10 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
     [sessionId, session]
   );
 
-  const handleVP = useCallback(
-    (idx: number, aVP: number, bVP: number) => {
+  const handleTurns = useCallback(
+    (idx: number, aTurns: number[], bTurns: number[]) => {
       ensureGameClock(idx);
-      updateMatchupVP(sessionId, idx, aVP, bVP);
+      updateMatchupTurns(sessionId, idx, aTurns, bTurns).catch(() => {});
     },
     [sessionId, ensureGameClock]
   );
@@ -413,7 +413,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
               isCoach={view === "coach"}
               expectedRound={expectedRound}
               now={now}
-              onVP={handleVP}
+              onTurns={handleTurns}
               onRound={handleRound}
               onNotes={handleNotes}
               onFinal={handleFinal}
@@ -454,7 +454,7 @@ function MatchupCard({
   isCoach,
   expectedRound,
   now,
-  onVP,
+  onTurns,
   onRound,
   onNotes,
   onFinal,
@@ -470,7 +470,7 @@ function MatchupCard({
   isCoach: boolean;
   expectedRound: number | null;
   now: number;
-  onVP: (idx: number, aVP: number, bVP: number) => void;
+  onTurns: (idx: number, aTurns: number[], bTurns: number[]) => void;
   onRound: (idx: number, r: number) => void;
   onNotes: (idx: number, n: string) => void;
   onFinal: (idx: number, f: boolean) => void;
@@ -486,6 +486,23 @@ function MatchupCard({
   const aAhead = vpDiff >= 0;
   // Finished games are locked against stray taps — untick "færdig" to edit.
   const canEdit = isCoach && !matchup.final;
+  // Per-turn scoring. Games from before this feature (e.g. round 1) have no
+  // turn arrays; an editable one with a lump total gets that total seeded into
+  // round 1 so switching to per-turn preserves the sum with zero data loss.
+  const hasTurns = Array.isArray(matchup.aTurns);
+  const pad5 = (arr?: number[]) =>
+    Array.from({ length: 5 }, (_, i) => Math.max(0, Math.floor(Number(arr?.[i]) || 0)));
+  const seededFromTotal = !hasTurns && (aVP > 0 || bVP > 0);
+  const aTurns = hasTurns ? pad5(matchup.aTurns) : seededFromTotal ? [aVP, 0, 0, 0, 0] : [0, 0, 0, 0, 0];
+  const bTurns = hasTurns ? pad5(matchup.bTurns) : seededFromTotal ? [bVP, 0, 0, 0, 0] : [0, 0, 0, 0, 0];
+  const setTurn = (side: "a" | "b", i: number, val: number) => {
+    const a = aTurns.slice();
+    const b = bTurns.slice();
+    const v = Math.max(0, Math.min(100, Math.floor(val) || 0));
+    if (side === "a") a[i] = v;
+    else b[i] = v;
+    onTurns(idx, a, b);
+  };
   // How far the live score is from the adjusted estimate — the coach's
   // "walk over there" signal once a game is underway.
   const started = aVP > 0 || bVP > 0;
@@ -777,81 +794,78 @@ function MatchupCard({
             </div>
           </div>
 
-          {/* VP Score input */}
+          {/* Per-turn VP score */}
           <div>
-            <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-2 font-semibold">
-              Score
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">
+                Score pr. runde
+              </span>
+              <span className="text-[10px] text-[#8888a0]">
+                Total <b className="text-[#e8e8f0]">{aVP}</b>–<b className="text-[#e8e8f0]">{bVP}</b>
+              </span>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              {/* Team A (our team) */}
-              <div className="rounded-lg border border-[rgba(34,197,94,0.2)] bg-[rgba(34,197,94,0.03)] p-2.5">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <DispDot d={matchup.aDisposition} />
-                  <span className="text-[11px] text-[#4ade80] font-medium truncate">{matchup.aFaction}</span>
+
+            {canEdit || hasTurns ? (
+              <div className="space-y-1.5">
+                {/* Column headers: who's who */}
+                <div className="grid grid-cols-[2.75rem_1fr_1fr] gap-2 items-center">
+                  <span className="text-[9px] text-[#8888a0] uppercase tracking-wider">Runde</span>
+                  <span className="flex items-center gap-1 text-[10px] text-[#4ade80] font-medium truncate">
+                    <DispDot d={matchup.aDisposition} />
+                    <span className="truncate">{matchup.aFaction}</span>
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px] text-[#8888a0] font-medium truncate">
+                    <DispDot d={matchup.bDisposition} />
+                    <span className="truncate">{matchup.bFaction}</span>
+                  </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {canEdit && (
-                    <button
-                      onClick={() => onVP(idx, Math.max(0, aVP - 1), bVP)}
-                      className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
-                    >
-                      −
-                    </button>
-                  )}
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={aVP}
-                    onChange={(e) => canEdit && onVP(idx, Math.max(0, Number(e.target.value) || 0), bVP)}
-                    disabled={!canEdit}
-                    className="flex-1 text-center text-xl font-bold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-1.5 text-[#e8e8f0] outline-none focus:border-[#4ade80] disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                  {canEdit && (
-                    <button
-                      onClick={() => onVP(idx, Math.min(100, aVP + 1), bVP)}
-                      className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
-                    >
-                      +
-                    </button>
-                  )}
+                {/* One row per battle round */}
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} className="grid grid-cols-[2.75rem_1fr_1fr] gap-2 items-center">
+                    <span className="text-[11px] text-[#8888a0] font-semibold">R{i + 1}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={aTurns[i]}
+                      onChange={(e) => setTurn("a", i, Number(e.target.value))}
+                      disabled={!canEdit}
+                      aria-label={`${teamAName} runde ${i + 1} VP`}
+                      className="w-full text-center text-sm font-bold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-1 text-[#e8e8f0] outline-none focus:border-[#4ade80] disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={bTurns[i]}
+                      onChange={(e) => setTurn("b", i, Number(e.target.value))}
+                      disabled={!canEdit}
+                      aria-label={`${teamBName} runde ${i + 1} VP`}
+                      className="w-full text-center text-sm font-bold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-1 text-[#e8e8f0] outline-none focus:border-[#a855f7] disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                ))}
+                {/* Sum row */}
+                <div className="grid grid-cols-[2.75rem_1fr_1fr] gap-2 items-center pt-1.5 border-t border-white/[0.06]">
+                  <span className="text-[9px] text-[#8888a0] uppercase tracking-wider">Sum</span>
+                  <span className={`text-center text-[15px] font-bold ${aAhead ? "text-[#4ade80]" : "text-[#e8e8f0]"}`}>{aVP}</span>
+                  <span className={`text-center text-[15px] font-bold ${!aAhead && vpDiff !== 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>{bVP}</span>
                 </div>
+                {canEdit && seededFromTotal && (
+                  <p className="text-[9px] text-[#facc15]">
+                    Tidligere total lagt i R1 — fordel den ud på de spillede runder.
+                  </p>
+                )}
               </div>
-              {/* Team B (opponent) */}
-              <div className="rounded-lg border border-white/[0.08] p-2.5">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <DispDot d={matchup.bDisposition} />
-                  <span className="text-[11px] text-[#8888a0] font-medium truncate">{matchup.bFaction}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {canEdit && (
-                    <button
-                      onClick={() => onVP(idx, aVP, Math.max(0, bVP - 1))}
-                      className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
-                    >
-                      −
-                    </button>
-                  )}
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={bVP}
-                    onChange={(e) => canEdit && onVP(idx, aVP, Math.max(0, Number(e.target.value) || 0))}
-                    disabled={!canEdit}
-                    className="flex-1 text-center text-xl font-bold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-1.5 text-[#e8e8f0] outline-none focus:border-[#a855f7] disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                  {canEdit && (
-                    <button
-                      onClick={() => onVP(idx, aVP, Math.min(100, bVP + 1))}
-                      className="w-8 h-8 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.08] text-sm font-bold"
-                    >
-                      +
-                    </button>
-                  )}
-                </div>
+            ) : (
+              /* Legacy game with no per-turn data (e.g. round 1) — show its total, read-only */
+              <div className="flex items-center justify-center gap-3 py-1">
+                <span className={`text-[18px] font-bold ${aAhead ? "text-[#4ade80]" : "text-[#e8e8f0]"}`}>{aVP}</span>
+                <span className="text-[11px] text-[#8888a0]">–</span>
+                <span className={`text-[18px] font-bold ${!aAhead && vpDiff !== 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>{bVP}</span>
               </div>
-            </div>
+            )}
+
             <div className="text-center mt-2 text-[10px] text-[#8888a0]">
               → {teamAName} {aAhead ? bp.winner : bp.loser} BP / {teamBName} {aAhead ? bp.loser : bp.winner} BP
             </div>
