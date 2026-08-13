@@ -13,13 +13,17 @@ export interface MatchupData {
   layoutPage: number | null;
   estimate: number; // pairing estimate (0-20 WTC scale), set when the matchup is created
   tableAdj?: number; // live per-game adjustment once the defender's table is known; effective = estimate + tableAdj
-  aVP: number; // Team A victory points (sum of aTurns once per-turn scoring is used)
-  bVP: number; // Team B victory points (sum of bTurns)
-  // Per-battle-round VP breakdown (index 0 = round 1). Optional: games scored
-  // before per-turn entry existed (e.g. round 1) have no turns and keep their
-  // aVP/bVP totals as-is. When present, aVP/bVP are kept equal to their sums.
-  aTurns?: number[];
-  bTurns?: number[];
+  aVP: number; // Team A total = sum(aPrim) + sum(aSec) once per-turn scoring is used
+  bVP: number; // Team B total = sum(bPrim) + sum(bSec)
+  // Per-battle-round score split into primary and secondary (index 0 = round 1),
+  // one array each per team. Each category's running total (its sum across the
+  // turns) is capped at SCORE_CAP (45), so a player's game total can't exceed 90.
+  // Games scored before this existed (e.g. round 1) have no arrays and keep their
+  // aVP/bVP totals as-is.
+  aPrim?: number[];
+  aSec?: number[];
+  bPrim?: number[];
+  bSec?: number[];
   round: number; // current game round (1-5)
   notes: string;
   final: boolean; // true when game is done
@@ -110,28 +114,46 @@ export async function updateMatchupVP(
   ]);
 }
 
-// Per-turn scoring: write the two per-battle-round VP arrays and keep the game
-// totals aVP/bVP equal to their sums, in one atomic multi-path update so the
-// breakdown and totals never diverge. Arrays are padded to 5 and floored to
-// non-negative ints, so Firebase stores a dense array (never a sparse object).
-export async function updateMatchupTurns(
+// Max primary or secondary a player can score in one game (running total across
+// all battle rounds). Total game score is therefore capped at 2×45 = 90.
+export const SCORE_CAP = 45;
+
+// Per-turn scoring: write the four per-battle-round arrays (primary/secondary ×
+// two teams) and keep the game totals aVP/bVP equal to their sums, in one atomic
+// multi-path update so breakdown and totals never diverge. Each array is padded
+// to 5 dense non-negative ints (never a sparse Firebase object) and its running
+// sum is clamped to SCORE_CAP — the cap is enforced here, not just in the UI.
+export async function updateMatchupScores(
   sessionId: string,
   matchupIndex: number,
-  aTurns: number[],
-  bTurns: number[]
+  aPrim: number[],
+  aSec: number[],
+  bPrim: number[],
+  bSec: number[]
 ): Promise<void> {
   await authReady();
-  const pad = (arr: number[]) =>
-    Array.from({ length: 5 }, (_, i) => Math.max(0, Math.floor(Number(arr[i]) || 0)));
-  const a = pad(aTurns);
-  const b = pad(bTurns);
+  const capArr = (arr: number[]) => {
+    let running = 0;
+    return Array.from({ length: 5 }, (_, i) => {
+      let v = Math.max(0, Math.floor(Number(arr[i]) || 0));
+      if (running + v > SCORE_CAP) v = Math.max(0, SCORE_CAP - running);
+      running += v;
+      return v;
+    });
+  };
+  const aP = capArr(aPrim);
+  const aS = capArr(aSec);
+  const bP = capArr(bPrim);
+  const bS = capArr(bSec);
   const sum = (x: number[]) => x.reduce((s, v) => s + v, 0);
   const base = `sessions/${sessionId}/matchups/${matchupIndex}`;
   await update(ref(getDb()), {
-    [`${base}/aTurns`]: a,
-    [`${base}/bTurns`]: b,
-    [`${base}/aVP`]: sum(a),
-    [`${base}/bVP`]: sum(b),
+    [`${base}/aPrim`]: aP,
+    [`${base}/aSec`]: aS,
+    [`${base}/bPrim`]: bP,
+    [`${base}/bSec`]: bS,
+    [`${base}/aVP`]: sum(aP) + sum(aS),
+    [`${base}/bVP`]: sum(bP) + sum(bS),
   });
 }
 

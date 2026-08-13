@@ -12,7 +12,8 @@ import {
   subscribeToConnection,
   setSessionTimer,
   updateMatchupClock,
-  updateMatchupTurns,
+  updateMatchupScores,
+  SCORE_CAP,
   updateMatchupRound,
   updateMatchupNotes,
   updateMatchupFinal,
@@ -94,10 +95,10 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
     [sessionId, session]
   );
 
-  const handleTurns = useCallback(
-    (idx: number, aTurns: number[], bTurns: number[]) => {
+  const handleScores = useCallback(
+    (idx: number, aPrim: number[], aSec: number[], bPrim: number[], bSec: number[]) => {
       ensureGameClock(idx);
-      updateMatchupTurns(sessionId, idx, aTurns, bTurns).catch(() => {});
+      updateMatchupScores(sessionId, idx, aPrim, aSec, bPrim, bSec).catch(() => {});
     },
     [sessionId, ensureGameClock]
   );
@@ -413,7 +414,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
               isCoach={view === "coach"}
               expectedRound={expectedRound}
               now={now}
-              onTurns={handleTurns}
+              onScores={handleScores}
               onRound={handleRound}
               onNotes={handleNotes}
               onFinal={handleFinal}
@@ -454,7 +455,7 @@ function MatchupCard({
   isCoach,
   expectedRound,
   now,
-  onTurns,
+  onScores,
   onRound,
   onNotes,
   onFinal,
@@ -470,7 +471,7 @@ function MatchupCard({
   isCoach: boolean;
   expectedRound: number | null;
   now: number;
-  onTurns: (idx: number, aTurns: number[], bTurns: number[]) => void;
+  onScores: (idx: number, aPrim: number[], aSec: number[], bPrim: number[], bSec: number[]) => void;
   onRound: (idx: number, r: number) => void;
   onNotes: (idx: number, n: string) => void;
   onFinal: (idx: number, f: boolean) => void;
@@ -486,22 +487,35 @@ function MatchupCard({
   const aAhead = vpDiff >= 0;
   // Finished games are locked against stray taps — untick "færdig" to edit.
   const canEdit = isCoach && !matchup.final;
-  // Per-turn scoring. Games from before this feature (e.g. round 1) have no
-  // turn arrays; an editable one with a lump total gets that total seeded into
-  // round 1 so switching to per-turn preserves the sum with zero data loss.
-  const hasTurns = Array.isArray(matchup.aTurns);
+  // Per-turn scoring, split into primary/secondary per team. Games from before
+  // this feature (e.g. round 1) have no arrays; an editable one with a lump total
+  // seeds that total into round 1 — primary first up to the cap, overflow into
+  // secondary — so switching preserves the sum with zero data loss.
+  const hasSplit = Array.isArray(matchup.aPrim);
   const pad5 = (arr?: number[]) =>
     Array.from({ length: 5 }, (_, i) => Math.max(0, Math.floor(Number(arr?.[i]) || 0)));
-  const seededFromTotal = !hasTurns && (aVP > 0 || bVP > 0);
-  const aTurns = hasTurns ? pad5(matchup.aTurns) : seededFromTotal ? [aVP, 0, 0, 0, 0] : [0, 0, 0, 0, 0];
-  const bTurns = hasTurns ? pad5(matchup.bTurns) : seededFromTotal ? [bVP, 0, 0, 0, 0] : [0, 0, 0, 0, 0];
-  const setTurn = (side: "a" | "b", i: number, val: number) => {
-    const a = aTurns.slice();
-    const b = bTurns.slice();
-    const v = Math.max(0, Math.min(100, Math.floor(val) || 0));
-    if (side === "a") a[i] = v;
-    else b[i] = v;
-    onTurns(idx, a, b);
+  const sumArr = (x: number[]) => x.reduce((s, v) => s + v, 0);
+  const seedFromTotal = (t: number): [number[], number[]] => {
+    const p = Math.min(t, SCORE_CAP);
+    const s = Math.max(0, Math.min(SCORE_CAP, t - p));
+    return [[p, 0, 0, 0, 0], [s, 0, 0, 0, 0]];
+  };
+  const seededFromTotal = !hasSplit && (aVP > 0 || bVP > 0);
+  const [aPrim, aSec] = hasSplit
+    ? [pad5(matchup.aPrim), pad5(matchup.aSec)]
+    : seededFromTotal ? seedFromTotal(aVP) : [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0]];
+  const [bPrim, bSec] = hasSplit
+    ? [pad5(matchup.bPrim), pad5(matchup.bSec)]
+    : seededFromTotal ? seedFromTotal(bVP) : [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0]];
+  const aPrimSum = sumArr(aPrim), aSecSum = sumArr(aSec);
+  const bPrimSum = sumArr(bPrim), bSecSum = sumArr(bSec);
+  // Set one cell, clamping it so its category's running total can't exceed the cap.
+  const setCell = (team: "a" | "b", cat: "P" | "S", i: number, val: number) => {
+    const arrs = { aP: aPrim.slice(), aS: aSec.slice(), bP: bPrim.slice(), bS: bSec.slice() };
+    const target = team === "a" ? (cat === "P" ? arrs.aP : arrs.aS) : (cat === "P" ? arrs.bP : arrs.bS);
+    const others = sumArr(target) - target[i];
+    target[i] = Math.max(0, Math.min(Math.floor(val) || 0, SCORE_CAP - others));
+    onScores(idx, arrs.aP, arrs.aS, arrs.bP, arrs.bS);
   };
   // How far the live score is from the adjusted estimate — the coach's
   // "walk over there" signal once a game is underway.
@@ -794,7 +808,7 @@ function MatchupCard({
             </div>
           </div>
 
-          {/* Per-turn VP score */}
+          {/* Per-turn score, split into primary/secondary per team */}
           <div>
             <div className="flex items-baseline justify-between mb-2">
               <span className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold">
@@ -805,60 +819,68 @@ function MatchupCard({
               </span>
             </div>
 
-            {canEdit || hasTurns ? (
-              <div className="space-y-1.5">
-                {/* Column headers: who's who */}
-                <div className="grid grid-cols-[2.75rem_1fr_1fr] gap-2 items-center">
-                  <span className="text-[9px] text-[#8888a0] uppercase tracking-wider">Runde</span>
-                  <span className="flex items-center gap-1 text-[10px] text-[#4ade80] font-medium truncate">
-                    <DispDot d={matchup.aDisposition} />
-                    <span className="truncate">{matchup.aFaction}</span>
+            {canEdit || hasSplit ? (
+              <div className="space-y-1">
+                {/* Team-name header, each spanning its primary+secondary columns */}
+                <div className="grid grid-cols-[1.7rem_1fr_1fr_1fr_1fr] gap-1 items-center">
+                  <span />
+                  <span className="col-span-2 flex items-center justify-center gap-1 text-[10px] text-[#4ade80] font-medium truncate">
+                    <DispDot d={matchup.aDisposition} /><span className="truncate">{matchup.aFaction}</span>
                   </span>
-                  <span className="flex items-center gap-1 text-[10px] text-[#8888a0] font-medium truncate">
-                    <DispDot d={matchup.bDisposition} />
-                    <span className="truncate">{matchup.bFaction}</span>
+                  <span className="col-span-2 flex items-center justify-center gap-1 text-[10px] text-[#8888a0] font-medium truncate border-l border-white/[0.08]">
+                    <DispDot d={matchup.bDisposition} /><span className="truncate">{matchup.bFaction}</span>
                   </span>
                 </div>
-                {/* One row per battle round */}
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <div key={i} className="grid grid-cols-[2.75rem_1fr_1fr] gap-2 items-center">
-                    <span className="text-[11px] text-[#8888a0] font-semibold">R{i + 1}</span>
+                {/* Primær / Sekundær sub-labels */}
+                <div className="grid grid-cols-[1.7rem_1fr_1fr_1fr_1fr] gap-1 items-center text-[8px] text-[#8888a0] uppercase tracking-wide text-center">
+                  <span className="text-left normal-case tracking-normal text-[9px]">Rnd</span>
+                  <span>Prim</span><span>Sek</span>
+                  <span className="border-l border-white/[0.08]">Prim</span><span>Sek</span>
+                </div>
+                {/* One row per battle round: A-prim, A-sec, B-prim, B-sec */}
+                {[0, 1, 2, 3, 4].map((i) => {
+                  const cell = (team: "a" | "b", cat: "P" | "S", value: number, divider: boolean) => (
                     <input
                       type="number"
                       min={0}
-                      max={100}
-                      value={aTurns[i]}
-                      onChange={(e) => setTurn("a", i, Number(e.target.value))}
+                      max={SCORE_CAP}
+                      value={value}
+                      onChange={(e) => setCell(team, cat, i, Number(e.target.value))}
                       disabled={!canEdit}
-                      aria-label={`${teamAName} runde ${i + 1} VP`}
-                      className="w-full text-center text-sm font-bold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-1 text-[#e8e8f0] outline-none focus:border-[#4ade80] disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      aria-label={`${team === "a" ? teamAName : teamBName} runde ${i + 1} ${cat === "P" ? "primær" : "sekundær"}`}
+                      className={`w-full min-w-0 text-center text-[13px] font-bold bg-[#1a1a22] border rounded px-0.5 py-1 text-[#e8e8f0] outline-none disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${team === "a" ? "focus:border-[#4ade80]" : "focus:border-[#a855f7]"} ${divider ? "border-l-white/[0.08] border-y-white/[0.14] border-r-white/[0.14] ml-1" : "border-white/[0.14]"}`}
                     />
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={bTurns[i]}
-                      onChange={(e) => setTurn("b", i, Number(e.target.value))}
-                      disabled={!canEdit}
-                      aria-label={`${teamBName} runde ${i + 1} VP`}
-                      className="w-full text-center text-sm font-bold bg-[#1a1a22] border border-white/[0.14] rounded px-1 py-1 text-[#e8e8f0] outline-none focus:border-[#a855f7] disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  </div>
-                ))}
-                {/* Sum row */}
-                <div className="grid grid-cols-[2.75rem_1fr_1fr] gap-2 items-center pt-1.5 border-t border-white/[0.06]">
-                  <span className="text-[9px] text-[#8888a0] uppercase tracking-wider">Sum</span>
-                  <span className={`text-center text-[15px] font-bold ${aAhead ? "text-[#4ade80]" : "text-[#e8e8f0]"}`}>{aVP}</span>
-                  <span className={`text-center text-[15px] font-bold ${!aAhead && vpDiff !== 0 ? "text-[#f87171]" : "text-[#8888a0]"}`}>{bVP}</span>
+                  );
+                  return (
+                    <div key={i} className="grid grid-cols-[1.7rem_1fr_1fr_1fr_1fr] gap-1 items-center">
+                      <span className="text-[11px] text-[#8888a0] font-semibold">R{i + 1}</span>
+                      {cell("a", "P", aPrim[i], false)}
+                      {cell("a", "S", aSec[i], false)}
+                      {cell("b", "P", bPrim[i], true)}
+                      {cell("b", "S", bSec[i], false)}
+                    </div>
+                  );
+                })}
+                {/* Sum row with the /45 cap made visible */}
+                <div className="grid grid-cols-[1.7rem_1fr_1fr_1fr_1fr] gap-1 items-center pt-1.5 border-t border-white/[0.06] text-center">
+                  <span className="text-[8px] text-[#8888a0] uppercase tracking-wide text-left">Sum</span>
+                  {[
+                    { s: aPrimSum, b: false }, { s: aSecSum, b: false },
+                    { s: bPrimSum, b: true }, { s: bSecSum, b: false },
+                  ].map((c, k) => (
+                    <span key={k} className={`text-[13px] font-bold ${c.b ? "border-l border-white/[0.08]" : ""} ${c.s >= SCORE_CAP ? "text-[#4ade80]" : "text-[#e8e8f0]"}`}>
+                      {c.s}<span className="text-[8px] text-[#8888a0] font-normal">/{SCORE_CAP}</span>
+                    </span>
+                  ))}
                 </div>
                 {canEdit && seededFromTotal && (
-                  <p className="text-[9px] text-[#facc15]">
-                    Tidligere total lagt i R1 — fordel den ud på de spillede runder.
+                  <p className="text-[9px] text-[#facc15] pt-0.5">
+                    Tidligere total lagt i R1 (primær først) — fordel den ud på runder og sekundær.
                   </p>
                 )}
               </div>
             ) : (
-              /* Legacy game with no per-turn data (e.g. round 1) — show its total, read-only */
+              /* Legacy game with no split (e.g. round 1) — show its total, read-only */
               <div className="flex items-center justify-center gap-3 py-1">
                 <span className={`text-[18px] font-bold ${aAhead ? "text-[#4ade80]" : "text-[#e8e8f0]"}`}>{aVP}</span>
                 <span className="text-[11px] text-[#8888a0]">–</span>
