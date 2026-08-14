@@ -24,6 +24,10 @@ export interface MatchupData {
   aSec?: number[];
   bPrim?: number[];
   bSec?: number[];
+  // Coach's editable projected team-A BP for this game (0-20). Seeds from the
+  // table-adjusted estimate, is overridden by hand as the game develops, and is
+  // ignored once the game is final (the projection then equals the actual BP).
+  projBP?: number;
   round: number; // current game round (1-5)
   notes: string;
   final: boolean; // true when game is done
@@ -155,6 +159,17 @@ export async function updateMatchupScores(
     [`${base}/aVP`]: sum(aP) + sum(aS),
     [`${base}/bVP`]: sum(bP) + sum(bS),
   });
+}
+
+// Set the coach's projected team-A BP for a game (0-20). Clamped and rounded.
+export async function updateMatchupProjection(
+  sessionId: string,
+  matchupIndex: number,
+  projBP: number
+): Promise<void> {
+  await authReady();
+  const v = Math.max(0, Math.min(20, Math.round(Number(projBP) || 0)));
+  await set(ref(getDb(), `sessions/${sessionId}/matchups/${matchupIndex}/projBP`), v);
 }
 
 export async function updateMatchupFinal(

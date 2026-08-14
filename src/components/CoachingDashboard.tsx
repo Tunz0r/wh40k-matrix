@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { DISP_STYLES, type Disposition } from "@/lib/data";
 import { getLayoutImage } from "@/lib/layouts";
-import { vpToBP, calculateTeamBP, teamResult, projectGame, teamWinProbability } from "@/lib/scoring";
+import { vpToBP, calculateTeamBP, teamResult, teamWinProbability } from "@/lib/scoring";
 import {
   type SessionData,
   type MatchupData,
@@ -18,6 +18,7 @@ import {
   updateMatchupNotes,
   updateMatchupFinal,
   updateMatchupTableAdj,
+  updateMatchupProjection,
 } from "@/lib/session";
 import { updateRoundStatus } from "@/lib/tournament-db";
 
@@ -25,6 +26,21 @@ import { updateRoundStatus } from "@/lib/tournament-db";
 function fmtMin(min: number): string {
   const t = Math.floor(min);
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
+
+// The coach's effective projected team-A BP for a game: the actual BP once the
+// game is final, an explicit override if the coach set one, else a seed from the
+// table-adjusted estimate. Single source of truth for both the per-game control
+// and the running team projection.
+function effectiveProjBP(m: MatchupData): number {
+  const clamp = (v: number) => Math.min(20, Math.max(0, Math.round(v)));
+  if (m.final) {
+    const vpDiff = (m.aVP ?? 0) - (m.bVP ?? 0);
+    const bp = vpToBP(vpDiff);
+    return vpDiff >= 0 ? bp.winner : bp.loser;
+  }
+  if (typeof m.projBP === "number") return clamp(m.projBP);
+  return m.estimate > 0 ? clamp(m.estimate + (m.tableAdj ?? 0)) : 10;
 }
 
 function DispDot({ d }: { d: Disposition | null }) {
@@ -125,6 +141,13 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
     [sessionId]
   );
 
+  const handleProj = useCallback(
+    (idx: number, projBP: number) => {
+      updateMatchupProjection(sessionId, idx, projBP).catch(() => {});
+    },
+    [sessionId]
+  );
+
   // Marking a game final freezes its clock; unmarking lets it run again.
   const handleFinal = useCallback(
     (idx: number, final: boolean) => {
@@ -180,16 +203,18 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
   const result = teamResult(teamABP, teamBBP);
   const finishedCount = session.matchups.filter((m) => m.final).length;
 
-  // Projection: actual BP for finished games, estimates for unstarted ones,
-  // round-weighted blend for games in progress.
-  const proj = session.matchups.reduce(
-    (acc, m) => {
-      const p = projectGame(m);
-      return { a: acc.a + p.a, b: acc.b + p.b };
-    },
-    { a: 0, b: 0 }
-  );
-  const projDiff = proj.a - proj.b;
+  // Running projection: actual BP for finished games, the coach's editable
+  // projection for the rest. Steerable per game, so the team total reflects the
+  // plan, not a fixed formula.
+  const projTotal = 20 * session.matchups.length;
+  const projA = session.matchups.reduce((s, m) => s + effectiveProjBP(m), 0);
+  const projB = projTotal - projA;
+  const projDiff = projA - projB;
+  const gameStarted = (m: MatchupData) =>
+    (m.aVP ?? 0) > 0 || (m.bVP ?? 0) > 0 || Array.isArray(m.aPrim);
+  const inProgressCount = session.matchups.filter((m) => !m.final && gameStarted(m)).length;
+  const notStartedCount = session.matchups.filter((m) => !m.final && !gameStarted(m)).length;
+  const winMargin = 12; // 8-player WTC: 12 BP differential secures the team win
   // Win probability: treats each unfinished game as a distribution, not a point
   // — the honest read for a dice game. Now deterministic (seeded from the matchup
   // state), so clock-tick re-renders yield the same numbers instead of jittering.
@@ -307,7 +332,42 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
           </div>
         </div>
 
-        {/* Status strip: sync state · projection · round clock */}
+        {/* Running projection — finished actuals + editable per-game projections */}
+        <div className="bg-[#1a1a22] rounded-lg px-3 py-2.5 border border-white/[0.08] mt-1.5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-[#8888a0] font-semibold">
+                Prognose · slutresultat
+              </div>
+              <div className="text-lg font-bold leading-tight mt-0.5">
+                <span className={projDiff >= winMargin ? "text-[#4ade80]" : "text-[#e8e8f0]"}>{projA}</span>
+                <span className="text-[#8888a0] text-sm"> – </span>
+                <span className={projDiff <= -winMargin ? "text-[#f87171]" : "text-[#e8e8f0]"}>{projB}</span>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              {projDiff >= winMargin ? (
+                <span className="inline-block text-[11px] font-bold px-2 py-0.5 rounded bg-[rgba(34,197,94,0.14)] text-[#4ade80]">SEJR +{projDiff}</span>
+              ) : projDiff <= -winMargin ? (
+                <span className="inline-block text-[11px] font-bold px-2 py-0.5 rounded bg-[rgba(239,68,68,0.14)] text-[#f87171]">NEDERLAG {projDiff}</span>
+              ) : (
+                <span className="inline-block text-[11px] font-bold px-2 py-0.5 rounded bg-[rgba(250,204,21,0.14)] text-[#facc15]">DRAW-bånd {projDiff > 0 ? "+" : ""}{projDiff}</span>
+              )}
+              {Math.abs(projDiff) < winMargin && (
+                <div className="text-[10px] text-[#8888a0] mt-1">mangler <b className="text-[#e8e8f0]">{winMargin - projDiff} BP</b> til sejr</div>
+              )}
+            </div>
+          </div>
+          <div className="relative h-1.5 rounded bg-[#22222e] mt-2 overflow-hidden">
+            <div className="absolute inset-y-0 left-0 bg-[#4ade80]" style={{ width: `${Math.min(100, (projA / projTotal) * 100)}%` }} />
+            <div className="absolute inset-y-0 w-px bg-[#facc15]" style={{ left: `${(((projTotal + winMargin) / 2) / projTotal) * 100}%` }} title="Sejrsgrænse" />
+          </div>
+          <div className="text-[10px] text-[#8888a0] mt-1.5">
+            Faktisk lige nu <b className="text-[#e8e8f0]">{teamABP}–{teamBBP}</b> · {finishedCount} færdige · {inProgressCount} i gang · {notStartedCount} ikke startet
+          </div>
+        </div>
+
+        {/* Status strip: sync state · win-% · round clock */}
         <div className="flex items-center gap-x-3 gap-y-1 flex-wrap bg-[#1a1a22] rounded-lg px-3 py-2 border border-white/[0.08] mt-1.5 text-[11px]">
           <span
             className={`flex items-center gap-1.5 font-semibold shrink-0 ${online ? "text-[#4ade80]" : "text-[#f87171]"}`}
@@ -315,23 +375,6 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
           >
             <span className={`w-2 h-2 rounded-full ${online ? "bg-[#4ade80]" : "bg-[#f87171] animate-pulse"}`} />
             {online ? "LIVE" : "OFFLINE!"}
-          </span>
-          <span className="text-[#44445a]">·</span>
-          <span
-            className="text-[#8888a0]"
-            title="Færdige kampe tæller deres resultat, ikke-startede deres justerede estimat, og igangværende en blanding vægtet efter spilrunde"
-          >
-            Prognose{" "}
-            <span className="font-bold text-[#e8e8f0]">{proj.a}–{proj.b}</span>{" "}
-            {projDiff >= 12 ? (
-              <span className="font-semibold text-[#4ade80]">SEJR (+{projDiff})</span>
-            ) : projDiff <= -12 ? (
-              <span className="font-semibold text-[#f87171]">NEDERLAG ({projDiff})</span>
-            ) : (
-              <span className="font-semibold text-[#facc15]">
-                DRAW-bånd ({projDiff > 0 ? "+" : ""}{projDiff}) · {12 - projDiff} BP til sejr
-              </span>
-            )}
           </span>
           <span className="text-[#44445a]">·</span>
           <span
@@ -415,6 +458,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
               expectedRound={expectedRound}
               now={now}
               onScores={handleScores}
+              onProj={handleProj}
               onRound={handleRound}
               onNotes={handleNotes}
               onFinal={handleFinal}
@@ -456,6 +500,7 @@ function MatchupCard({
   expectedRound,
   now,
   onScores,
+  onProj,
   onRound,
   onNotes,
   onFinal,
@@ -472,6 +517,7 @@ function MatchupCard({
   expectedRound: number | null;
   now: number;
   onScores: (idx: number, aPrim: number[], aSec: number[], bPrim: number[], bSec: number[]) => void;
+  onProj: (idx: number, projBP: number) => void;
   onRound: (idx: number, r: number) => void;
   onNotes: (idx: number, n: string) => void;
   onFinal: (idx: number, f: boolean) => void;
@@ -531,6 +577,9 @@ function MatchupCard({
   const gameClock = matchup.startedAt
     ? fmtMin(Math.max(0, ((matchup.finishedAt ?? now) - matchup.startedAt) / 60000))
     : null;
+  // Live team-A BP from the current score, and the coach's editable projection.
+  const actualBP = aAhead ? bp.winner : bp.loser;
+  const effProj = effectiveProjBP(matchup);
 
   return (
     <div
@@ -686,6 +735,50 @@ function MatchupCard({
           )}
         </div>
       </button>
+
+      {/* Always-visible projection: live BP vs the coach's editable projection */}
+      <div className="flex items-center gap-2 px-3 pb-2 pt-0.5">
+        <span className="text-[9px] uppercase tracking-wider text-[#8888a0] font-semibold shrink-0">
+          Prognose
+        </span>
+        {matchup.final ? (
+          <span className="text-[13px] font-bold text-[#8888a0]" title="Låst til faktisk resultat">
+            {effProj}<span className="text-[9px] font-normal"> BP</span>
+          </span>
+        ) : (
+          <div className="flex items-center gap-1">
+            {isCoach && (
+              <button
+                onClick={() => onProj(idx, Math.max(0, effProj - 1))}
+                className="w-6 h-6 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.1] text-sm font-bold leading-none"
+                aria-label="Sænk prognose"
+              >
+                −
+              </button>
+            )}
+            <span className="text-[14px] font-bold text-[#e8e8f0] w-6 text-center">{effProj}</span>
+            {isCoach && (
+              <button
+                onClick={() => onProj(idx, Math.min(20, effProj + 1))}
+                className="w-6 h-6 rounded bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.1] text-sm font-bold leading-none"
+                aria-label="Hæv prognose"
+              >
+                +
+              </button>
+            )}
+            <span className="text-[9px] text-[#a855f7] font-semibold">BP</span>
+            {matchup.projBP == null && (
+              <span className="text-[9px] text-[#8888a0] ml-1">fra estimat</span>
+            )}
+          </div>
+        )}
+        <span className="ml-auto text-[10px] text-[#8888a0] shrink-0">
+          Faktisk{" "}
+          <b className={started || matchup.final ? "text-[#e8e8f0]" : "text-[#8888a0]"}>
+            {started || matchup.final ? `${actualBP} BP` : "—"}
+          </b>
+        </span>
+      </div>
 
       {/* Expanded detail */}
       {expanded && (
