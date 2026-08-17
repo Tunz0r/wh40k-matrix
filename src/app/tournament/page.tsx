@@ -1678,7 +1678,7 @@ export default function TournamentPage() {
                         vs {r.opponentName || "?"}
                       </span>
                       {r.score && (
-                        <span className={`text-[11px] font-bold shrink-0 ${r.score.us > r.score.them ? "text-[#4ade80]" : r.score.us < r.score.them ? "text-[#f87171]" : "text-[#8888a0]"}`}>
+                        <span className={`text-[11px] font-bold shrink-0 ${r.score.us - r.score.them >= 12 ? "text-[#4ade80]" : r.score.them - r.score.us >= 12 ? "text-[#f87171]" : "text-[#facc15]"}`}>
                           {r.score.us}–{r.score.them}
                         </span>
                       )}
