@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   type Disposition,
   DISP_STYLES,
@@ -229,18 +230,14 @@ function MissionInfo({ a, b }: { a: Disposition; b: Disposition }) {
 function MatchupPreview({
   label,
   aArmy,
-  aIdx,
   aRole,
   bArmy,
-  bIdx,
   bRole,
 }: {
   label: string;
   aArmy: RosterArmy;
-  aIdx: number;
   aRole: string;
   bArmy: RosterArmy;
-  bIdx: number;
   bRole: string;
 }) {
   return (
@@ -301,9 +298,11 @@ function LayoutPicker({
                 : "border-white/[0.08] hover:border-white/[0.18]"
             }`}
           >
-            <img
+            <Image
               src={getLayoutImage(l.page)}
               alt={`Layout ${l.layout}`}
+              width={800}
+              height={1131}
               className="w-full aspect-[3/4] object-cover object-top"
             />
             <div className="px-2 py-1.5 bg-[#1a1a22] text-center">
@@ -316,10 +315,12 @@ function LayoutPicker({
       </div>
       {selected && (
         <div className="mt-2">
-          <img
+          <Image
             src={getLayoutImage(layouts.find((l) => l.layout === selected)!.page)}
             alt={`Layout ${selected} preview`}
-            className="w-full rounded-lg border border-white/[0.08]"
+            width={800}
+            height={1131}
+            className="w-full h-auto rounded-lg border border-white/[0.08]"
           />
         </div>
       )}
@@ -632,8 +633,12 @@ export default function TournamentPage() {
   const [listPaste, setListPaste] = useState("");
   const [listBusy, setListBusy] = useState(false);
 
-  // Initialize from localStorage
+  // Initialize from localStorage. This MUST be a mount effect, not lazy state:
+  // the component is server-rendered, so hydrating from localStorage during
+  // render would mismatch the server HTML. Render the default, then sync on
+  // mount — so the synchronous setState here is intentional.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTournament(loadTournament());
     setInitialized(true);
   }, []);
@@ -691,8 +696,9 @@ export default function TournamentPage() {
   const [pastSessions, setPastSessions] = useState<SessionData[]>([]);
   useEffect(() => {
     const done = (fbDoc?.rounds || []).filter((r) => r.status === "completed" && r.sessionId);
-    if (!done.length) { setPastSessions([]); return; }
     let cancelled = false;
+    // Promise.all([]) resolves to [], so an empty round list clears state too —
+    // no synchronous setState in the effect body.
     Promise.all(done.map((r) => fetchSession(r.sessionId!).catch(() => null))).then((list) => {
       if (!cancelled) setPastSessions(list.filter((s): s is SessionData => !!s));
     });
@@ -2161,19 +2167,15 @@ export default function TournamentPage() {
                       <MatchupPreview
                         label="Matchup"
                         aArmy={tournament.roster!.armies[defenderA!]}
-                        aIdx={defenderA!}
                         aRole="DEF"
                         bArmy={opponentRoster.armies[choiceA!]}
-                        bIdx={choiceA!}
                         bRole="ATK"
                       />
                       <MatchupPreview
                         label="Matchup"
                         aArmy={tournament.roster!.armies[choiceB!]}
-                        aIdx={choiceB!}
                         aRole="ATK"
                         bArmy={opponentRoster.armies[defenderB!]}
-                        bIdx={defenderB!}
                         bRole="DEF"
                       />
                       {pairingPhase.startsWith("main") && (() => {
@@ -2183,10 +2185,8 @@ export default function TournamentPage() {
                           <MatchupPreview
                             label={`Refused Attackers (Layout ${roundLayout})`}
                             aArmy={tournament.roster!.armies[refA]}
-                            aIdx={refA}
                             aRole="REF"
                             bArmy={opponentRoster.armies[refB]}
-                            bIdx={refB}
                             bRole="REF"
                           />
                         );
@@ -2333,10 +2333,12 @@ export default function TournamentPage() {
                       <summary className="text-[10px] text-[#a855f7] cursor-pointer hover:text-[#c084fc]">
                         Vis layout
                       </summary>
-                      <img
+                      <Image
                         src={getLayoutImage(m.layoutPage)}
                         alt={`Layout for ${m.a.faction} vs ${m.b.faction}`}
-                        className="mt-2 rounded-lg border border-white/[0.08] w-full max-w-md"
+                        width={800}
+                        height={1131}
+                        className="mt-2 rounded-lg border border-white/[0.08] w-full max-w-md h-auto"
                       />
                     </details>
                   )}
