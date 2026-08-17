@@ -43,7 +43,7 @@ import {
   type SessionData,
   type MatchupData,
 } from "@/lib/session";
-import { vpToBP } from "@/lib/scoring";
+import { tournamentGamesForArmy } from "@/lib/tournament-games";
 import { getLayoutImage } from "@/lib/layouts";
 
 const MY_ARMY_KEY = "wtc-my-army";
@@ -60,7 +60,9 @@ function BPChip({ v, big }: { v: number; big?: boolean }) {
   );
 }
 
-// Find the matchup in a session that belongs to our army (matched by faction).
+// Find the matchup in a session that belongs to our army (matched by faction) —
+// used for the LIVE active session; completed rounds go through
+// tournamentGamesForArmy instead.
 function myMatchup(session: SessionData | null, faction: string): MatchupData | null {
   if (!session) return null;
   return (session.matchups || []).find((m) => m.aFaction === faction) || null;
@@ -121,27 +123,25 @@ export default function PlayerPage() {
   }, [completedRounds]);
   useEffect(() => { loadPast(); }, [loadPast]);
 
-  // My results across completed rounds
-  const myResults = useMemo(() => {
-    const rows: { round: number; opponent: string; theirFaction: string; estimate: number | null; actual: number; delta: number | null }[] = [];
-    for (const r of completedRounds) {
-      const m = myMatchup(pastSessions[r.sessionId], myFaction);
-      if (!m || !m.final) continue;
-      const diff = (m.aVP ?? 0) - (m.bVP ?? 0);
-      const bp = vpToBP(diff);
-      const actual = diff >= 0 ? bp.winner : bp.loser;
-      const estimate = m.estimate && m.estimate > 0 ? m.estimate + (m.tableAdj ?? 0) : null;
-      rows.push({
-        round: r.number,
-        opponent: r.opponentName,
-        theirFaction: m.bFaction,
-        estimate,
-        actual,
-        delta: estimate !== null ? actual - estimate : null,
-      });
-    }
-    return rows;
-  }, [completedRounds, pastSessions, myFaction]);
+  // My played tournament games, bridged to Min side: estimate from the opponent
+  // country's matrix, result from the coaching session. See lib/tournament-games.
+  const myResults = useMemo(
+    () =>
+      myIdx === null
+        ? []
+        : tournamentGamesForArmy({
+            opponents,
+            rounds: completedRounds.map((r) => ({
+              number: r.number,
+              opponentName: r.opponentName,
+              sessionId: r.sessionId,
+            })),
+            sessions: pastSessions,
+            armyIdx: myIdx,
+            armyFaction: myFaction,
+          }),
+    [opponents, completedRounds, pastSessions, myIdx, myFaction]
+  );
 
   const calibration = useMemo(() => {
     const deltas = myResults.map((r) => r.delta).filter((d): d is number => d !== null);
@@ -908,9 +908,10 @@ export default function PlayerPage() {
               </div>
             )}
 
-            {/* Your results */}
+            {/* Your results — tournament games bridged from coaching sessions */}
             <div className="rounded-xl border border-white/[0.08] p-4">
-              <h2 className="text-sm font-semibold text-[#e8e8f0] mb-3">Dine resultater</h2>
+              <h2 className="text-sm font-semibold text-[#e8e8f0]">Dine turneringskampe</h2>
+              <p className="text-[10px] text-[#8888a0] mb-3">Automatisk hentet fra spillede runder — estimat fra landets matrix, resultat fra coaching-sessionen.</p>
               {myResults.length === 0 ? (
                 <p className="text-[11px] text-[#8888a0]">Ingen færdigspillede kampe endnu.</p>
               ) : (
@@ -918,7 +919,10 @@ export default function PlayerPage() {
                   {myResults.map((r) => (
                     <div key={r.round} className="flex items-center gap-2 rounded-lg border border-white/[0.05] px-2.5 py-1.5">
                       <span className="text-[10px] font-semibold text-[#8888a0] bg-[#22222e] px-1.5 py-0.5 rounded shrink-0">R{r.round}</span>
-                      <span className="text-[11px] text-[#e8e8f0] flex-1 min-w-0 truncate">vs {r.opponent} · {r.theirFaction}</span>
+                      <span className="text-[11px] text-[#e8e8f0] flex-1 min-w-0 truncate" title={`${r.theirFaction}${r.theirDetachments.length ? ` — ${r.theirDetachments.join(", ")}` : ""}${r.theirDisposition ? ` [${r.theirDisposition}]` : ""}`}>
+                        vs {r.opponentTeam} · {r.theirFaction}
+                        {r.theirDetachments.length > 0 && <span className="text-[#8888a0]"> {r.theirDetachments.join(", ")}</span>}
+                      </span>
                       {r.estimate !== null ? <BPChip v={r.estimate} /> : <span className="w-8 text-center text-[10px] text-[#44445a]">—</span>}
                       <span className="text-[9px] text-[#8888a0]">→</span>
                       <BPChip v={r.actual} big />
