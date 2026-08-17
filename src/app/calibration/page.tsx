@@ -49,6 +49,48 @@ function DeltaBadge({ d }: { d: number | null }) {
   );
 }
 
+// A player's delta spread as a bar: worst→best delta on a fixed −20..+20 axis,
+// with the over-estimated (red) and under-estimated (green) halves tinted. A
+// glance shows reliability (bar width) and rough bias (which side it sits on) —
+// both of which a lone average hid. The exact average is in the tooltip.
+function SpanBar({
+  min,
+  max,
+  n,
+  avg,
+  total,
+}: {
+  min: number;
+  max: number;
+  n: number;
+  avg: number;
+  total: number;
+}) {
+  const pos = (v: number) => ((Math.max(-20, Math.min(20, v)) + 20) / 40) * 100;
+  const left = pos(min);
+  const width = Math.max(2.5, pos(max) - pos(min));
+  const fmt = (v: number) => `${v > 0 ? "+" : ""}${v}`;
+  return (
+    <div className="flex items-center gap-2 justify-end">
+      <div
+        className="relative h-4 w-[130px] sm:w-[160px] rounded overflow-hidden shrink-0"
+        style={{ background: "linear-gradient(90deg, rgba(239,68,68,0.10) 0 50%, rgba(34,197,94,0.10) 50% 100%)" }}
+        title={`Gennemsnit ${fmt(Number(avg.toFixed(1)))} BP · ${n}${total > n ? `/${total}` : ""} kampe med estimat`}
+      >
+        <div className="absolute inset-y-0 left-1/2 w-px bg-white/25" />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-[#6b6b80]"
+          style={{ left: `${left}%`, width: `${width}%` }}
+        />
+      </div>
+      <span className="text-[11px] tabular-nums text-[#e8e8f0] font-semibold whitespace-nowrap">
+        {fmt(min)}…{fmt(max)}
+        <span className="text-[9px] text-[#8888a0] font-normal ml-1">· {n}</span>
+      </span>
+    </div>
+  );
+}
+
 export default function CalibrationPage() {
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
   const [opponents, setOpponents] = useState<OpponentMap>({});
@@ -130,6 +172,8 @@ export default function CalibrationPage() {
             n: deltas.length,
             avg: deltas.reduce((a, b) => a + b, 0) / deltas.length,
             abs: deltas.reduce((a, b) => a + Math.abs(b), 0) / deltas.length,
+            min: Math.min(...deltas),
+            max: Math.max(...deltas),
           }
         : null;
     return armies
@@ -225,32 +269,11 @@ export default function CalibrationPage() {
                   <tbody>
                     {playerStats.map((s) => {
                       const cell = (
-                        st: { n: number; avg: number; abs: number } | null,
+                        st: { n: number; avg: number; abs: number; min: number; max: number } | null,
                         total: number
                       ) =>
                         st ? (
-                          <span
-                            className={`text-[12px] font-bold ${
-                              Math.abs(st.avg) <= 1
-                                ? "text-[#4ade80]"
-                                : st.avg > 0
-                                  ? "text-[#facc15]"
-                                  : "text-[#f87171]"
-                            }`}
-                            title={
-                              (st.avg > 1
-                                ? "Undervurderer sig selv — spiller bedre end estimaterne"
-                                : st.avg < -1
-                                  ? "Overvurderer sig selv — estimaterne er for optimistiske"
-                                  : "Rammer plet") + ` · ${st.n}${total > st.n ? `/${total}` : ""} kampe med estimat`
-                            }
-                          >
-                            {st.avg > 0 ? "+" : ""}
-                            {st.avg.toFixed(1)}
-                            <span className="text-[9px] text-[#8888a0] font-normal ml-1">
-                              (±{st.abs.toFixed(1)} · {st.n})
-                            </span>
-                          </span>
+                          <SpanBar min={st.min} max={st.max} n={st.n} avg={st.avg} total={total} />
                         ) : (
                           <span className="text-[11px] text-[#44445a]">—</span>
                         );
@@ -269,7 +292,7 @@ export default function CalibrationPage() {
                 </table>
               </div>
               <p className="text-[10px] text-[#8888a0] mt-2">
-                Delta = faktisk BP minus estimat. Negativ (rød) = for optimistiske estimater. Når runderne begynder, viser kolonnerne om jeres warmup-kalibrering holdt ved WTC.
+                Bjælken = spredning fra dårligste til bedste delta (faktisk BP minus estimat). Venstre halvdel (rød) = overvurderet / for optimistisk, højre (grøn) = undervurderet. Smal bjælke = pålidelig, bred = svingende. Tal: interval · antal kampe (gennemsnit i tooltip).
               </p>
             </div>
 
