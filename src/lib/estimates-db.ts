@@ -88,62 +88,80 @@ export async function fetchRawLists(
 
 export async function saveOpponentTeam(
   slug: string,
-  team: OpponentTeam
+  team: OpponentTeam,
+  tournamentSlug: string = TEAM_SLUG
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${BASE}/${slug}`), team);
+  await set(ref(getDb(), `${baseFor(tournamentSlug)}/${slug}`), team);
 }
 
-export async function deleteOpponentTeam(slug: string): Promise<void> {
+export async function deleteOpponentTeam(
+  slug: string,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<void> {
   await authReady();
-  await remove(ref(getDb(), `${BASE}/${slug}`));
+  await remove(ref(getDb(), `${baseFor(tournamentSlug)}/${slug}`));
 }
 
 // Restore teams from a backup by writing each team individually. Teams present
 // in the backup are overwritten; teams NOT in the backup are left untouched
 // (never a blanket wipe), so restoring an old backup can't delete newer teams.
-export async function restoreOpponents(map: OpponentMap): Promise<number> {
+export async function restoreOpponents(
+  map: OpponentMap,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<number> {
   await authReady();
   const updates: Record<string, OpponentTeam> = {};
   for (const [slug, team] of Object.entries(map)) {
-    if (team && team.name) updates[`${BASE}/${slug}`] = team;
+    if (team && team.name) updates[`${baseFor(tournamentSlug)}/${slug}`] = team;
   }
   if (Object.keys(updates).length) await update(ref(getDb()), updates);
   return Object.keys(updates).length;
 }
 
 // Save scouting note for a whole team (patch, doesn't touch lists/estimates).
-export async function saveTeamNote(slug: string, note: string): Promise<void> {
+export async function saveTeamNote(
+  slug: string,
+  note: string,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${BASE}/${slug}/notes`), note || null);
+  await set(ref(getDb(), `${baseFor(tournamentSlug)}/${slug}/notes`), note || null);
 }
 
 // Save scouting note for a single list.
-export async function saveListNote(slug: string, idx: number, note: string): Promise<void> {
+export async function saveListNote(
+  slug: string,
+  idx: number,
+  note: string,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${BASE}/${slug}/armies/${idx}/notes`), note || null);
+  await set(ref(getDb(), `${baseFor(tournamentSlug)}/${slug}/armies/${idx}/notes`), note || null);
 }
 
 // Replace a single list on a team without touching the other seven or the estimates.
 export async function updateOpponentList(
   slug: string,
   idx: number,
-  list: OpponentList
+  list: OpponentList,
+  tournamentSlug: string = TEAM_SLUG
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${BASE}/${slug}/armies/${idx}`), list);
+  await set(ref(getDb(), `${baseFor(tournamentSlug)}/${slug}/armies/${idx}`), list);
 }
 
 // Multi-path write of estimate cells. Keys are `${teamSlug}/${ourIdx}_${theirIdx}`;
 // null deletes the cell.
 export async function writeEstimateCells(
-  cells: Record<string, EstimateCell | null>
+  cells: Record<string, EstimateCell | null>,
+  tournamentSlug: string = TEAM_SLUG
 ): Promise<void> {
   await authReady();
   const updates: Record<string, EstimateCell | null> = {};
   for (const [key, value] of Object.entries(cells)) {
     const [teamSlug, cellKey] = key.split("/");
-    updates[`${BASE}/${teamSlug}/estimates/${cellKey}`] = value;
+    updates[`${baseFor(tournamentSlug)}/${teamSlug}/estimates/${cellKey}`] = value;
   }
   await update(ref(getDb()), updates);
 }
@@ -161,8 +179,9 @@ export async function writeClusterEstimate(opts: {
   value: number | null;
   currentVersion: string;
   playedSlugs?: Set<string>;
+  tournamentSlug?: string;
 }): Promise<void> {
-  const { ourIdx, cluster, value, currentVersion, playedSlugs } = opts;
+  const { ourIdx, cluster, value, currentVersion, playedSlugs, tournamentSlug } = opts;
   const locked = (slug: string) => Boolean(playedSlugs?.has(slug));
   const unlocked = cluster.members.filter((m) => !locked(m.teamSlug));
   if (unlocked.length === 0) return;
@@ -176,7 +195,7 @@ export async function writeClusterEstimate(opts: {
         ? null
         : stampVersion(m === anchor ? { v: value } : { v: value, auto: true }, currentVersion);
   }
-  await writeEstimateCells(updates);
+  await writeEstimateCells(updates, tournamentSlug);
 }
 
 // Toggle the "needs testing" flag on existing estimate cells without touching
@@ -184,13 +203,14 @@ export async function writeClusterEstimate(opts: {
 // the subfield, so cells that don't exist are left alone (nothing to flag).
 export async function setNeedsTestCells(
   keys: string[],
-  flag: boolean
+  flag: boolean,
+  tournamentSlug: string = TEAM_SLUG
 ): Promise<void> {
   await authReady();
   const updates: Record<string, true | null> = {};
   for (const key of keys) {
     const [teamSlug, cellKey] = key.split("/");
-    updates[`${BASE}/${teamSlug}/estimates/${cellKey}/needsTest`] = flag ? true : null;
+    updates[`${baseFor(tournamentSlug)}/${teamSlug}/estimates/${cellKey}/needsTest`] = flag ? true : null;
   }
   await update(ref(getDb()), updates);
 }
@@ -395,7 +415,8 @@ export async function switchSlotArchetype(
   armyIdx: number,
   oldProfile: ArchetypeDescriptor | null,
   newProfile: ArchetypeDescriptor | null,
-  lockedSlugs: Set<string>
+  lockedSlugs: Set<string>,
+  tournamentSlug: string = TEAM_SLUG
 ): Promise<{ parked: number; inherited: number }> {
   await authReady();
   const snapshot = snapshotSlotCells(opponents, armyIdx);
@@ -406,7 +427,7 @@ export async function switchSlotArchetype(
     const [slug, j] = key.split("|");
     if (lockedSlugs.has(slug)) return false;
     if (value !== null && !opponents[slug]?.armies?.[Number(j)]) return false;
-    updates[`estimates/${TEAM_SLUG}/${slug}/estimates/${armyIdx}_${j}`] = value;
+    updates[`${baseFor(tournamentSlug)}/${slug}/estimates/${armyIdx}_${j}`] = value;
     return true;
   };
 

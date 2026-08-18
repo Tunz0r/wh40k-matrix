@@ -135,7 +135,7 @@ export async function uploadActualList(opts: {
   }
 
   try {
-    const res = await switchSlotArchetype(opts.opponents, opts.armyIdx, oldDesc, newDesc, opts.lockedSlugs);
+    const res = await switchSlotArchetype(opts.opponents, opts.armyIdx, oldDesc, newDesc, opts.lockedSlugs, opts.slug);
     await savePlayerProfile(opts.slug, opts.armyIdx, profile);
     return { status: "saved", profile, matchedSize, created, inherited: res.inherited };
   } catch {

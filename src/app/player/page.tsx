@@ -330,7 +330,7 @@ export default function PlayerPage() {
           return;
         }
       }
-      const res = await switchSlotArchetype(opponents, myIdx, oldDesc, newDesc, lockedSlugs);
+      const res = await switchSlotArchetype(opponents, myIdx, oldDesc, newDesc, lockedSlugs, activeSlug);
       await savePlayerProfile(TEAM_SLUG, myIdx, profile);
       if (res.inherited > 0) alert(`${res.inherited} estimater overtaget fra arketypen.`);
       setProfCluster("");
@@ -366,7 +366,7 @@ export default function PlayerPage() {
       return;
     setProfBusy(true);
     try {
-      await switchSlotArchetype(opponents, myIdx, profileDescriptor(myProfile), null, lockedSlugs);
+      await switchSlotArchetype(opponents, myIdx, profileDescriptor(myProfile), null, lockedSlugs, activeSlug);
       await savePlayerProfile(TEAM_SLUG, myIdx, null);
     } catch {
       alert("Kunne ikke nulstille — tjek Firebase.");
@@ -475,7 +475,7 @@ export default function PlayerPage() {
       const testedKeys = wuSelected.members
         .filter((m) => opponents[m.teamSlug]?.estimates?.[`${myIdx}_${m.listIdx}`]?.needsTest)
         .map((m) => `${m.teamSlug}/${myIdx}_${m.listIdx}`);
-      if (testedKeys.length) setNeedsTestCells(testedKeys, false).catch(() => {});
+      if (testedKeys.length) setNeedsTestCells(testedKeys, false, activeSlug).catch(() => {});
       setWuCluster("");
       setWuActual("");
       setWuNotes("");

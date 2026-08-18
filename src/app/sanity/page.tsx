@@ -175,6 +175,7 @@ export default function SanityPage() {
       value,
       currentVersion: versions?.current ?? BASE_VERSION_ID,
       playedSlugs,
+      tournamentSlug: activeSlug,
     }).catch(() => {});
   };
 
