@@ -30,7 +30,7 @@ export default function CoachingPage() {
       sessionId={sessionId}
       teamSlug={isActive ? TEAM_SLUG : undefined}
       roundNumber={round?.number}
-      onRoundCompleted={() => router.push("/tournament")}
+      onRoundCompleted={() => router.push("/tournament/wtc-2026")}
     />
   );
 }

@@ -283,7 +283,7 @@ export default function WarmupsPage() {
       <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4">
         {!doc?.roster?.armies?.length && (
           <p className="text-[11px] text-[#8888a0]">
-            Intet roster fundet — gå til <Link href="/tournament" className="text-[#a855f7] underline">turneringen</Link> og opdater roster først.
+            Intet roster fundet — gå til <Link href="/tournament/wtc-2026" className="text-[#a855f7] underline">turneringen</Link> og opdater roster først.
           </p>
         )}
 

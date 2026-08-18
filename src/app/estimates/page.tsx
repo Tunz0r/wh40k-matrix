@@ -698,7 +698,7 @@ export default function EstimatesPage() {
 
         {ourArmies.length === 0 && (
           <div className="rounded-xl border border-dashed border-[rgba(239,68,68,0.3)] p-4 text-[11px] text-[#f87171]">
-            Intet roster fundet — gå til <Link href="/tournament" className="underline">turneringen</Link> og opdater roster først.
+            Intet roster fundet — gå til <Link href="/tournament/wtc-2026" className="underline">turneringen</Link> og opdater roster først.
           </div>
         )}
 

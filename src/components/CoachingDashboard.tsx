@@ -187,7 +187,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
       <div className="flex flex-col items-center justify-center min-h-[200px] gap-3">
         <div className="text-red-400 text-sm">{error || "Ukendt fejl"}</div>
         {!embedded && (
-          <Link href="/tournament" className="text-[#a855f7] text-xs hover:text-[#c084fc]">
+          <Link href="/tournament/wtc-2026" className="text-[#a855f7] text-xs hover:text-[#c084fc]">
             ← Tilbage til turnering
           </Link>
         )}

@@ -54,7 +54,7 @@ export default function TeamRoomPage() {
           Tjek at URL&apos;en er korrekt: /team/{slug}
         </p>
         <Link
-          href="/tournament"
+          href="/tournament/wtc-2026"
           className="text-[#a855f7] text-xs hover:text-[#c084fc]"
         >
           ← Gå til turnering
@@ -140,7 +140,7 @@ export default function TeamRoomPage() {
                 : "Turneringen er ikke startet endnu."}
             </div>
             <Link
-              href="/tournament"
+              href="/tournament/wtc-2026"
               className="inline-block mt-3 text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors"
             >
               Kaptajn: Gå til turneringen og start næste runde →
