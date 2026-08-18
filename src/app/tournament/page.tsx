@@ -12,6 +12,7 @@ import {
 } from "@/lib/tournaments-registry";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
 import { computeStandings } from "@/lib/standings";
+import { useActiveTournament } from "@/lib/active-tournament";
 
 const slugify = (s: string) =>
   s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -25,6 +26,7 @@ const STATUS: Record<TournamentStatus, { label: string; cls: string }> = {
 export default function TournamentIndexPage() {
   const [list, setList] = useState<TournamentMeta[]>([]);
   const [docs, setDocs] = useState<Record<string, TournamentDoc | null>>({});
+  const { setActive } = useActiveTournament();
 
   useEffect(() => {
     ensureRegistry().catch(() => {});
@@ -124,6 +126,7 @@ export default function TournamentIndexPage() {
               <Link
                 key={t.id}
                 href={`/tournament/${t.id}`}
+                onClick={() => setActive(t.id)}
                 className="block rounded-xl border border-white/[0.08] p-4 hover:border-white/[0.2] hover:bg-white/[0.02] transition-colors"
               >
                 <div className="flex items-center gap-2 flex-wrap">

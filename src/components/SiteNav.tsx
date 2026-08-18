@@ -54,11 +54,14 @@ const LINKS: { href: string; label: string; match: (path: string) => boolean }[]
 export default function SiteNav() {
   const pathname = usePathname() || "/";
   const [open, setOpen] = useState(false);
-  const { tournaments, activeId, activeSlug, setActive } = useActiveTournament();
-  // Team Room follows the active tournament; other links are static.
-  const links = LINKS.map((l) =>
-    l.label === "Team Room" ? { ...l, href: `/team/${activeSlug}` } : l
-  );
+  const { active, activeId, activeSlug } = useActiveTournament();
+  const activeName = active?.name ?? "Vælg turnering";
+  // Team Room + Turnering follow the active tournament; others are static.
+  const links = LINKS.map((l) => {
+    if (l.label === "Team Room") return { ...l, href: `/team/${activeSlug}` };
+    if (l.label === "Turnering") return { ...l, href: `/tournament/${activeId}` };
+    return l;
+  });
 
   if (pathname === "/login") return null;
 
@@ -83,21 +86,16 @@ export default function SiteNav() {
             </span>
           </Link>
 
-          {/* Active tournament selector */}
-          {tournaments.length > 0 && (
-            <select
-              value={activeId}
-              onChange={(e) => setActive(e.target.value)}
-              title="Aktiv turnering"
-              className="mr-2 shrink-0 text-[11px] px-2 py-1 rounded-md border border-white/[0.1] bg-[#1a1a22] text-[#c084fc] outline-none focus:border-[#a855f7] max-w-[130px]"
-            >
-              {tournaments.map((t) => (
-                <option key={t.id} value={t.id} className="bg-[#1a1a22] text-[#e8e8f0]">
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          )}
+          {/* Active tournament — click to switch (the /tournament picker) */}
+          <Link
+            href="/tournament"
+            onClick={() => setOpen(false)}
+            title="Skift turnering"
+            className="mr-2 shrink-0 flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md border border-white/[0.1] text-[#c084fc] hover:border-[#a855f7]/50 hover:bg-[rgba(168,85,247,0.08)] transition-colors max-w-[170px]"
+          >
+            <span className="truncate">{activeName}</span>
+            <span className="text-[#8888a0] text-[10px] shrink-0">⇄</span>
+          </Link>
 
           {/* Desktop links */}
           <div className="hidden sm:flex items-center gap-1 flex-1">

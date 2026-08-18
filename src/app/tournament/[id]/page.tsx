@@ -8,6 +8,7 @@ import {
   getTournament,
   type TournamentMeta,
 } from "@/lib/tournaments-registry";
+import { useActiveTournament } from "@/lib/active-tournament";
 import TournamentDashboard from "./dashboard";
 
 export default function TournamentDetailPage({
@@ -16,6 +17,7 @@ export default function TournamentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { setActive } = useActiveTournament();
   // undefined = loading, null = not found.
   const [meta, setMeta] = useState<TournamentMeta | null | undefined>(undefined);
 
@@ -23,9 +25,15 @@ export default function TournamentDetailPage({
     let cancelled = false;
     ensureRegistry()
       .then(() => getTournament(id))
-      .then((m) => { if (!cancelled) setMeta(m); })
+      .then((m) => {
+        if (cancelled) return;
+        setMeta(m);
+        if (m) setActive(m.id); // viewing a tournament makes it the active one
+      })
       .catch(() => { if (!cancelled) setMeta(null); });
     return () => { cancelled = true; };
+    // setActive is stable enough; re-run only on id change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   if (meta === undefined) {
