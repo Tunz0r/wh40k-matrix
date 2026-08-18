@@ -107,6 +107,9 @@ export default function TournamentIndexPage() {
                 {idTaken ? `"${proposedId}" findes allerede` : <>URL: <code className="text-[#c8c8d4]">/tournament/{proposedId}</code></>}
               </p>
             )}
+            <p className="text-[10px] text-[#8888a0] mt-2 pt-2 border-t border-white/[0.06]">
+              Arketype-biblioteket (og dine estimater mod arketyper) deles automatisk med den nye turnering — kun modstander-landene er turnerings-specifikke.
+            </p>
           </div>
         )}
 
