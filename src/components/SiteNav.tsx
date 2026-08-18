@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
+import { useActiveTournament } from "@/lib/active-tournament";
 
 // The matrix itself lives on "/" — reachable via the brand logo, so it
 // doesn't need its own nav item.
@@ -53,6 +54,11 @@ const LINKS: { href: string; label: string; match: (path: string) => boolean }[]
 export default function SiteNav() {
   const pathname = usePathname() || "/";
   const [open, setOpen] = useState(false);
+  const { tournaments, activeId, activeSlug, setActive } = useActiveTournament();
+  // Team Room follows the active tournament; other links are static.
+  const links = LINKS.map((l) =>
+    l.label === "Team Room" ? { ...l, href: `/team/${activeSlug}` } : l
+  );
 
   if (pathname === "/login") return null;
 
@@ -77,9 +83,25 @@ export default function SiteNav() {
             </span>
           </Link>
 
+          {/* Active tournament selector */}
+          {tournaments.length > 0 && (
+            <select
+              value={activeId}
+              onChange={(e) => setActive(e.target.value)}
+              title="Aktiv turnering"
+              className="mr-2 shrink-0 text-[11px] px-2 py-1 rounded-md border border-white/[0.1] bg-[#1a1a22] text-[#c084fc] outline-none focus:border-[#a855f7] max-w-[130px]"
+            >
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id} className="bg-[#1a1a22] text-[#e8e8f0]">
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
+
           {/* Desktop links */}
           <div className="hidden sm:flex items-center gap-1 flex-1">
-            {LINKS.map((link) => {
+            {links.map((link) => {
               const active = link.match(pathname);
               return (
                 <Link
@@ -120,7 +142,7 @@ export default function SiteNav() {
       {/* Mobile menu */}
       {open && (
         <div className="sm:hidden border-t border-white/[0.06] px-3 py-2 space-y-0.5 bg-[#0f0f13]">
-          {LINKS.map((link) => {
+          {links.map((link) => {
             const active = link.match(pathname);
             return (
               <Link
