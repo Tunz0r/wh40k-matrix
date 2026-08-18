@@ -43,6 +43,20 @@ const BASE = `estimates/${TEAM_SLUG}`;
 // for WTC 2026, and new tournaments have no opponents to write to yet).
 const baseFor = (slug: string = TEAM_SLUG) => `estimates/${slug}`;
 
+// The shared archetype library: the `Meta …`-tier reference teams (and their
+// estimates) live here, read by EVERY tournament, so estimating an archetype
+// carries across tournaments. "_library" can't collide with a real tournament
+// slug ("_" prefix). `LIB_SLUGS` mirrors its team keys so writes can route each
+// cell to the library (shared) vs the per-tournament node — kept in sync by the
+// _library subscription in subscribeToOpponents. Empty until the migration runs,
+// so everything defaults to the per-tournament node (current behavior).
+const LIBRARY = "estimates/_library";
+let LIB_SLUGS = new Set<string>();
+// Node a given opponent-team's estimate cells live in: the shared library for
+// library teams, else the per-tournament node.
+const nodeForTeam = (teamSlug: string, tournamentSlug: string) =>
+  LIB_SLUGS.has(teamSlug) ? LIBRARY : baseFor(tournamentSlug);
+
 // "Team Sweden" and "Sweden" must map to the same slug — round opponent names
 // come from imported rosters while estimate teams use seeding country names.
 export function slugifyTeam(name: string): string {
@@ -60,16 +74,35 @@ export function subscribeToOpponents(
   slug: string = TEAM_SLUG
 ): () => void {
   let cancelled = false;
-  let cleanup: (() => void) | null = null;
+  let offBase: (() => void) | null = null;
+  let offLib: (() => void) | null = null;
+  let baseTeams: OpponentMap = {};
+  let libTeams: OpponentMap = {};
+  let baseReady = false;
+  let libReady = false;
+  const emit = () => {
+    if (!baseReady || !libReady) return; // wait for both to avoid a flash of half the field
+    // Shared library first; per-tournament teams override on a slug collision.
+    callback({ ...libTeams, ...baseTeams });
+  };
   authReady().then(() => {
     if (cancelled) return;
-    const r = ref(getDb(), baseFor(slug));
-    onValue(r, (snap) => callback(snap.val() || {}));
-    cleanup = () => off(r);
+    const rb = ref(getDb(), baseFor(slug));
+    onValue(rb, (snap) => { baseTeams = snap.val() || {}; baseReady = true; emit(); });
+    offBase = () => off(rb);
+    const rl = ref(getDb(), LIBRARY);
+    onValue(rl, (snap) => {
+      libTeams = (snap.val() as OpponentMap) || {};
+      LIB_SLUGS = new Set(Object.keys(libTeams));
+      libReady = true;
+      emit();
+    });
+    offLib = () => off(rl);
   });
   return () => {
     cancelled = true;
-    cleanup?.();
+    offBase?.();
+    offLib?.();
   };
 }
 
@@ -92,7 +125,7 @@ export async function saveOpponentTeam(
   tournamentSlug: string = TEAM_SLUG
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${baseFor(tournamentSlug)}/${slug}`), team);
+  await set(ref(getDb(), `${nodeForTeam(slug, tournamentSlug)}/${slug}`), team);
 }
 
 export async function deleteOpponentTeam(
@@ -100,7 +133,7 @@ export async function deleteOpponentTeam(
   tournamentSlug: string = TEAM_SLUG
 ): Promise<void> {
   await authReady();
-  await remove(ref(getDb(), `${baseFor(tournamentSlug)}/${slug}`));
+  await remove(ref(getDb(), `${nodeForTeam(slug, tournamentSlug)}/${slug}`));
 }
 
 // Restore teams from a backup by writing each team individually. Teams present
@@ -113,7 +146,7 @@ export async function restoreOpponents(
   await authReady();
   const updates: Record<string, OpponentTeam> = {};
   for (const [slug, team] of Object.entries(map)) {
-    if (team && team.name) updates[`${baseFor(tournamentSlug)}/${slug}`] = team;
+    if (team && team.name) updates[`${nodeForTeam(slug, tournamentSlug)}/${slug}`] = team;
   }
   if (Object.keys(updates).length) await update(ref(getDb()), updates);
   return Object.keys(updates).length;
@@ -126,7 +159,7 @@ export async function saveTeamNote(
   tournamentSlug: string = TEAM_SLUG
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${baseFor(tournamentSlug)}/${slug}/notes`), note || null);
+  await set(ref(getDb(), `${nodeForTeam(slug, tournamentSlug)}/${slug}/notes`), note || null);
 }
 
 // Save scouting note for a single list.
@@ -137,7 +170,7 @@ export async function saveListNote(
   tournamentSlug: string = TEAM_SLUG
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${baseFor(tournamentSlug)}/${slug}/armies/${idx}/notes`), note || null);
+  await set(ref(getDb(), `${nodeForTeam(slug, tournamentSlug)}/${slug}/armies/${idx}/notes`), note || null);
 }
 
 // Replace a single list on a team without touching the other seven or the estimates.
@@ -148,7 +181,7 @@ export async function updateOpponentList(
   tournamentSlug: string = TEAM_SLUG
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${baseFor(tournamentSlug)}/${slug}/armies/${idx}`), list);
+  await set(ref(getDb(), `${nodeForTeam(slug, tournamentSlug)}/${slug}/armies/${idx}`), list);
 }
 
 // Multi-path write of estimate cells. Keys are `${teamSlug}/${ourIdx}_${theirIdx}`;
@@ -161,7 +194,7 @@ export async function writeEstimateCells(
   const updates: Record<string, EstimateCell | null> = {};
   for (const [key, value] of Object.entries(cells)) {
     const [teamSlug, cellKey] = key.split("/");
-    updates[`${baseFor(tournamentSlug)}/${teamSlug}/estimates/${cellKey}`] = value;
+    updates[`${nodeForTeam(teamSlug, tournamentSlug)}/${teamSlug}/estimates/${cellKey}`] = value;
   }
   await update(ref(getDb()), updates);
 }
@@ -210,7 +243,7 @@ export async function setNeedsTestCells(
   const updates: Record<string, true | null> = {};
   for (const key of keys) {
     const [teamSlug, cellKey] = key.split("/");
-    updates[`${baseFor(tournamentSlug)}/${teamSlug}/estimates/${cellKey}/needsTest`] = flag ? true : null;
+    updates[`${nodeForTeam(teamSlug, tournamentSlug)}/${teamSlug}/estimates/${cellKey}/needsTest`] = flag ? true : null;
   }
   await update(ref(getDb()), updates);
 }
@@ -427,7 +460,7 @@ export async function switchSlotArchetype(
     const [slug, j] = key.split("|");
     if (lockedSlugs.has(slug)) return false;
     if (value !== null && !opponents[slug]?.armies?.[Number(j)]) return false;
-    updates[`${baseFor(tournamentSlug)}/${slug}/estimates/${armyIdx}_${j}`] = value;
+    updates[`${nodeForTeam(slug, tournamentSlug)}/${slug}/estimates/${armyIdx}_${j}`] = value;
     return true;
   };
 
@@ -474,7 +507,10 @@ const WARMUP_TEAM_SLUG = "warmup-arketyper";
 
 export async function appendListToMetaTeam(list: OpponentList): Promise<number> {
   await authReady();
-  const teamRef = ref(getDb(), `${BASE}/${WARMUP_TEAM_SLUG}`);
+  // The warmup library is a shared archetype team — write it wherever it lives
+  // (the shared node once migrated, else the legacy per-team node).
+  const node = nodeForTeam(WARMUP_TEAM_SLUG, TEAM_SLUG);
+  const teamRef = ref(getDb(), `${node}/${WARMUP_TEAM_SLUG}`);
   const snap = await get(teamRef);
   const team = snap.val() as OpponentTeam | null;
   if (!team) {
@@ -482,7 +518,7 @@ export async function appendListToMetaTeam(list: OpponentList): Promise<number> 
     return 0;
   }
   const idx = (team.armies || []).length;
-  await set(ref(getDb(), `${BASE}/${WARMUP_TEAM_SLUG}/armies/${idx}`), list);
+  await set(ref(getDb(), `${node}/${WARMUP_TEAM_SLUG}/armies/${idx}`), list);
   return idx;
 }
 
