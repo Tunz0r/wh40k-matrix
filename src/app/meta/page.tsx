@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
+import { TEAM_NAME } from "@/lib/team";
+import { useActiveTournament } from "@/lib/active-tournament";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
 import {
   subscribeToOpponents,
@@ -80,13 +81,14 @@ export default function MetaPage() {
   const [biasMode, setBiasMode] = useState<BiasMode>("raw");
   const [onlyUntested, setOnlyUntested] = useState(false);
 
+  const { activeSlug } = useActiveTournament();
   useEffect(() => {
     try {
-      const u1 = subscribeToTournament(TEAM_SLUG, setDoc);
-      const u2 = subscribeToOpponents(setOpponents);
+      const u1 = subscribeToTournament(activeSlug, setDoc);
+      const u2 = subscribeToOpponents(setOpponents, activeSlug);
       return () => { u1(); u2(); };
     } catch {}
-  }, []);
+  }, [activeSlug]);
   useEffect(() => {
     setOnlyUntested(sessionStorage.getItem(TEST_KEY) === "1");
     const m = sessionStorage.getItem(BIAS_KEY);

@@ -37,6 +37,11 @@ export interface OpponentTeam {
 export type OpponentMap = Record<string, OpponentTeam>;
 
 const BASE = `estimates/${TEAM_SLUG}`;
+// Per-tournament opponent-data root. Estimate pages pass the active tournament's
+// dataSlug; everything else defaults to TEAM_SLUG (WTC 2026 / the legacy data).
+// Phase 2a: reads are parameterized; writes still default to TEAM_SLUG (correct
+// for WTC 2026, and new tournaments have no opponents to write to yet).
+const baseFor = (slug: string = TEAM_SLUG) => `estimates/${slug}`;
 
 // "Team Sweden" and "Sweden" must map to the same slug — round opponent names
 // come from imported rosters while estimate teams use seeding country names.
@@ -51,13 +56,14 @@ export function slugifyTeam(name: string): string {
 }
 
 export function subscribeToOpponents(
-  callback: (teams: OpponentMap) => void
+  callback: (teams: OpponentMap) => void,
+  slug: string = TEAM_SLUG
 ): () => void {
   let cancelled = false;
   let cleanup: (() => void) | null = null;
   authReady().then(() => {
     if (cancelled) return;
-    const r = ref(getDb(), BASE);
+    const r = ref(getDb(), baseFor(slug));
     onValue(r, (snap) => callback(snap.val() || {}));
     cleanup = () => off(r);
   });
@@ -71,9 +77,12 @@ export function subscribeToOpponents(
 // sibling node, kept OUT of the opponents subscription because they're ~1MB and
 // that stream loads on every estimates/stats/player page. Fetched on demand by
 // the /lists reader. Returns { [armyIdx]: rawListText }.
-export async function fetchRawLists(slug: string): Promise<Record<string, string>> {
+export async function fetchRawLists(
+  slug: string,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<Record<string, string>> {
   await authReady();
-  const snap = await get(ref(getDb(), `estimates/${TEAM_SLUG}-lists-raw/${slug}`));
+  const snap = await get(ref(getDb(), `estimates/${tournamentSlug}-lists-raw/${slug}`));
   return (snap.val() as Record<string, string> | null) || {};
 }
 

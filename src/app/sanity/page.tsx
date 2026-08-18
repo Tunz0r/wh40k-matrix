@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
+import { TEAM_NAME } from "@/lib/team";
+import { useActiveTournament } from "@/lib/active-tournament";
 import {
   subscribeToTournament,
   type TournamentDoc,
@@ -136,16 +137,17 @@ export default function SanityPage() {
   const [opponents, setOpponents] = useState<OpponentMap>({});
   const [acks, setAcks] = useState<SanityAckMap>({});
   const [versions, setVersions] = useState<VersionsNode | null>(null);
+  const { activeSlug } = useActiveTournament();
 
   useEffect(() => {
     try {
-      const u1 = subscribeToTournament(TEAM_SLUG, setDoc);
-      const u2 = subscribeToOpponents(setOpponents);
+      const u1 = subscribeToTournament(activeSlug, setDoc);
+      const u2 = subscribeToOpponents(setOpponents, activeSlug);
       const u3 = subscribeToSanityAcks(setAcks);
       const u4 = subscribeToVersions(setVersions);
       return () => { u1(); u2(); u3(); u4(); };
     } catch {}
-  }, []);
+  }, [activeSlug]);
 
   const clusters = useMemo(() => clusterLists(opponents), [opponents]);
   const armies = useMemo(() => doc?.roster?.armies || [], [doc]);

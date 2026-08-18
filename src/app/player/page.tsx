@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
+import { useActiveTournament } from "@/lib/active-tournament";
 import { DISP_STYLES, FACTIONS } from "@/lib/data";
 import {
   subscribeToTournament,
@@ -75,13 +76,14 @@ export default function PlayerPage() {
   const [activeSession, setActiveSession] = useState<SessionData | null>(null);
   const [pastSessions, setPastSessions] = useState<Record<string, SessionData>>({});
 
+  const { activeSlug } = useActiveTournament();
   useEffect(() => {
     try {
-      const u1 = subscribeToTournament(TEAM_SLUG, setDoc);
-      const u2 = subscribeToOpponents(setOpponents);
+      const u1 = subscribeToTournament(activeSlug, setDoc);
+      const u2 = subscribeToOpponents(setOpponents, activeSlug);
       return () => { u1(); u2(); };
     } catch {}
-  }, []);
+  }, [activeSlug]);
 
   useEffect(() => {
     const saved = localStorage.getItem(MY_ARMY_KEY);

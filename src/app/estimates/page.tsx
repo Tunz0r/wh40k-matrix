@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { deserializeRoster, type RosterArmy } from "@/lib/roster";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
-import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
+import { TEAM_NAME } from "@/lib/team";
+import { useActiveTournament } from "@/lib/active-tournament";
 import { DISP_STYLES, FACTIONS } from "@/lib/data";
 import ArmyEditor from "@/components/ArmyEditor";
 import EstimateInput from "@/components/EstimateInput";
@@ -190,17 +191,18 @@ export default function EstimatesPage() {
     }
   }
 
+  const { activeSlug } = useActiveTournament();
   useEffect(() => {
     try {
-      const unsub1 = subscribeToOpponents(setOpponents);
-      const unsub2 = subscribeToTournament(TEAM_SLUG, setFbDoc);
+      const unsub1 = subscribeToOpponents(setOpponents, activeSlug);
+      const unsub2 = subscribeToTournament(activeSlug, setFbDoc);
       const unsub3 = subscribeToVersions(setVersions);
       // Writes the "11th fresh" base version the first time anyone opens the
       // page; existing estimate cells stay untouched and count as that version.
       ensureVersions().catch(() => {});
       return () => { unsub1(); unsub2(); unsub3(); };
     } catch {}
-  }, []);
+  }, [activeSlug]);
 
   const currentVersion = versions.current;
   const currentVersionLabel = versions.list?.[currentVersion]?.label ?? currentVersion;

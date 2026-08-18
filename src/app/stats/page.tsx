@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
+import { TEAM_NAME } from "@/lib/team";
+import { useActiveTournament } from "@/lib/active-tournament";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
 import {
   subscribeToOpponents,
@@ -84,13 +85,14 @@ export default function StatsPage() {
   const [opponents, setOpponents] = useState<OpponentMap>({});
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
 
+  const { activeSlug } = useActiveTournament();
   useEffect(() => {
     try {
-      const u1 = subscribeToOpponents(setOpponents);
-      const u2 = subscribeToTournament(TEAM_SLUG, setDoc);
+      const u1 = subscribeToOpponents(setOpponents, activeSlug);
+      const u2 = subscribeToTournament(activeSlug, setDoc);
       return () => { u1(); u2(); };
     } catch {}
-  }, []);
+  }, [activeSlug]);
 
   const stats = useMemo(() => {
     // Real WTC 2026 field: teams flagged wtc + our own roster.

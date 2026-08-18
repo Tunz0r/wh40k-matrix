@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
+import { TEAM_NAME } from "@/lib/team";
+import { useActiveTournament } from "@/lib/active-tournament";
 import {
   subscribeToTournament,
   type TournamentDoc,
@@ -152,13 +153,14 @@ export default function WarmupsPage() {
   const [fMinDelta, setFMinDelta] = useState(0);
   const [sort, setSort] = useState("absdelta");
 
+  const { activeSlug } = useActiveTournament();
   useEffect(() => {
     try {
-      const u1 = subscribeToTournament(TEAM_SLUG, setDoc);
-      const u2 = subscribeToOpponents(setOpponents);
+      const u1 = subscribeToTournament(activeSlug, setDoc);
+      const u2 = subscribeToOpponents(setOpponents, activeSlug);
       return () => { u1(); u2(); };
     } catch {}
-  }, []);
+  }, [activeSlug]);
 
   // Collapse/mode state survives navigation within the browser session.
   useEffect(() => {
