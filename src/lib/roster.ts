@@ -4,7 +4,8 @@ export interface RosterArmy {
   faction: string;
   detachments: string[];
   disposition: Disposition | null;
-  player?: string;
+  player?: string; // display name (legacy / fallback)
+  playerId?: string; // link to the Player entity (see lib/players)
 }
 
 export interface RosterExport {

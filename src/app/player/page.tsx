@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
+import { TEAM_NAME } from "@/lib/team";
 import { useActiveTournament } from "@/lib/active-tournament";
+import { useActivePlayer } from "@/lib/active-player";
 import { DISP_STYLES, FACTIONS } from "@/lib/data";
 import {
   subscribeToTournament,
@@ -47,7 +48,6 @@ import {
 import { tournamentGamesForArmy } from "@/lib/tournament-games";
 import { getLayoutImage } from "@/lib/layouts";
 
-const MY_ARMY_KEY = "wtc-my-army";
 
 function BPChip({ v, big }: { v: number; big?: boolean }) {
   const s = estimateStyle(v);
@@ -72,7 +72,6 @@ function myMatchup(session: SessionData | null, faction: string): MatchupData | 
 export default function PlayerPage() {
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
   const [opponents, setOpponents] = useState<OpponentMap>({});
-  const [myIdx, setMyIdx] = useState<number | null>(null);
   const [activeSession, setActiveSession] = useState<SessionData | null>(null);
   const [pastSessions, setPastSessions] = useState<Record<string, SessionData>>({});
 
@@ -85,17 +84,15 @@ export default function PlayerPage() {
     } catch {}
   }, [activeSlug]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(MY_ARMY_KEY);
-    if (saved !== null) setMyIdx(Number(saved));
-  }, []);
-
-  function pickArmy(i: number) {
-    setMyIdx(i);
-    localStorage.setItem(MY_ARMY_KEY, String(i));
-  }
+  const { activePlayer, activePlayerId, players, setActivePlayer } = useActivePlayer();
 
   const armies = useMemo(() => doc?.roster?.armies || [], [doc]);
+  // "My army" = the roster slot in the ACTIVE tournament linked to my identity,
+  // resolved from playerId (login-ready) rather than a local army pick.
+  const myIdx = useMemo(() => {
+    const i = armies.findIndex((a) => a.playerId && a.playerId === activePlayerId);
+    return i >= 0 ? i : null;
+  }, [armies, activePlayerId]);
   const myArmy = myIdx !== null ? armies[myIdx] : null;
   const myFaction = myArmy?.faction || "";
 
@@ -331,7 +328,7 @@ export default function PlayerPage() {
         }
       }
       const res = await switchSlotArchetype(opponents, myIdx, oldDesc, newDesc, lockedSlugs, activeSlug);
-      await savePlayerProfile(TEAM_SLUG, myIdx, profile);
+      await savePlayerProfile(activeSlug, myIdx, profile);
       if (res.inherited > 0) alert(`${res.inherited} estimater overtaget fra arketypen.`);
       setProfCluster("");
       setProfPaste("");
@@ -367,7 +364,7 @@ export default function PlayerPage() {
     setProfBusy(true);
     try {
       await switchSlotArchetype(opponents, myIdx, profileDescriptor(myProfile), null, lockedSlugs, activeSlug);
-      await savePlayerProfile(TEAM_SLUG, myIdx, null);
+      await savePlayerProfile(activeSlug, myIdx, null);
     } catch {
       alert("Kunne ikke nulstille — tjek Firebase.");
     } finally {
@@ -469,7 +466,7 @@ export default function PlayerPage() {
       ...(wuNotes.trim() ? { notes: wuNotes.trim() } : {}),
     };
     try {
-      await addWarmupGame(TEAM_SLUG, myIdx, game);
+      await addWarmupGame(activeSlug, myIdx, game);
       // Closing the loop: testing the matchup clears its "needs testing" flag
       // on this army's estimate cells for the archetype.
       const testedKeys = wuSelected.members
@@ -539,33 +536,42 @@ export default function PlayerPage() {
             Min side
             <span className="text-[#4ade80] ml-2 text-sm font-normal">— {TEAM_NAME}</span>
           </h1>
-          {myArmy && (
+          {activePlayer && (
             <span className="text-[12px] text-[#8888a0]">
-              {myArmy.player ? `${myArmy.player} · ` : ""}{myFaction}
+              {activePlayer.name}{myFaction ? ` · ${myFaction}` : ""}
             </span>
           )}
         </div>
       </header>
 
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
-        {/* Army picker */}
+        {/* Identity — who are you (stand-in for login) */}
         <div className="rounded-xl border border-white/[0.08] p-4">
-          <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-2">Vælg din hær</h2>
-          {armies.length === 0 ? (
-            <p className="text-[11px] text-[#8888a0]">Intet roster endnu — bed kaptajnen opsætte holdet.</p>
+          <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-2">Hvem er du?</h2>
+          {players.length === 0 ? (
+            <p className="text-[11px] text-[#8888a0]">Ingen spillere endnu.</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-              {armies.map((a, i) => (
-                <button
-                  key={i}
-                  onClick={() => pickArmy(i)}
-                  className={`text-left rounded-lg border p-2 transition-colors ${myIdx === i ? "border-[#a855f7]/60 bg-[#a855f7]/10" : "border-white/[0.08] hover:border-white/[0.18]"}`}
-                >
-                  <div className="text-[11px] text-[#e8e8f0] font-medium truncate">{a.faction}</div>
-                  <div className="text-[9px] text-[#8888a0] truncate">{a.player || "—"}</div>
-                </button>
-              ))}
+              {players.map((p) => {
+                const army = armies.find((a) => a.playerId === p.id);
+                const isMe = p.id === activePlayerId;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setActivePlayer(p.id)}
+                    className={`text-left rounded-lg border p-2 transition-colors ${isMe ? "border-[#a855f7]/60 bg-[#a855f7]/10" : "border-white/[0.08] hover:border-white/[0.18]"}`}
+                  >
+                    <div className="text-[11px] text-[#e8e8f0] font-medium truncate">{p.name}</div>
+                    <div className="text-[9px] text-[#8888a0] truncate">{army ? army.faction : "ikke i denne turnering"}</div>
+                  </button>
+                );
+              })}
             </div>
+          )}
+          {activePlayer && myIdx === null && (
+            <p className="text-[10px] text-[#facc15] mt-2">
+              {activePlayer.name} er ikke tildelt en hær i denne turnering.
+            </p>
           )}
         </div>
 
@@ -878,7 +884,7 @@ export default function PlayerPage() {
                           <button
                             onClick={() => {
                               if (!confirm("Slet denne warmup-kamp?")) return;
-                              if (myIdx !== null) deleteWarmupGame(TEAM_SLUG, myIdx, g.id).catch(() => {});
+                              if (myIdx !== null) deleteWarmupGame(activeSlug, myIdx, g.id).catch(() => {});
                             }}
                             title="Slet warmup-kamp"
                             className="text-[11px] text-[#8888a0] hover:text-red-400 shrink-0 transition-colors"
