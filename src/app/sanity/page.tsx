@@ -142,7 +142,7 @@ export default function SanityPage() {
   useEffect(() => {
     try {
       const u1 = subscribeToTournament(activeSlug, setDoc);
-      const u2 = subscribeToOpponents(setOpponents, activeSlug);
+      const u2 = subscribeToOpponents(setOpponents, activeSlug, false); // tournament-local field only
       const u3 = subscribeToSanityAcks(setAcks);
       const u4 = subscribeToVersions(setVersions);
       return () => { u1(); u2(); u3(); u4(); };

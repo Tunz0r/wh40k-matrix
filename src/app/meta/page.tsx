@@ -85,7 +85,7 @@ export default function MetaPage() {
   useEffect(() => {
     try {
       const u1 = subscribeToTournament(activeSlug, setDoc);
-      const u2 = subscribeToOpponents(setOpponents, activeSlug);
+      const u2 = subscribeToOpponents(setOpponents, activeSlug, false); // tournament-local field only
       return () => { u1(); u2(); };
     } catch {}
   }, [activeSlug]);

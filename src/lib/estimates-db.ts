@@ -69,9 +69,15 @@ export function slugifyTeam(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+// `includeLibrary` (default true) merges the shared archetype library into the
+// view — used where you MANAGE estimates (/estimates) or prep against archetypes.
+// Pass false for the tournament-LOCAL field: the analysis pages (/meta, /sanity,
+// /stats) that should reflect only THIS tournament's opponent countries, not the
+// global reference library.
 export function subscribeToOpponents(
   callback: (teams: OpponentMap) => void,
-  slug: string = TEAM_SLUG
+  slug: string = TEAM_SLUG,
+  includeLibrary: boolean = true
 ): () => void {
   let cancelled = false;
   let offBase: (() => void) | null = null;
@@ -79,25 +85,27 @@ export function subscribeToOpponents(
   let baseTeams: OpponentMap = {};
   let libTeams: OpponentMap = {};
   let baseReady = false;
-  let libReady = false;
+  let libReady = !includeLibrary; // when excluded, the library half is "ready" (empty)
   const emit = () => {
     if (!baseReady || !libReady) return; // wait for both to avoid a flash of half the field
     // Shared library first; per-tournament teams override on a slug collision.
-    callback({ ...libTeams, ...baseTeams });
+    callback(includeLibrary ? { ...libTeams, ...baseTeams } : baseTeams);
   };
   authReady().then(() => {
     if (cancelled) return;
     const rb = ref(getDb(), baseFor(slug));
     onValue(rb, (snap) => { baseTeams = snap.val() || {}; baseReady = true; emit(); });
     offBase = () => off(rb);
-    const rl = ref(getDb(), LIBRARY);
-    onValue(rl, (snap) => {
-      libTeams = (snap.val() as OpponentMap) || {};
-      LIB_SLUGS = new Set(Object.keys(libTeams));
-      libReady = true;
-      emit();
-    });
-    offLib = () => off(rl);
+    if (includeLibrary) {
+      const rl = ref(getDb(), LIBRARY);
+      onValue(rl, (snap) => {
+        libTeams = (snap.val() as OpponentMap) || {};
+        LIB_SLUGS = new Set(Object.keys(libTeams));
+        libReady = true;
+        emit();
+      });
+      offLib = () => off(rl);
+    }
   });
   return () => {
     cancelled = true;

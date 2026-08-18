@@ -88,7 +88,7 @@ export default function StatsPage() {
   const { activeSlug } = useActiveTournament();
   useEffect(() => {
     try {
-      const u1 = subscribeToOpponents(setOpponents, activeSlug);
+      const u1 = subscribeToOpponents(setOpponents, activeSlug, false); // tournament-local field only
       const u2 = subscribeToTournament(activeSlug, setDoc);
       return () => { u1(); u2(); };
     } catch {}
