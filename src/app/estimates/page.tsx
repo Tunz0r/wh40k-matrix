@@ -38,6 +38,7 @@ import {
   subscribeToVersions,
   ensureVersions,
   createVersion,
+  setCurrentVersion,
   stampVersion,
 } from "@/lib/estimates-db";
 
@@ -203,6 +204,11 @@ export default function EstimatesPage() {
 
   const currentVersion = versions.current;
   const currentVersionLabel = versions.list?.[currentVersion]?.label ?? currentVersion;
+  // Newest version first (base "11th fresh" has createdAt 0 → sorts last).
+  const versionList = useMemo(
+    () => Object.values(versions.list || {}).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+    [versions]
+  );
 
   // Cut a new estimate version: from here on, new/changed estimates are stamped
   // with it, and anything still carrying an older stamp shows up as carried
@@ -580,13 +586,27 @@ export default function EstimatesPage() {
           <span className="text-[11px] text-[#8888a0] hidden sm:inline">
             {totals.teams} hold · {totals.manual} manuelle · {totals.auto} auto
           </span>
-          <button
-            onClick={cutVersion}
-            title={`Alle estimater hører til en version. Nuværende: ${currentVersionLabel}. Klik for at skære en ny version, når metaen flytter sig — gamle estimater bevares og markeres som fra den forrige.`}
-            className="text-[11px] px-2 py-0.5 rounded-md border border-[rgba(74,222,128,0.3)] text-[#4ade80] hover:border-[#4ade80] transition-colors"
-          >
-            v: {currentVersionLabel}
-          </button>
+          <div className="flex items-center gap-1">
+            <select
+              value={currentVersion}
+              onChange={(e) => setCurrentVersion(e.target.value).catch(() => {})}
+              title="Version af estimater + arketyper. Vælg hvilken nye/ændrede estimater stemples med. Nyeste øverst."
+              className="text-[11px] px-2 py-1 rounded-md border border-[rgba(74,222,128,0.3)] bg-[#1a1a22] text-[#4ade80] outline-none focus:border-[#4ade80] max-w-[150px]"
+            >
+              {versionList.map((v) => (
+                <option key={v.id} value={v.id} className="bg-[#1a1a22] text-[#e8e8f0]">
+                  {v.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={cutVersion}
+              title="Skær en ny version — nye/ændrede estimater stemples herefter med den. Gamle bevares og markeres som fra den forrige."
+              className="text-[11px] px-1.5 py-1 rounded-md border border-white/[0.1] text-[#8888a0] hover:text-[#4ade80] hover:border-[#4ade80] transition-colors"
+            >
+              + ny
+            </button>
+          </div>
           <button
             onClick={() => setArchOpen(!archOpen)}
             title="Tilføj en liste til arketype-biblioteket"
