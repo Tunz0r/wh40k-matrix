@@ -146,11 +146,16 @@ export default function PlayerPage() {
   const calibration = useMemo(() => {
     const deltas = myResults.map((r) => r.delta).filter((d): d is number => d !== null);
     if (!deltas.length) return null;
-    return {
-      n: deltas.length,
-      avg: deltas.reduce((a, b) => a + b, 0) / deltas.length,
-      abs: deltas.reduce((a, b) => a + Math.abs(b), 0) / deltas.length,
-    };
+    const n = deltas.length;
+    // ACCURACY (mean absolute deviation) is the headline: how far off each
+    // estimate is regardless of direction. A signed average would let a +12 and
+    // a -12 cancel to 0 and hide two terrible estimates — MAD flags them.
+    const mad = deltas.reduce((a, b) => a + Math.abs(b), 0) / n;
+    // BIAS (signed mean) is secondary: only says which way you lean on average.
+    const bias = deltas.reduce((a, b) => a + b, 0) / n;
+    // Worst single miss, to surface an outlier even when the average looks fine.
+    const worst = deltas.reduce((m, d) => (Math.abs(d) > Math.abs(m) ? d : m), 0);
+    return { n, mad, bias, worst };
   }, [myResults]);
 
   // --- Warmup games: log prep results vs archetypes and compare to estimates ---
@@ -897,14 +902,30 @@ export default function PlayerPage() {
                   <span className="text-[10px] text-[#8888a0]">{calibration.n} kampe</span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className={`text-2xl font-bold ${Math.abs(calibration.avg) <= 1 ? "text-[#4ade80]" : calibration.avg > 0 ? "text-[#facc15]" : "text-[#f87171]"}`}>
-                    {calibration.avg > 0 ? "+" : ""}{calibration.avg.toFixed(1)}
+                  <span className={`text-2xl font-bold ${calibration.mad <= 1.5 ? "text-[#4ade80]" : calibration.mad <= 3 ? "text-[#facc15]" : "text-[#f87171]"}`}>
+                    {calibration.mad.toFixed(1)}
                   </span>
-                  <span className="text-[11px] text-[#8888a0]">snit-afvigelse (±{calibration.abs.toFixed(1)})</span>
+                  <span className="text-[11px] text-[#8888a0]">BP gns. afvigelse pr. kamp (uanset retning)</span>
                 </div>
                 <p className="text-[10px] text-[#8888a0] mt-1">
-                  {calibration.avg > 1 ? "Du spiller bedre end dine estimater — vær lidt mere optimistisk." : calibration.avg < -1 ? "Dine estimater er for optimistiske — skru lidt ned." : "Godt kalibreret."}
+                  {calibration.mad <= 1.5
+                    ? "Skarpe estimater — du rammer tæt på."
+                    : calibration.mad <= 3
+                      ? "Rimeligt, men der er spredning i træfsikkerheden."
+                      : "Estimaterne rammer langt fra — kampene svinger meget over og under."}
                 </p>
+                <div className="flex items-center gap-3 mt-2 pt-2 border-t border-white/[0.06] text-[10px] text-[#8888a0]">
+                  <span>
+                    Tendens{" "}
+                    <b className={Math.abs(calibration.bias) <= 1 ? "text-[#8888a0]" : calibration.bias > 0 ? "text-[#4ade80]" : "text-[#f87171]"}>
+                      {calibration.bias > 0 ? "+" : ""}{calibration.bias.toFixed(1)}
+                    </b>{" "}
+                    {Math.abs(calibration.bias) <= 1 ? "(ingen skævhed)" : calibration.bias > 0 ? "(underestimerer)" : "(overestimerer)"}
+                  </span>
+                  <span>
+                    · Værste <b className="text-[#e8e8f0]">{calibration.worst > 0 ? "+" : ""}{calibration.worst}</b> BP
+                  </span>
+                </div>
               </div>
             )}
 
