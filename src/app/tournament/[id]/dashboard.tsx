@@ -1202,6 +1202,7 @@ export default function TournamentDashboard({
         teamBName: roundName,
         createdAt: Date.now(),
         teamSize,
+        teamSlug: slug,
         matchups: matchupData,
       });
       const url = `/coaching/${id}`;

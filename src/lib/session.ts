@@ -40,6 +40,7 @@ export interface SessionData {
   teamBName: string;
   createdAt: number;
   teamSize?: number; // players per team; drives the win margin (default 8)
+  teamSlug?: string; // the tournament this session belongs to (dataSlug)
   matchups: MatchupData[];
   timerStartedAt?: number | null; // round clock, epoch ms (null = not started)
   timerMinutes?: number; // round length in minutes, default 180
