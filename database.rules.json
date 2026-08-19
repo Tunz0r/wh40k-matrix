@@ -28,7 +28,15 @@
           ".read": "auth != null && ($uid === auth.uid || root.child('tournaments/_admins/'+auth.uid).exists())"
         }
       },
-      "_claims": {
+      "_coaches": {
+        ".read": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()",
+        ".write": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()"
+      },
+      "_profileOwners": {
+        ".read": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()",
+        ".write": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()"
+      },
+      "_users": {
         ".read": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()",
         "$uid": {
           ".read": "auth != null && ($uid === auth.uid || root.child('tournaments/_admins/'+auth.uid).exists())",
@@ -48,7 +56,26 @@
       },
       "$slug": {
         ".read": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_members/'+$slug+'/'+auth.uid).exists())",
-        ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_members/'+$slug+'/'+auth.uid).exists())"
+        ".write": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()",
+        "profiles": {
+          "$armyKey": {
+            ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_profileOwners/'+$slug+'/'+$armyKey).val() === auth.uid)"
+          }
+        },
+        "warmups": {
+          "$armyKey": {
+            ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_profileOwners/'+$slug+'/'+$armyKey).val() === auth.uid)"
+          }
+        },
+        "rounds": {
+          ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_members/'+$slug+'/'+auth.uid).exists())"
+        },
+        "activeSessionId": {
+          ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_members/'+$slug+'/'+auth.uid).exists())"
+        },
+        "currentRound": {
+          ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_members/'+$slug+'/'+auth.uid).exists())"
+        }
       }
     },
     "estimates": {

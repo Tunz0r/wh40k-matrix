@@ -1,20 +1,24 @@
 "use client";
 
-// Membership + admin + claim primitives — the denormalized index the DB rules
-// check to enforce HARD per-tournament isolation. Nothing here is the source of
-// truth; membership is DERIVED from rosters (a slot's playerId) + player
-// bindings (a Player's authUid). `recomputeMembership()` rebuilds the index from
-// that truth and is safe to run any time.
+// Membership + roles + users registry — the denormalized index the DB rules
+// check to enforce HARD per-tournament isolation and segregation of duties.
+// Nothing here except the source-of-truth nodes is authoritative; the derived
+// index is rebuilt from truth by `recomputeMembership()`, safe to run any time.
 //
-// Index nodes (all admin-write; clients never read them directly — rule
-// `root.child()` lookups bypass read rules):
-//   tournaments/_admins/{uid}        -> true      (admin allowlist)
-//   tournaments/_members/{nodeKey}/{uid} -> true  (per-tournament / per-estimate-node)
-//   tournaments/_teamMembers/{uid}   -> true      (bound member of ANY tournament)
-//   tournaments/_claims/{uid}        -> claim     (self-write, admin-read)
+// Sources of truth (rules read these):
+//   tournaments/_admins/{uid}: true              admin allowlist
+//   tournaments/_players/{playerId}.authUid      player binding (membership from roster playerIds)
+//   tournaments/_coaches/{uid}/{tournamentId}    per-tournament coach assignment
+// Derived index (admin-write; clients never read directly — rule root.child()
+// lookups bypass read rules):
+//   tournaments/_members/{nodeKey}/{uid}         per-tournament / per-estimate-node access
+//   tournaments/_teamMembers/{uid}               bound member of ANY tournament
+//   tournaments/_myTournaments/{uid}/{id}        the tournaments a user may list
+//   tournaments/_profileOwners/{dataSlug}/a{idx} = authUid  SoD: who may write that profile
+// Registry of logins (admin-read, self-write):
+//   tournaments/_users/{uid} = {displayName, note?, lastSeen}
 //
-// A Firebase uid's email is NEVER stored outside a transient claim; the bound
-// Player entity keeps only a display name + authUid.
+// A Firebase uid's email is NEVER stored in the RTDB — only a display name.
 
 import { ref, get, set, update, onValue, off } from "firebase/database";
 import { getDb, authReady } from "./firebase";
@@ -23,18 +27,22 @@ import type { TournamentMeta } from "./tournaments-registry";
 import type { TournamentDoc } from "./tournament-db";
 
 const ADMINS = "tournaments/_admins";
+const COACHES = "tournaments/_coaches";
 const MY_TOURNAMENTS = "tournaments/_myTournaments";
-const CLAIMS = "tournaments/_claims";
+const USERS = "tournaments/_users";
 const REGISTRY = "tournaments/_registry";
 const PLAYERS = "tournaments/_players";
 
-export interface Claim {
+// A signed-in login, as shown in the admin users list. Display name only —
+// never the email (that lives in Firebase Auth).
+export interface AppUser {
   uid: string;
-  displayName: string;
-  email: string;
-  requestedPlayerName?: string;
-  createdAt: number;
+  displayName?: string;
+  note?: string; // optional free-text the pending user leaves for the admin
+  lastSeen?: number;
 }
+
+export type CoachMap = Record<string, Record<string, true>>; // uid -> {tournamentId: true}
 
 // The estimate-layer node keys a tournament's dataSlug fans out into. The
 // `estimates/$node` wildcard rule gates each of these, so membership has to be
@@ -43,12 +51,43 @@ export interface Claim {
 const ESTIMATE_SUFFIXES = ["", "-versioner", "-arketype-bank", "-lists-raw", "-sanity-ok"];
 
 function nodeKeysForSlug(dataSlug: string): string[] {
-  // The tournament doc node (tournaments/{slug}) and every estimate sibling
-  // share the same dataSlug key space, so one membership set covers them all.
   return ESTIMATE_SUFFIXES.map((suffix) => dataSlug + suffix);
 }
 
-// --- Admin -----------------------------------------------------------------
+// --- Users registry --------------------------------------------------------
+
+// Called on every (non-anonymous) sign-in: record/refresh the caller's own row
+// so the admin can see who has logged in. Merges, preserving any note. Never
+// writes email.
+export async function upsertSelfUser(
+  uid: string,
+  displayName: string | null | undefined
+): Promise<void> {
+  await authReady();
+  await update(ref(getDb(), `${USERS}/${uid}`), {
+    displayName: displayName || "",
+    lastSeen: Date.now(),
+  });
+}
+
+// A pending user leaves a note for the admin (e.g. "I'm Simon O"). Self-write.
+export async function setUserNote(uid: string, note: string): Promise<void> {
+  await authReady();
+  await update(ref(getDb(), `${USERS}/${uid}`), { note });
+}
+
+export function subscribeToUsers(callback: (users: AppUser[]) => void): () => void {
+  return adminSubscribe(USERS, (val) => {
+    const rec = (val as Record<string, Omit<AppUser, "uid">>) || {};
+    callback(
+      Object.entries(rec)
+        .map(([uid, u]) => ({ uid, ...u }))
+        .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))
+    );
+  });
+}
+
+// --- Roles: admin + coach --------------------------------------------------
 
 export async function isAdminUid(uid: string): Promise<boolean> {
   await authReady();
@@ -81,54 +120,40 @@ export function subscribeToIsAdmin(
   };
 }
 
-// --- Claims ----------------------------------------------------------------
-
-// A signed-in but unbound user records who they are so an admin can bind them.
-// Writes ONLY the caller's own claim (rule: $uid === auth.uid). The email is
-// transient here (deleted on approval) so an admin can match the person.
-export async function submitClaim(claim: Omit<Claim, "createdAt">): Promise<void> {
+export async function setAdmin(uid: string, on: boolean): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${CLAIMS}/${claim.uid}`), {
-    ...claim,
-    createdAt: Date.now(),
-  });
+  await set(ref(getDb(), `${ADMINS}/${uid}`), on ? true : null);
 }
 
-export function subscribeToClaims(callback: (claims: Claim[]) => void): () => void {
-  let cancelled = false;
-  let cleanup: (() => void) | null = null;
-  authReady().then(() => {
-    if (cancelled) return;
-    const r = ref(getDb(), CLAIMS);
-    onValue(
-      r,
-      (snap) => {
-        const val = (snap.val() as Record<string, Claim>) || {};
-        callback(Object.values(val).sort((a, b) => a.createdAt - b.createdAt));
-      },
-      () => callback([]) // non-admins can't read claims
-    );
-    cleanup = () => off(r);
-  });
-  return () => {
-    cancelled = true;
-    cleanup?.();
-  };
+export function subscribeToAdmins(callback: (uids: Set<string>) => void): () => void {
+  return adminSubscribe(ADMINS, (val) =>
+    callback(new Set(Object.keys((val as Record<string, true>) || {})))
+  );
 }
 
-export async function deleteClaim(uid: string): Promise<void> {
+export function subscribeToCoaches(callback: (coaches: CoachMap) => void): () => void {
+  return adminSubscribe(COACHES, (val) => callback((val as CoachMap) || {}));
+}
+
+// Assign/unassign a coach to one tournament, then refresh the index so it takes
+// effect immediately.
+export async function assignCoach(
+  uid: string,
+  tournamentId: string,
+  on: boolean
+): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${CLAIMS}/${uid}`), null);
+  await set(ref(getDb(), `${COACHES}/${uid}/${tournamentId}`), on ? true : null);
+  await recomputeMembership();
 }
 
-// --- Binding + recompute ---------------------------------------------------
+// --- Binding + revoke ------------------------------------------------------
 
-// Admin action: bind a Firebase uid to a Player, drop the claim, and refresh
-// the membership index so the new binding takes effect immediately.
+// Admin action: bind a Firebase uid to a Player, then refresh the index. If the
+// player was bound to a different uid, this overwrites it (re-bind).
 export async function bindPlayer(uid: string, playerId: string): Promise<void> {
   await authReady();
   await update(ref(getDb(), `${PLAYERS}/${playerId}`), { authUid: uid });
-  await deleteClaim(uid);
   await recomputeMembership();
 }
 
@@ -138,69 +163,128 @@ export async function unbindPlayer(playerId: string): Promise<void> {
   await recomputeMembership();
 }
 
-// Rebuild _members + _teamMembers from the source of truth (registry rosters +
-// player bindings). Idempotent — replaces the whole index. Admin-write only, so
-// this runs in an admin context (roster edits / tournament creation / binding).
+// Strip a uid of all access: remove admin + coach assignments + any player
+// binding, then recompute. The _users row is kept (they still show as pending).
+export async function revokeAccess(uid: string): Promise<void> {
+  await authReady();
+  const db = getDb();
+  await set(ref(db, `${ADMINS}/${uid}`), null);
+  await set(ref(db, `${COACHES}/${uid}`), null);
+  const players = ((await get(ref(db, PLAYERS))).val() as Record<string, Player>) || {};
+  await Promise.all(
+    Object.values(players)
+      .filter((p) => p.authUid === uid)
+      .map((p) => update(ref(db, `${PLAYERS}/${p.id}`), { authUid: null }))
+  );
+  await recomputeMembership();
+}
+
+// --- Recompute the derived index -------------------------------------------
+
+// Rebuild _members/_teamMembers/_myTournaments/_profileOwners from truth
+// (rosters + player bindings + coach assignments). Idempotent — replaces each
+// subtree. Admin-write only, so this runs in an admin context.
 export async function recomputeMembership(): Promise<void> {
   await authReady();
   const db = getDb();
 
-  const [registrySnap, playersSnap] = await Promise.all([
+  const [registrySnap, playersSnap, coachesSnap] = await Promise.all([
     get(ref(db, REGISTRY)),
     get(ref(db, PLAYERS)),
+    get(ref(db, COACHES)),
   ]);
 
   const registry = (registrySnap.val() as Record<string, TournamentMeta>) || {};
   const players = (playersSnap.val() as Record<string, Player>) || {};
+  const coaches = (coachesSnap.val() as CoachMap) || {};
 
-  // playerId -> bound authUid (only players that have signed in + been bound)
   const uidByPlayer = new Map<string, string>();
-  for (const p of Object.values(players)) {
-    if (p.authUid) uidByPlayer.set(p.id, p.authUid);
+  for (const p of Object.values(players)) if (p.authUid) uidByPlayer.set(p.id, p.authUid);
+
+  // tournamentId -> coach uids assigned to it
+  const coachUidsByTournament = new Map<string, Set<string>>();
+  for (const [uid, assigned] of Object.entries(coaches)) {
+    for (const tid of Object.keys(assigned || {})) {
+      if (!coachUidsByTournament.has(tid)) coachUidsByTournament.set(tid, new Set());
+      coachUidsByTournament.get(tid)!.add(uid);
+    }
   }
 
   const members: Record<string, Record<string, true>> = {};
   const teamMembers: Record<string, true> = {};
-  // uid -> { tournamentId: true } so a member can list ONLY their tournaments
-  // (they can't read the whole registry under hard isolation).
   const myTournaments: Record<string, Record<string, true>> = {};
+  const profileOwners: Record<string, Record<string, string>> = {};
+
+  const grant = (uid: string, meta: TournamentMeta) => {
+    teamMembers[uid] = true;
+    myTournaments[uid] = myTournaments[uid] || {};
+    myTournaments[uid][meta.id] = true;
+    for (const nodeKey of nodeKeysForSlug(meta.dataSlug)) {
+      members[nodeKey] = members[nodeKey] || {};
+      members[nodeKey][uid] = true;
+    }
+  };
 
   await Promise.all(
     Object.values(registry).map(async (meta) => {
-      const docSnap = await get(ref(db, `tournaments/${meta.dataSlug}`));
-      const doc = docSnap.val() as TournamentDoc | null;
+      const doc = (await get(ref(db, `tournaments/${meta.dataSlug}`))).val() as TournamentDoc | null;
       const armies = doc?.roster?.armies || [];
 
-      const uids = new Set<string>();
-      for (const army of armies) {
+      // Rostered players
+      armies.forEach((army, idx) => {
         const uid = army.playerId ? uidByPlayer.get(army.playerId) : undefined;
-        if (uid) uids.add(uid);
-      }
+        if (!uid) return;
+        grant(uid, meta);
+        profileOwners[meta.dataSlug] = profileOwners[meta.dataSlug] || {};
+        profileOwners[meta.dataSlug][`a${idx}`] = uid;
+      });
 
-      for (const uid of uids) {
-        teamMembers[uid] = true;
-        myTournaments[uid] = myTournaments[uid] || {};
-        myTournaments[uid][meta.id] = true;
-      }
-      for (const nodeKey of nodeKeysForSlug(meta.dataSlug)) {
-        members[nodeKey] = members[nodeKey] || {};
-        for (const uid of uids) members[nodeKey][uid] = true;
-      }
+      // Coaches assigned to this tournament
+      for (const uid of coachUidsByTournament.get(meta.id) || []) grant(uid, meta);
     })
   );
 
-  // Single overwrite of each index subtree keeps it exactly in sync with truth.
   await update(ref(db, "tournaments"), {
     _members: members,
     _teamMembers: teamMembers,
     _myTournaments: myTournaments,
+    _profileOwners: profileOwners,
   });
 }
 
+// --- Access + tournament listing (client, self-readable) -------------------
+
+// Whether the signed-in user has been granted access to anything (player OR
+// coach) — reads their own _myTournaments row. Admins are handled separately.
+export function subscribeToHasAccess(
+  uid: string | null,
+  callback: (hasAccess: boolean) => void
+): () => void {
+  if (!uid) {
+    callback(false);
+    return () => {};
+  }
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const r = ref(getDb(), `${MY_TOURNAMENTS}/${uid}`);
+    onValue(
+      r,
+      (snap) => callback(snap.exists()),
+      () => callback(false)
+    );
+    cleanup = () => off(r);
+  });
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
+}
+
 // The tournaments a signed-in member can see — their own only. Reads the
-// per-user index (`_myTournaments/{uid}`, self-readable) then pulls each
-// registry entry the rules allow. Admins should use subscribeToRegistry instead
-// (they can read the whole registry).
+// per-user index (self-readable) then pulls each registry entry the rules allow.
+// Admins should use subscribeToRegistry instead (they can read the whole thing).
 export function subscribeToMyTournaments(
   uid: string,
   callback: (tournaments: TournamentMeta[]) => void
@@ -240,20 +324,25 @@ export function subscribeToMyTournaments(
   };
 }
 
-// Which tournaments a player is rostered in — powers the "only my tournaments"
-// index filter. Reads rosters directly (client-visible via membership once
-// bound); admins see everything so callers can skip this for them.
-export async function tournamentIdsForPlayer(playerId: string): Promise<Set<string>> {
-  await authReady();
-  const db = getDb();
-  const registry = ((await get(ref(db, REGISTRY))).val() as Record<string, TournamentMeta>) || {};
-  const ids = new Set<string>();
-  await Promise.all(
-    Object.values(registry).map(async (meta) => {
-      const doc = (await get(ref(db, `tournaments/${meta.dataSlug}`))).val() as TournamentDoc | null;
-      const armies = doc?.roster?.armies || [];
-      if (armies.some((a) => a.playerId === playerId)) ids.add(meta.id);
-    })
-  );
-  return ids;
+// --- helpers ---------------------------------------------------------------
+
+// Subscribe to an admin-only node, tolerating the permission-denied a non-admin
+// hits (returns null value so the callback can render "nothing").
+function adminSubscribe(path: string, onVal: (val: unknown) => void): () => void {
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const r = ref(getDb(), path);
+    onValue(
+      r,
+      (snap) => onVal(snap.val()),
+      () => onVal(null)
+    );
+    cleanup = () => off(r);
+  });
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
 }

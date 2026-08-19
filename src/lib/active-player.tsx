@@ -17,7 +17,7 @@ import {
   type ReactNode,
 } from "react";
 import { subscribeToPlayers, type Player } from "./players";
-import { subscribeToIsAdmin } from "./membership";
+import { subscribeToIsAdmin, subscribeToHasAccess } from "./membership";
 import { useAuth } from "./auth";
 
 const KEY = "wtc-active-player"; // admin-only override
@@ -28,6 +28,7 @@ interface ActivePlayerCtx {
   activePlayerId: string | null;
   isAdmin: boolean;
   bound: boolean; // a Player matched the signed-in uid
+  access: boolean; // granted access to anything (player OR coach OR admin)
   setActivePlayer: (id: string | null) => void; // admin override only
 }
 
@@ -37,10 +38,12 @@ export function ActivePlayerProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [players, setPlayers] = useState<Player[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [hasGrant, setHasGrant] = useState(false);
   const [overrideId, setOverrideId] = useState<string | null>(null);
 
   useEffect(() => subscribeToPlayers(setPlayers), []);
   useEffect(() => subscribeToIsAdmin(user?.uid ?? null, setIsAdmin), [user?.uid]);
+  useEffect(() => subscribeToHasAccess(user?.uid ?? null, setHasGrant), [user?.uid]);
 
   useEffect(() => {
     const saved = typeof localStorage !== "undefined" ? localStorage.getItem(KEY) : null;
@@ -78,10 +81,11 @@ export function ActivePlayerProvider({ children }: { children: ReactNode }) {
       activePlayerId: activePlayer?.id ?? null,
       isAdmin,
       bound: boundPlayer !== null,
+      access: isAdmin || boundPlayer !== null || hasGrant,
       setActivePlayer,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [players, activePlayer, isAdmin, boundPlayer]
+    [players, activePlayer, isAdmin, boundPlayer, hasGrant]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -95,6 +99,7 @@ export function useActivePlayer(): ActivePlayerCtx {
       activePlayerId: null,
       isAdmin: false,
       bound: false,
+      access: false,
       setActivePlayer: () => {},
     }
   );

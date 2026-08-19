@@ -4,16 +4,16 @@ import { type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
 import { useActivePlayer } from "@/lib/active-player";
 import LoginScreen from "./LoginScreen";
-import ClaimScreen from "./ClaimScreen";
+import PendingScreen from "./PendingScreen";
 
 // The single gate in front of the whole app:
-//   loading                       -> spinner
-//   not signed in                 -> LoginScreen
-//   signed in, not bound, non-admin -> ClaimScreen (awaiting approval)
-//   bound player (or admin)       -> the app
+//   loading                    -> spinner
+//   not signed in              -> LoginScreen
+//   signed in, no access grant -> PendingScreen (awaiting approval)
+//   player / coach / admin      -> the app
 export default function AuthGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  const { bound, isAdmin } = useActivePlayer();
+  const { access } = useActivePlayer();
 
   if (loading) {
     return (
@@ -24,7 +24,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (!user) return <LoginScreen />;
-  if (!bound && !isAdmin) return <ClaimScreen />;
+  if (!access) return <PendingScreen />;
 
   return <>{children}</>;
 }

@@ -123,8 +123,9 @@ export async function setActiveSession(
     rounds.push({ number: roundNumber, opponentName, sessionId, status: "live" });
   }
 
-  await set(tournamentRef, {
-    ...doc,
+  // Patch only round fields (not the whole doc) so coaching stays writable by
+  // members under the per-child SoD rules — roster/profiles are admin/owner-only.
+  await update(tournamentRef, {
     activeSessionId: sessionId,
     currentRound: roundNumber,
     rounds,
@@ -159,24 +160,18 @@ export async function updateRoundStatus(
     }
   }
 
-  await set(tournamentRef, { ...doc, ...updates });
+  // Patch only round fields so the coaching flow stays member-writable (SoD).
+  await update(tournamentRef, updates);
 }
 
 export async function resetTournamentDoc(slug: string): Promise<void> {
   await authReady();
-  const tournamentRef = ref(getDb(), `tournaments/${slug}`);
-  const snapshot = await get(tournamentRef);
-  const doc: TournamentDoc | null = snapshot.val();
-  await set(tournamentRef, {
-    teamName: doc?.teamName || "",
+  // Clear only round state; roster/seeding/eventDate/warmups/profiles are left
+  // untouched (a partial update preserves them and stays member-writable / SoD).
+  await update(ref(getDb(), `tournaments/${slug}`), {
     activeSessionId: null,
     currentRound: 0,
     rounds: [],
-    roster: doc?.roster ?? null,
-    seedingTiers: doc?.seedingTiers ?? null,
-    eventDate: doc?.eventDate ?? null,
-    warmups: doc?.warmups ?? null,
-    profiles: doc?.profiles ?? null,
   });
 }
 
@@ -196,8 +191,8 @@ export async function resetRound(slug: string, roundNumber: number): Promise<voi
     removed?.sessionId && doc.activeSessionId === removed.sessionId
       ? null
       : doc.activeSessionId ?? null;
-  await set(tournamentRef, {
-    ...doc,
+  // Patch only round fields (SoD: roster/profiles are admin/owner-only).
+  await update(tournamentRef, {
     rounds,
     activeSessionId,
     currentRound: rounds.reduce((m, r) => Math.max(m, r.number), 0),

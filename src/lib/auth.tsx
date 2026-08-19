@@ -29,6 +29,7 @@ import {
   type User,
 } from "firebase/auth";
 import { getAuthInstance } from "./firebase";
+import { upsertSelfUser } from "./membership";
 
 const EMAIL_KEY = "wtc-email-for-signin";
 
@@ -85,6 +86,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(u);
       setLoading(false);
+      // Register/refresh this login in the admin-visible users list (name only,
+      // never email). Best-effort — a denied write must not block sign-in.
+      if (u) upsertSelfUser(u.uid, u.displayName).catch(() => {});
     });
     return unsub;
   }, []);
