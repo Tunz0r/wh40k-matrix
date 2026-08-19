@@ -44,3 +44,6 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# transient MFM-watch output (the committed baseline is mfm-snapshot.json)
+mfm-changes.md

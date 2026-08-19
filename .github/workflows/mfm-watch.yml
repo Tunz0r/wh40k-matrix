@@ -1,0 +1,44 @@
+name: MFM watch
+
+# Checks mfm.warhammer-community.com weekly for detachment DP / Force Disposition
+# changes. On a change it commits the refreshed snapshot and opens an issue.
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check MFM for changes
+        run: node scripts/mfm-check.mjs
+
+      - name: Commit snapshot if it changed
+        id: snap
+        run: |
+          if git diff --quiet -- mfm-snapshot.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git config user.name "mfm-watch"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add mfm-snapshot.json
+            git commit -m "MFM snapshot update ($(date +%F))"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open an issue describing the change
+        if: steps.snap.outputs.changed == 'true'
+        run: gh issue create --title "MFM update detected ($(date +%F))" --body-file mfm-changes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

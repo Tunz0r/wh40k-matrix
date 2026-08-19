@@ -1,0 +1,1338 @@
+{
+  "adepta-sororitas": {
+    "ARMY OF FAITH": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BRINGERS OF FLAME": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "CHAMPIONS OF FAITH": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "CHORUS OF CONDEMNATION": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "HALLOWED MARTYRS": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "PENITENT HOST": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "SACRED CHAMPIONS": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "SANCTIFIED ORATORS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    }
+  },
+  "adeptus-custodes": {
+    "AURIC CHAMPIONS": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "LIONS OF THE EMPEROR": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "MIGHT OF THE MORITOI": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "NULL MAIDEN VIGIL": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "SHIELD HOST": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "SILENT HUNTERS": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "SOLAR SPEARHEAD": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "TALONS OF THE EMPEROR": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "THARANATOI HAMMERBLOW": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    }
+  },
+  "adeptus-mechanicus": {
+    "COHORT ACQUISITUS": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "COHORT CYBERNETICA": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "DATA-PSALM CONCLAVE": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "ERADICATION COHORT": {
+      "dp": 3,
+      "disposition": "PURGE THE FOE"
+    },
+    "EXPLORATOR MANIPLE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HALOSCREED BATTLE CLADE": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "LORDS OF THE FORGE": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "LUMINEN AUTO-CHOIR": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "RAD-ZONE CORPS": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "SKITARII HUNTER COHORT": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    }
+  },
+  "aeldari": {
+    "ARMOURED WARHOST": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "ASPECT HOST": {
+      "dp": 3,
+      "disposition": "DISRUPTION"
+    },
+    "CORSAIR COTERIE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "DEVOTED OF YNNEAD": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "ELDRITCH RAIDERS": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "FATEFUL PERFORMANCE": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "GHOSTS OF THE WEBWAY": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "GUARDIAN BATTLEHOST": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "PATH OF THE OUTCAST": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "SEER COUNCIL": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "SERPENT’S BROOD": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "SPIRIT CONCLAVE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "TWILIGHT FLICKERS": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "WARHOST": {
+      "dp": 3,
+      "disposition": "RECONNAISSANCE"
+    },
+    "WINDRIDER HOST": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    }
+  },
+  "astra-militarum": {
+    "ABHUMAN AUXILIARIES": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "ARMOURED INFANTRY": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BRIDGEHEAD STRIKE": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "COMBINED ARMS": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "DESIGNATION FORCE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "GRIZZLED COMPANY": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HAMMER OF THE EMPEROR": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "MECHANISED ASSAULT": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "RECON ELEMENT": {
+      "dp": 3,
+      "disposition": "RECONNAISSANCE"
+    },
+    "SIEGE REGIMENT": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "STEEL HAMMER": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    }
+  },
+  "blood-angels": {
+    "1ST COMPANY TASK FORCE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "ANGELIC INHERITORS": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "ANVIL SIEGE FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "ARMOURED SPEARTIP": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BASTION TASK FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "CERAMITE SENTINELS": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "ENCARMINE SPEARTIP": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "FIRESTORM ASSAULT FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "FULGURIS TASK FORCE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "GLADIUS TASK FORCE": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HEADHUNTER TASK FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "IRONSTORM SPEARHEAD": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "LEGACY OF GRACE": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "LIBERATOR ASSAULT GROUP": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "LIBRARIUS CONCLAVE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "ORBITAL ASSAULT FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "RAGE-CURSED ONSLAUGHT": {
+      "dp": 3,
+      "disposition": "PURGE THE FOE"
+    },
+    "STORMLANCE TASK FORCE": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "SUBVERSION ASSETS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "THE ANGELIC HOST": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "THE LOST BRETHREN": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "VANGUARD SPEARHEAD": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "VENGEFUL HOSTS": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "WRATH OF THE DOOMED": {
+      "dp": 1,
+      "disposition": "PURGE THE FOE"
+    }
+  },
+  "chaos-daemons": {
+    "BLOOD LEGION": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "CAVALCADE OF CHAOS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "DAEMONIC INCURSION": {
+      "dp": 3,
+      "disposition": "DISRUPTION"
+    },
+    "LEGION OF EXCESS": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "LORDS OF THE WARP": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "PLAGUE LEGION": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "SCINTILLATING LEGION": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "SHADOW LEGION": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "WARPTIDE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    }
+  },
+  "chaos-knights": {
+    "BASTIONS OF TYRANNY": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HELHUNT LANCE": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "HOUNDPACK LANCE": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "HUNTING WARPACK": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "ICONOCLAST FIEFDOM": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "INFERNAL LANCE": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "LORDS OF DREAD": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "TRAITORIS LANCE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    }
+  },
+  "chaos-space-marines": {
+    "CABAL OF CHAOS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "CHAOS CULT": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "CREATIONS OF BILE": {
+      "dp": 3,
+      "disposition": "PURGE THE FOE"
+    },
+    "CULT OF THE ARKIFANE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "DECEPTORS": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "DEVOTEES OF DESTRUCTION": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "DREAD TALONS": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "FELLHAMMER SIEGE-HOST": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "HURON’S MARAUDERS": {
+      "dp": 3,
+      "disposition": "DISRUPTION"
+    },
+    "MURDERTALON RAIDERS": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "NIGHTMARE HUNT": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "PACTBOUND ZEALOTS": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "RENEGADE RAIDERS": {
+      "dp": 3,
+      "disposition": "RECONNAISSANCE"
+    },
+    "RENEGADE WARBAND": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "SOULFORGED WARPACK": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "VETERANS OF THE LONG WAR": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "WARPSTRIKE CHAMPIONS": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    }
+  },
+  "dark-angels": {
+    "1ST COMPANY TASK FORCE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "ANVIL SIEGE FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "ARMOURED SPEARTIP": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BASTION TASK FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "CERAMITE SENTINELS": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "COMPANY OF HUNTERS": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "DARK AGE ARSENAL": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "DARKFLIGHT PURSUIT": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "FIRESTORM ASSAULT FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "FULGURIS TASK FORCE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "GLADIUS TASK FORCE": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HEADHUNTER TASK FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "INNER CIRCLE TASK FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "INTERROGATION CONCLAVE": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "IRONSTORM SPEARHEAD": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "LIBRARIUS CONCLAVE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "LION’S BLADE TASK FORCE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "ORBITAL ASSAULT FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "STORMLANCE TASK FORCE": {
+      "dp": 3,
+      "disposition": "DISRUPTION"
+    },
+    "SUBVERSION ASSETS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "UNFORGIVEN TASK FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "VANGUARD SPEARHEAD": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "VENGEFUL HOSTS": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "WRATH OF THE ROCK": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    }
+  },
+  "death-guard": {
+    "CHAMPIONS OF CONTAGION": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "CONTAGION ENGINES": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "DEATH LORD’S CHOSEN": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "FLYBLOWN HOST": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "MORTARION’S HAMMER": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "PARAGONS OF PUTRESCENCE": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "SHAMBLEROT VECTORIUM": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "TALLYBAND SUMMONERS": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "VIRULENT VECTORIUM": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    }
+  },
+  "deathwatch": {
+    "1ST COMPANY TASK FORCE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "ANVIL SIEGE FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "ARMOURED SPEARTIP": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BASTION TASK FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BLACK SPEAR TASK FORCE": {
+      "dp": 3,
+      "disposition": "PURGE THE FOE"
+    },
+    "CERAMITE SENTINELS": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "FIRESTORM ASSAULT FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "FULGURIS TASK FORCE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "GLADIUS TASK FORCE": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HEADHUNTER TASK FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "IRONSTORM SPEARHEAD": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "LIBRARIUS CONCLAVE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "ORBITAL ASSAULT FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "STORMLANCE TASK FORCE": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "SUBVERSION ASSETS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "VANGUARD SPEARHEAD": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "VENGEFUL HOSTS": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    }
+  },
+  "drukhari": {
+    "COVENITE COTERIE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "EXHIBITION OF SLAUGHTER": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "KABALITE AGONYSTS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "KABALITE CARTEL": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "REALSPACE RAIDERS": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "REAPER’S WAGER": {
+      "dp": 3,
+      "disposition": "PURGE THE FOE"
+    },
+    "SKYSPLINTER ASSAULT": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "SPECTACLE OF SPITE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "TOOLS OF TORMENT": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    }
+  },
+  "emperors-children": {
+    "CARNIVAL OF EXCESS": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "COTERIE OF THE CONCEITED": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "COURT OF THE PHOENICIAN": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "ELEGANT BRUTES": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "FRENZIED HOST": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "MERCURIAL HOST": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "PEERLESS BLADESMEN": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "RAPID EVISCERATION": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "SLAANESH’S CHOSEN": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "SPECTACLE OF SLAUGHTER": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    }
+  },
+  "genestealer-cults": {
+    "BIOSANCTIC BROODSURGE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BROOD BROTHERS AUXILIA": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "FINAL DAY": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "HEROES OF THE UPRISING": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "HOST OF ASCENSION": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "OUTLANDER CLAW": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "PURESTRAIN BROODSWARM": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "XENOCREED CONGREGATION": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "XENOCULT MASSES": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    }
+  },
+  "grey-knights": {
+    "ARGENT ASSAULT": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "AUGURIUM TASK FORCE": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "BANISHERS": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "BROTHERHOOD STRIKE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "FIRES OF PURGATION": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "HALLOWED CONCLAVE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "IMMATERIAL INTERDICTION": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "SANCTIC SPEARHEAD": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "WARPBANE TASK FORCE": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    }
+  },
+  "imperial-knights": {
+    "DOMINUS FOEBREAKERS": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "FREEBLADE COMPANY": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "GATE WARDEN LANCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "QUESTOR FORGEPACT": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "QUESTORIS COMPANIONS": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "SPEARHEAD-AT-ARMS": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "THRONE-BONDED OUTRIDERS": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "VALOURSTRIKE LANCE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    }
+  },
+  "leagues-of-votann": {
+    "ARMOURED TRAILBLAZERS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "BRANDFAST OATHBAND": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "DÊLVE ASSAULT SHIFT": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "FARSEEKERS": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "HEARTHBAND": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HEARTHFYRE ARSENAL": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HEARTHGUARD COVENANT": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "MERCENARY OATHBAND": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "NEEDGAÂRD OATHBAND": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "PERSECUTION PROSPECT": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    }
+  },
+  "necrons": {
+    "ANNIHILATION LEGION": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "AWAKENED DYNASTY": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "CANOPTEK COURT": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "CRYPTEK CONCLAVE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "CURSED LEGION": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "HAND OF THE DYNASTY": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "HYPERCRYPT LEGION": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "OBEISANCE PHALANX": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "PANTHEON OF WOE": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "SKYSHROUD SPEARHEAD": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "STARSHATTER ARSENAL": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "THE PHAERON'S ARMOURY": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    }
+  },
+  "orks": {
+    "BLITZ BRIGADE": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "BULLY BOYZ": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "DA BIG HUNT": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "DREAD MOB": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "EQUATORIAL HORDES": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "FREEBOOTER KREW": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "GREEN TIDE": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "KULT OF SPEED": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "MORE DAKKA!": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "ROLLIN' DEFF": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "SPEEDWAAAGH!": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "TAKTIKAL BRIGADE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "WAR HORDE": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    }
+  },
+  "space-marines": {
+    "1ST COMPANY TASK FORCE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "ANVIL SIEGE FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "ARMOURED SPEARTIP": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BASTION TASK FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BLADE OF ULTRAMAR": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "CERAMITE SENTINELS": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "EMPEROR’S SHIELD": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "FIRESTORM ASSAULT FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "FORGEFATHER’S SEEKERS": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "FULGURIS TASK FORCE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "GLADIUS TASK FORCE": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HAMMER OF AVERNII": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "HEADHUNTER TASK FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "IRONSTORM SPEARHEAD": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "LIBRARIUS CONCLAVE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "ORBITAL ASSAULT FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "RECLAMATION FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "SHADOWMARK TALON": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "SPEARPOINT TASK FORCE": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "STORMLANCE TASK FORCE": {
+      "dp": 3,
+      "disposition": "DISRUPTION"
+    },
+    "SUBVERSION ASSETS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "VANGUARD SPEARHEAD": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "VENGEFUL HOSTS": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    }
+  },
+  "space-wolves": {
+    "1ST COMPANY TASK FORCE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "ANVIL SIEGE FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "ARMOURED SPEARTIP": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BASTION TASK FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "CERAMITE SENTINELS": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "CHAMPIONS OF FENRIS": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "FIRESTORM ASSAULT FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "FULGURIS TASK FORCE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "GLADIUS TASK FORCE": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HEADHUNTER TASK FORCE": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "IRONSTORM SPEARHEAD": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "LEGENDS OF SAGA AND SONG": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "LIBRARIUS CONCLAVE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "ORBITAL ASSAULT FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "SAGA OF THE BEASTSLAYER": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "SAGA OF THE BOLD": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "SAGA OF THE GREAT WOLF": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "SAGA OF THE HUNTER": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "STORMLANCE TASK FORCE": {
+      "dp": 3,
+      "disposition": "DISRUPTION"
+    },
+    "SUBVERSION ASSETS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "VANGUARD SPEARHEAD": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "VENGEFUL HOSTS": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "VETERANS OF THE FANG": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    }
+  },
+  "tau-empire": {
+    "ADVANCED ACQUISITION CADRE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "AUXILIARY CADRE": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "EXPERIMENTAL PROTOTYPE CADRE": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "KAUYON": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "KROOT HUNTING PACK": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "MONT’KA": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "RETALIATION CADRE": {
+      "dp": 3,
+      "disposition": "PURGE THE FOE"
+    }
+  },
+  "thousand-sons": {
+    "CHANGEHOST OF DECEIT": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "GRAND COVEN": {
+      "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HEXWARP THRALLBAND": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "RITUAL OF REGENERATION": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "RUBRICAE PHALANX": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "SEKHETAR COHORT": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "SERVANTS OF CHANGE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "WARPFORGED CABAL": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "WARPMELD PACT": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    }
+  },
+  "tyranids": {
+    "AMBUSH PREDATORS": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "ASSIMILATION SWARM": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "CRUSHER STAMPEDE": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "INVASION FLEET": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
+    "SUBTERRANEAN ASSAULT": {
+      "dp": 3,
+      "disposition": "DISRUPTION"
+    },
+    "SYNAPTIC NEXUS": {
+      "dp": 2,
+      "disposition": "DISRUPTION"
+    },
+    "TALONS OF THE NORN QUEEN": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "UNENDING SWARM": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "VANGUARD ONSLAUGHT": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "WARRIOR BIOFORM ONSLAUGHT": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    }
+  },
+  "world-eaters": {
+    "BERZERKER WARBAND": {
+      "dp": 3,
+      "disposition": "PURGE THE FOE"
+    },
+    "BRAZEN ENGINES": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "BUTCHERS OF KHORNE": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "CULT OF BLOOD": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "GORETRACK ONSLAUGHT": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "KHORNE DAEMONKIN": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "POSSESSED SLAUGHTERBAND": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "VESSELS OF WRATH": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    }
+  }
+}
