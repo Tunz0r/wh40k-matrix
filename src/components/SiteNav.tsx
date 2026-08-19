@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
 import { useActiveTournament } from "@/lib/active-tournament";
 import { useActivePlayer } from "@/lib/active-player";
+import { useAuth } from "@/lib/auth";
 
 // The matrix itself lives on "/" — reachable via the brand logo, so it
 // doesn't need its own nav item.
@@ -57,15 +58,14 @@ export default function SiteNav() {
   const [open, setOpen] = useState(false);
   const { active, activeId, activeSlug } = useActiveTournament();
   const activeName = active?.name ?? "Vælg turnering";
-  const { players, activePlayerId, setActivePlayer } = useActivePlayer();
+  const { players, activePlayer, activePlayerId, setActivePlayer, isAdmin } = useActivePlayer();
+  const { signOutUser } = useAuth();
   // Team Room + Turnering follow the active tournament; others are static.
   const links = LINKS.map((l) => {
     if (l.label === "Team Room") return { ...l, href: `/team/${activeSlug}` };
     if (l.label === "Turnering") return { ...l, href: `/tournament/${activeId}` };
     return l;
   });
-
-  if (pathname === "/login") return null;
 
   return (
     <nav className="sticky top-0 z-50 bg-[#0f0f13]/95 backdrop-blur border-b border-white/[0.08]">
@@ -99,22 +99,30 @@ export default function SiteNav() {
             <span className="text-[#8888a0] text-[10px] shrink-0">⇄</span>
           </Link>
 
-          {/* Who are you — global identity selector */}
-          {players.length > 0 && (
+          {/* Identity. Admins get an override <select> (act as any player);
+              a normal player sees a fixed chip of who they're logged in as. */}
+          {isAdmin ? (
             <select
               value={activePlayerId ?? ""}
               onChange={(e) => setActivePlayer(e.target.value || null)}
-              title="Hvem er du?"
-              className="mr-2 shrink-0 text-[11px] font-medium px-1.5 py-1 rounded-md border border-white/[0.1] bg-[#1a1a22] text-[#4ade80] outline-none focus:border-[#4ade80] max-w-[120px]"
+              title="Optræd som spiller (admin)"
+              className="mr-2 shrink-0 text-[11px] font-medium px-1.5 py-1 rounded-md border border-[#f0b429]/40 bg-[#1a1a22] text-[#f0b429] outline-none focus:border-[#f0b429] max-w-[130px]"
             >
-              <option value="">Vælg spiller</option>
+              <option value="">Admin</option>
               {players.map((p) => (
                 <option key={p.id} value={p.id} className="bg-[#1a1a22] text-[#e8e8f0]">
                   {p.name}
                 </option>
               ))}
             </select>
-          )}
+          ) : activePlayer ? (
+            <span
+              title="Du er logget ind som denne spiller"
+              className="mr-2 shrink-0 text-[11px] font-medium px-2 py-1 rounded-md border border-white/[0.1] bg-[#1a1a22] text-[#4ade80] max-w-[120px] truncate"
+            >
+              {activePlayer.name}
+            </span>
+          ) : null}
 
           {/* Desktop links */}
           <div className="hidden sm:flex items-center gap-1 flex-1">
@@ -134,6 +142,25 @@ export default function SiteNav() {
                 </Link>
               );
             })}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className={`px-2 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                  pathname.startsWith("/admin")
+                    ? "bg-[rgba(240,180,41,0.15)] text-[#f0b429]"
+                    : "text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04]"
+                }`}
+              >
+                Admin
+              </Link>
+            )}
+            <button
+              onClick={() => signOutUser()}
+              title="Log ud"
+              className="ml-auto px-2 py-1.5 rounded-md text-[12px] font-medium text-[#8888a0] hover:text-[#f87171] hover:bg-white/[0.04] transition-colors"
+            >
+              Log ud
+            </button>
           </div>
 
           {/* Mobile hamburger */}
@@ -176,6 +203,24 @@ export default function SiteNav() {
               </Link>
             );
           })}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              onClick={() => setOpen(false)}
+              className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#f0b429] hover:bg-white/[0.04] transition-colors"
+            >
+              Admin
+            </Link>
+          )}
+          <button
+            onClick={() => {
+              setOpen(false);
+              signOutUser();
+            }}
+            className="block w-full text-left px-3 py-2.5 rounded-md text-[13px] font-medium text-[#8888a0] hover:text-[#f87171] hover:bg-white/[0.04] transition-colors"
+          >
+            Log ud
+          </button>
         </div>
       )}
     </nav>

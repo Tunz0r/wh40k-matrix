@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import SiteNav from "@/components/SiteNav";
+import AuthGate from "@/components/AuthGate";
+import { AuthProvider } from "@/lib/auth";
 import { ActiveTournamentProvider } from "@/lib/active-tournament";
 import { ActivePlayerProvider } from "@/lib/active-player";
 
@@ -23,12 +25,16 @@ export default function RootLayout({
   return (
     <html lang="da" className={`${inter.variable} h-full`}>
       <body className="min-h-full font-[family-name:var(--font-inter)] bg-[#0f0f13] text-[#e8e8f0] text-sm leading-relaxed antialiased">
-        <ActiveTournamentProvider>
-          <ActivePlayerProvider>
-            <SiteNav />
-            {children}
-          </ActivePlayerProvider>
-        </ActiveTournamentProvider>
+        <AuthProvider>
+          <ActiveTournamentProvider>
+            <ActivePlayerProvider>
+              <AuthGate>
+                <SiteNav />
+                {children}
+              </AuthGate>
+            </ActivePlayerProvider>
+          </ActiveTournamentProvider>
+        </AuthProvider>
       </body>
     </html>
   );

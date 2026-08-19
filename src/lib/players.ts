@@ -27,10 +27,14 @@ export function subscribeToPlayers(callback: (players: Player[]) => void): () =>
   authReady().then(() => {
     if (cancelled) return;
     const r = ref(getDb(), PLAYERS);
-    onValue(r, (snap) => {
-      const val = (snap.val() as Record<string, Player>) || {};
-      callback(Object.values(val).sort((a, b) => a.name.localeCompare(b.name, "da")));
-    });
+    onValue(
+      r,
+      (snap) => {
+        const val = (snap.val() as Record<string, Player>) || {};
+        callback(Object.values(val).sort((a, b) => a.name.localeCompare(b.name, "da")));
+      },
+      () => callback([]) // unbound users can't read _players once rules tighten
+    );
     cleanup = () => off(r);
   });
   return () => { cancelled = true; cleanup?.(); };

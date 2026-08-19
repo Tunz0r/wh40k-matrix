@@ -13,6 +13,9 @@ import {
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
 import { computeStandings } from "@/lib/standings";
 import { useActiveTournament } from "@/lib/active-tournament";
+import { useActivePlayer } from "@/lib/active-player";
+import { useAuth } from "@/lib/auth";
+import { subscribeToMyTournaments } from "@/lib/membership";
 
 const slugify = (s: string) =>
   s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -27,11 +30,19 @@ export default function TournamentIndexPage() {
   const [list, setList] = useState<TournamentMeta[]>([]);
   const [docs, setDocs] = useState<Record<string, TournamentDoc | null>>({});
   const { setActive } = useActiveTournament();
+  const { isAdmin } = useActivePlayer();
+  const { user } = useAuth();
 
+  // Admins can read the whole registry; a normal member sees only the
+  // tournaments they were rostered in (hard isolation — see membership.ts).
   useEffect(() => {
-    ensureRegistry().catch(() => {});
-    return subscribeToRegistry(setList);
-  }, []);
+    if (isAdmin) {
+      ensureRegistry().catch(() => {});
+      return subscribeToRegistry(setList);
+    }
+    if (user) return subscribeToMyTournaments(user.uid, setList);
+    setList([]);
+  }, [isAdmin, user]);
 
   // Subscribe to each tournament's data doc so we can show its record.
   useEffect(() => {
@@ -76,12 +87,14 @@ export default function TournamentIndexPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">Turneringer</h1>
           <span className="text-[11px] text-[#8888a0]">{list.length} i alt</span>
-          <button
-            onClick={() => setAdding((v) => !v)}
-            className="ml-auto text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-3 py-1.5 rounded-lg transition-colors"
-          >
-            {adding ? "Annullér" : "+ Tilføj turnering"}
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setAdding((v) => !v)}
+              className="ml-auto text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-3 py-1.5 rounded-lg transition-colors"
+            >
+              {adding ? "Annullér" : "+ Tilføj turnering"}
+            </button>
+          )}
         </div>
       </header>
 

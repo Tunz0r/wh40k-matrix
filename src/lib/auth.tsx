@@ -1,0 +1,119 @@
+"use client";
+
+// Real per-user authentication (Firebase Auth). Two providers, no passwords:
+//   - Google Sign-In (primary): name + verified email come from the Google
+//     profile.
+//   - Email link (fallback): a passwordless "magic link" to the user's inbox.
+//
+// The user's email lives ONLY in Firebase Auth (Google-managed) — it is never
+// written to the Realtime DB. Identity resolution (uid -> Player) happens in
+// active-player.tsx; this provider only exposes the raw Firebase user + the
+// sign-in/out actions.
+
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  onAuthStateChanged,
+  signOut,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+  type User,
+} from "firebase/auth";
+import { getAuthInstance } from "./firebase";
+
+const EMAIL_KEY = "wtc-email-for-signin";
+
+interface AuthCtx {
+  user: User | null;
+  loading: boolean;
+  signInWithGoogle: () => Promise<void>;
+  sendEmailLink: (email: string) => Promise<void>;
+  signOutUser: () => Promise<void>;
+}
+
+const Ctx = createContext<AuthCtx | null>(null);
+
+// The URL the email link returns to. Any same-origin route works — the
+// completion logic in AuthProvider runs on mount regardless of route — so we
+// return to the app root.
+function emailLinkRedirect(): string {
+  return `${window.location.origin}/`;
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const auth = getAuthInstance();
+
+    // Complete an email-link sign-in if we arrived via one.
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      let email = localStorage.getItem(EMAIL_KEY);
+      if (!email) {
+        // Opened on a different device/browser than the request — ask for it.
+        email = window.prompt("Bekræft din e-mail for at logge ind") || "";
+      }
+      if (email) {
+        signInWithEmailLink(auth, email, window.location.href)
+          .then(() => {
+            localStorage.removeItem(EMAIL_KEY);
+            // Strip the one-time link params from the URL.
+            window.history.replaceState({}, "", window.location.pathname);
+          })
+          .catch(() => {});
+      }
+    }
+
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const value = useMemo<AuthCtx>(
+    () => ({
+      user,
+      loading,
+      signInWithGoogle: async () => {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(getAuthInstance(), provider);
+      },
+      sendEmailLink: async (email: string) => {
+        await sendSignInLinkToEmail(getAuthInstance(), email, {
+          url: emailLinkRedirect(),
+          handleCodeInApp: true,
+        });
+        localStorage.setItem(EMAIL_KEY, email);
+      },
+      signOutUser: async () => {
+        await signOut(getAuthInstance());
+      },
+    }),
+    [user, loading]
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useAuth(): AuthCtx {
+  return (
+    useContext(Ctx) ?? {
+      user: null,
+      loading: true,
+      signInWithGoogle: async () => {},
+      sendEmailLink: async () => {},
+      signOutUser: async () => {},
+    }
+  );
+}
