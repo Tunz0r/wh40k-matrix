@@ -588,7 +588,11 @@ function TableAdjRow({
 
 // --- Main Component ---
 
-export default function TournamentDashboard() {
+export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: number }) {
+  // Number of Initial Skirmish modules for this team size (Companion pairing
+  // plan): 8p = 2, 5p = 1, 3-4p = 0. Main Engagement always runs; the Champion
+  // game is added automatically only when a leftover player remains.
+  const nSkirmishes = Math.max(0, Math.floor((teamSize - 3) / 2));
   const [tournament, setTournament] = useState<TournamentState>(() => loadTournament());
   const [view, setView] = useState<TournamentView>("overview");
   const [initialized, setInitialized] = useState(false);
@@ -894,7 +898,7 @@ export default function TournamentDashboard() {
   function updateRoster() {
     const roster = deserializeRoster(rosterImportText.trim());
     if (!roster) { alert("Ugyldigt roster format"); return; }
-    if (roster.armies.length !== 8) { alert(`Roster skal have 8 hære (fandt ${roster.armies.length})`); return; }
+    if (roster.armies.length !== teamSize) { alert(`Roster skal have ${teamSize} hære (fandt ${roster.armies.length})`); return; }
     roster.name = TEAM_NAME;
     updateTournament({ teamName: TEAM_NAME, slug: TEAM_SLUG, roster });
     // Patch only the roster — rounds and active sessions stay intact
@@ -996,13 +1000,15 @@ export default function TournamentDashboard() {
   function importOpponent() {
     const roster = deserializeRoster(opponentImportText.trim());
     if (!roster) { alert("Ugyldigt roster format"); return; }
-    if (roster.armies.length !== 8) { alert(`Roster skal have 8 hære (fandt ${roster.armies.length})`); return; }
+    if (roster.armies.length !== teamSize) { alert(`Roster skal have ${teamSize} hære (fandt ${roster.armies.length})`); return; }
     setOpponentRoster(roster);
   }
 
   function startPairings() {
     setMatchups([]);
-    setPairingPhase("skirmish1-defender");
+    // Start at the first Initial Skirmish, or straight to Main Engagement when
+    // the team size has no skirmishes (3-4 players).
+    setPairingPhase(nSkirmishes >= 1 ? "skirmish1-defender" : "main-defender");
     resetModuleState();
     setView("round-pairing");
     updateRoundStatus(TEAM_SLUG, currentRoundNumber, "pairing").catch(() => {});
@@ -1117,7 +1123,8 @@ export default function TournamentDashboard() {
     resetModuleState();
 
     if (pairingPhase.startsWith("skirmish1")) {
-      setPairingPhase("skirmish2-defender");
+      // A second Initial Skirmish only for team sizes that use two (7-8 players).
+      setPairingPhase(nSkirmishes >= 2 ? "skirmish2-defender" : "main-defender");
     } else if (pairingPhase.startsWith("skirmish2")) {
       setPairingPhase("main-defender");
     } else if (pairingPhase.startsWith("main")) {
@@ -1184,6 +1191,7 @@ export default function TournamentDashboard() {
         teamAName: tournament.teamName,
         teamBName: roundName,
         createdAt: Date.now(),
+        teamSize,
         matchups: matchupData,
       });
       const url = `/coaching/${id}`;
@@ -1370,8 +1378,8 @@ export default function TournamentDashboard() {
             <div className="rounded-xl border border-white/[0.08] p-4">
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <h2 className="text-sm font-semibold text-[#e8e8f0]">Hold-parathed</h2>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded ${playersAssigned === 8 ? "bg-[rgba(34,197,94,0.12)] text-[#4ade80]" : "bg-[#22222e] text-[#8888a0]"}`}>
-                  {playersAssigned}/8 spillere
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${playersAssigned === teamSize ? "bg-[rgba(34,197,94,0.12)] text-[#4ade80]" : "bg-[#22222e] text-[#8888a0]"}`}>
+                  {playersAssigned}/{teamSize} spillere
                 </span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${estimatesDone >= 100 ? "bg-[rgba(34,197,94,0.12)] text-[#4ade80]" : "bg-[#22222e] text-[#8888a0]"}`}>
                   {estimatesDone}% estimater

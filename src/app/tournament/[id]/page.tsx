@@ -65,7 +65,7 @@ export default function TournamentDetailPage({
     return (
       <>
         {crumb}
-        <TournamentDashboard />
+        <TournamentDashboard teamSize={meta.teamSize ?? 8} />
       </>
     );
   }

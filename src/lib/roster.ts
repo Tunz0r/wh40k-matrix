@@ -54,13 +54,15 @@ export function deserializeRoster(encoded: string): RosterExport | null {
 export function rosterToArmies(
   roster: RosterExport
 ): { detachments: { detachment: Detachment; faction: string }[]; chosenDisposition: Disposition | null }[] {
-  const armies = Array.from({ length: 8 }, () => ({
+  // Preserve the roster's own size (5-player teams have 5 armies, WTC has 8).
+  const size = roster.armies.length || 8;
+  const armies = Array.from({ length: size }, () => ({
     detachments: [] as { detachment: Detachment; faction: string }[],
     chosenDisposition: null as Disposition | null,
   }));
 
   roster.armies.forEach((ra, i) => {
-    if (i >= 8) return;
+    if (i >= size) return;
     const factionDets = FACTIONS[ra.faction];
     armies[i] = {
       detachments: ra.detachments

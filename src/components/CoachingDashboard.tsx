@@ -200,7 +200,7 @@ export default function CoachingDashboard({ sessionId, embedded, teamSlug, round
     bVP: m.bVP ?? 0,
   }));
   const { teamABP, teamBBP } = calculateTeamBP(estimates);
-  const result = teamResult(teamABP, teamBBP);
+  const result = teamResult(teamABP, teamBBP, session?.teamSize ?? 8);
   const finishedCount = session.matchups.filter((m) => m.final).length;
 
   // Running projection: actual BP for finished games, the coach's editable
