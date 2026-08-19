@@ -27,7 +27,7 @@ import {
   type TournamentDoc,
   type WarmupsNode,
 } from "@/lib/tournament-db";
-import { TEAM_SLUG, TEAM_NAME, TOTAL_ROUNDS } from "@/lib/team";
+import { TEAM_SLUG as DEFAULT_SLUG, TEAM_NAME as DEFAULT_NAME, TOTAL_ROUNDS } from "@/lib/team";
 import {
   type OpponentMap,
   type OpponentTeam,
@@ -100,27 +100,29 @@ interface TournamentState {
 
 const STORAGE_KEY = "wtc-tournament";
 
-function emptyTournament(): TournamentState {
-  return { teamName: TEAM_NAME, slug: TEAM_SLUG, roster: null, seedingTiers: [], rounds: [] };
+function emptyTournament(slug: string, teamName: string): TournamentState {
+  return { teamName, slug, roster: null, seedingTiers: [], rounds: [] };
 }
 
-function loadTournament(): TournamentState {
-  if (typeof window === "undefined") return emptyTournament();
+// localStorage cache is keyed per tournament so multiple tournaments don't
+// clobber each other. Firebase (fbDoc) remains the source of truth.
+function loadTournament(slug: string, teamName: string): TournamentState {
+  if (typeof window === "undefined") return emptyTournament(slug, teamName);
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(`${STORAGE_KEY}-${slug}`);
     if (raw) {
       const parsed = JSON.parse(raw);
-      parsed.teamName = TEAM_NAME;
-      parsed.slug = TEAM_SLUG;
+      parsed.teamName = teamName;
+      parsed.slug = slug;
       return parsed;
     }
   } catch {}
-  return emptyTournament();
+  return emptyTournament(slug, teamName);
 }
 
-function saveTournament(state: TournamentState) {
+function saveTournament(slug: string, state: TournamentState) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(`${STORAGE_KEY}-${slug}`, JSON.stringify(state));
   } catch {}
 }
 
@@ -588,12 +590,20 @@ function TableAdjRow({
 
 // --- Main Component ---
 
-export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: number }) {
+export default function TournamentDashboard({
+  teamSize = 8,
+  slug = DEFAULT_SLUG,
+  teamName = DEFAULT_NAME,
+}: {
+  teamSize?: number;
+  slug?: string;
+  teamName?: string;
+}) {
   // Number of Initial Skirmish modules for this team size (Companion pairing
   // plan): 8p = 2, 5p = 1, 3-4p = 0. Main Engagement always runs; the Champion
   // game is added automatically only when a leftover player remains.
   const nSkirmishes = Math.max(0, Math.floor((teamSize - 3) / 2));
-  const [tournament, setTournament] = useState<TournamentState>(() => loadTournament());
+  const [tournament, setTournament] = useState<TournamentState>(() => loadTournament(slug, teamName));
   const [view, setView] = useState<TournamentView>("overview");
   const [initialized, setInitialized] = useState(false);
 
@@ -643,20 +653,20 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
   // mount — so the synchronous setState here is intentional.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTournament(loadTournament());
+    setTournament(loadTournament(slug, teamName));
     setInitialized(true);
   }, []);
 
   // Persist tournament state
   useEffect(() => {
-    if (initialized) saveTournament(tournament);
+    if (initialized) saveTournament(slug, tournament);
   }, [tournament, initialized]);
 
   // Live tournament doc from Firebase — authoritative for round status across devices
   const [fbDoc, setFbDoc] = useState<TournamentDoc | null>(null);
   useEffect(() => {
     try {
-      return subscribeToTournament(TEAM_SLUG, setFbDoc);
+      return subscribeToTournament(slug, setFbDoc);
     } catch {}
   }, []);
 
@@ -664,7 +674,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
   const [opponents, setOpponents] = useState<OpponentMap>({});
   useEffect(() => {
     try {
-      return subscribeToOpponents(setOpponents);
+      return subscribeToOpponents(setOpponents, slug);
     } catch {}
   }, []);
 
@@ -747,14 +757,14 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
     const fbSeeding = (fbDoc.seedingTiers || []).map((t) => ({ name: t.name, teams: t.teams || [] }));
     // Migration: if Firebase has no seeding yet but this browser does, push it up
     if (fbSeeding.length === 0 && tournament.seedingTiers.length > 0) {
-      saveTeamSetup(TEAM_SLUG, { seedingTiers: tournament.seedingTiers }).catch(() => {});
+      saveTeamSetup(slug, { seedingTiers: tournament.seedingTiers }).catch(() => {});
     }
     const rosterChanged = JSON.stringify(fbDoc.roster) !== JSON.stringify(tournament.roster);
     const seedingChanged = fbSeeding.length > 0 && JSON.stringify(fbSeeding) !== JSON.stringify(tournament.seedingTiers);
     if (!rosterChanged && !seedingChanged) return;
     updateTournament({
-      teamName: TEAM_NAME,
-      slug: TEAM_SLUG,
+      teamName: teamName,
+      slug: slug,
       roster: rosterChanged ? fbDoc.roster : tournament.roster,
       seedingTiers: seedingChanged ? fbSeeding : tournament.seedingTiers,
     });
@@ -842,7 +852,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
     const tiers = (tournament.seedingTiers || []).map((t) => ({
       name: t.name,
       teams: (t.teams || []).filter(
-        (team) => !TEAM_NAME.toLowerCase().includes(team.toLowerCase())
+        (team) => !teamName.toLowerCase().includes(team.toLowerCase())
       ),
     }));
     const seeded = new Set(tiers.flatMap((t) => t.teams.map((x) => slugifyTeam(x))));
@@ -899,10 +909,10 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
     const roster = deserializeRoster(rosterImportText.trim());
     if (!roster) { alert("Ugyldigt roster format"); return; }
     if (roster.armies.length !== teamSize) { alert(`Roster skal have ${teamSize} hære (fandt ${roster.armies.length})`); return; }
-    roster.name = TEAM_NAME;
-    updateTournament({ teamName: TEAM_NAME, slug: TEAM_SLUG, roster });
+    roster.name = teamName;
+    updateTournament({ teamName: teamName, slug: slug, roster });
     // Patch only the roster — rounds and active sessions stay intact
-    saveTeamSetup(TEAM_SLUG, { teamName: TEAM_NAME, roster }).catch(() => {});
+    saveTeamSetup(slug, { teamName: teamName, roster }).catch(() => {});
     setEditingRoster(false);
     setRosterImportText("");
   }
@@ -914,7 +924,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
     armies[idx] = army;
     const roster = { ...tournament.roster, armies };
     updateTournament({ roster });
-    saveTeamSetup(TEAM_SLUG, { roster }).catch(() => {});
+    saveTeamSetup(slug, { roster }).catch(() => {});
     setEditingArmyIdx(null);
   }
 
@@ -937,7 +947,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
     try {
       const res = await uploadActualList({
         opponents,
-        slug: TEAM_SLUG,
+        slug: slug,
         armyIdx: idx,
         pasteText: listPaste,
         oldProfile: fbDoc?.profiles?.[`a${idx}`] ?? null,
@@ -979,7 +989,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
   function saveSeedingTiers() {
     const tiers = parseSeedingText(seedingText);
     updateTournament({ seedingTiers: tiers });
-    saveTeamSetup(TEAM_SLUG, { seedingTiers: tiers }).catch(() => {});
+    saveTeamSetup(slug, { seedingTiers: tiers }).catch(() => {});
     setEditingSeeding(false);
   }
 
@@ -1011,7 +1021,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
     setPairingPhase(nSkirmishes >= 1 ? "skirmish1-defender" : "main-defender");
     resetModuleState();
     setView("round-pairing");
-    updateRoundStatus(TEAM_SLUG, currentRoundNumber, "pairing").catch(() => {});
+    updateRoundStatus(slug, currentRoundNumber, "pairing").catch(() => {});
   }
 
   function resetModuleState() {
@@ -1198,7 +1208,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
       setSessionUrl(url);
 
       // Update team room in Firebase
-      await setActiveSession(TEAM_SLUG, id, currentRoundNumber, roundName);
+      await setActiveSession(slug, id, currentRoundNumber, roundName);
 
       // Save round to tournament
       const completedRound: CompletedRound = {
@@ -1220,7 +1230,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
 
   function resetTournament() {
     if (!confirm("Nulstil turneringen? Runder og aktive kampe slettes — roster og seeding bevares.")) return;
-    resetTournamentDoc(TEAM_SLUG).catch(() => {});
+    resetTournamentDoc(slug).catch(() => {});
     updateTournament({ rounds: [] });
     setView("overview");
     setOpponentRoster(null);
@@ -1233,7 +1243,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
   // in round 2 or 3 doesn't cost the earlier rounds' record.
   function resetSingleRound(n: number) {
     if (!confirm(`Nulstil runde ${n}? Kun denne runde slettes — alle andre runder og historik bevares.`)) return;
-    resetRound(TEAM_SLUG, n).catch(() => {});
+    resetRound(slug, n).catch(() => {});
     updateTournament({ rounds: tournament.rounds.filter((r) => r.number !== n) });
     if (n === currentRoundNumber) {
       setView("overview");
@@ -1301,7 +1311,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
           <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
             WTC Turnering
             <span className="text-[#4ade80] ml-2 text-sm font-normal">
-              — {TEAM_NAME}
+              — {teamName}
             </span>
           </h1>
           <div className="ml-auto flex items-center gap-2">
@@ -1396,7 +1406,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
                   <input
                     type="date"
                     value={eventDate ? eventDate.slice(0, 10) : ""}
-                    onChange={(e) => saveTournamentSettings(TEAM_SLUG, { eventDate: e.target.value || null }).catch(() => {})}
+                    onChange={(e) => saveTournamentSettings(slug, { eventDate: e.target.value || null }).catch(() => {})}
                     className="bg-[#1a1a22] border border-white/[0.14] rounded px-1.5 py-0.5 text-[10px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
                   />
                 </div>
@@ -1437,7 +1447,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
             {/* Our roster */}
             <div className="rounded-xl border border-[rgba(74,222,128,0.2)] bg-[rgba(74,222,128,0.03)] p-4">
               <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold text-[#4ade80]">{TEAM_NAME}</h2>
+                <h2 className="text-sm font-semibold text-[#4ade80]">{teamName}</h2>
                 {tournament.roster && (
                   <span className="text-[10px] text-[#8888a0]">({tournament.roster.armies.length} hære)</span>
                 )}
@@ -1748,7 +1758,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
                       </Link>
                     )}
                     <Link
-                      href={`/team/${TEAM_SLUG}`}
+                      href={`/team/${slug}`}
                       className="text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors"
                     >
                       Team room →
@@ -1756,7 +1766,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
                     <button
                       onClick={() => {
                         if (!confirm(`Afslut runde ${activeRound.number}?`)) return;
-                        updateRoundStatus(TEAM_SLUG, activeRound.number, "completed").catch(() => {});
+                        updateRoundStatus(slug, activeRound.number, "completed").catch(() => {});
                       }}
                       className="ml-auto text-[11px] font-medium text-[#8888a0] hover:text-[#e8e8f0] border border-white/[0.1] px-3 py-1.5 rounded-md transition-colors"
                     >
@@ -1786,13 +1796,13 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/team/${TEAM_SLUG}`}
+                    href={`/team/${slug}`}
                     className="text-[12px] text-[#a855f7] hover:text-[#c084fc] transition-colors font-mono"
                   >
-                    /team/{TEAM_SLUG}
+                    /team/{slug}
                   </Link>
                   <button
-                    onClick={() => navigator.clipboard.writeText(window.location.origin + `/team/${TEAM_SLUG}`)}
+                    onClick={() => navigator.clipboard.writeText(window.location.origin + `/team/${slug}`)}
                     className="text-[10px] text-[#8888a0] hover:text-[#e8e8f0] transition-colors"
                   >
                     Kopiér
@@ -2389,7 +2399,7 @@ export default function TournamentDashboard({ teamSize = 8 }: { teamSize?: numbe
               {sessionUrl && (
                 <button
                   onClick={() => {
-                    updateRoundStatus(TEAM_SLUG, currentRoundNumber, "completed").catch(() => {});
+                    updateRoundStatus(slug, currentRoundNumber, "completed").catch(() => {});
                     backToOverview();
                   }}
                   className="text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-5 py-2 rounded-md transition-colors"

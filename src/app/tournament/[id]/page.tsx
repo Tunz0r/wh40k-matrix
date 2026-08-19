@@ -2,7 +2,6 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { TEAM_SLUG } from "@/lib/team";
 import {
   ensureRegistry,
   getTournament,
@@ -57,37 +56,15 @@ export default function TournamentDetailPage({
     </div>
   );
 
-  // WTC 2026 wraps the legacy single-tournament data (dataSlug === TEAM_SLUG),
-  // so it renders the full dashboard unchanged. Newly-added tournaments have a
-  // registry entry but their live data layer (rounds/pairing/estimates keyed to
-  // their own dataSlug) is the next phase.
-  if (meta.dataSlug === TEAM_SLUG) {
-    return (
-      <>
-        {crumb}
-        <TournamentDashboard teamSize={meta.teamSize ?? 8} />
-      </>
-    );
-  }
-
+  // Every tournament renders its own dashboard, scoped by dataSlug + team size.
   return (
     <>
       {crumb}
-      <div className="p-4 sm:p-6 max-w-2xl">
-        <h1 className="text-lg font-semibold text-[#e8e8f0]">{meta.name}</h1>
-        <p className="text-[11px] text-[#8888a0] mt-1">
-          {[meta.format, meta.startDate ? new Date(meta.startDate).toLocaleDateString("da-DK") : null]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-        <div className="mt-4 rounded-xl border border-[rgba(250,204,21,0.25)] bg-[rgba(250,204,21,0.05)] p-4">
-          <p className="text-[12px] text-[#facc15] font-semibold">Data-lag ikke koblet til endnu</p>
-          <p className="text-[11px] text-[#8888a0] mt-1">
-            Turneringen er oprettet i registret (data-slug <code className="text-[#c8c8d4]">{meta.dataSlug}</code>), men
-            runder, parring og estimater kører stadig kun for WTC 2026. Isolering af estimat-databasen pr. turnering er næste skridt.
-          </p>
-        </div>
-      </div>
+      <TournamentDashboard
+        slug={meta.dataSlug}
+        teamName={meta.teamName}
+        teamSize={meta.teamSize ?? 8}
+      />
     </>
   );
 }
