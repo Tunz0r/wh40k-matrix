@@ -20,6 +20,7 @@ export interface TournamentMeta {
   name: string; // display name, e.g. "WTC 2026"
   dataSlug: string; // tournaments/{dataSlug} + estimates/{dataSlug} live here
   teamName: string; // our team for this tournament
+  teamSize?: number; // players per team (5 or 8, …); drives roster/pairing/margins
   format?: string; // free text, e.g. "WTC · 7 runder"
   rounds?: number; // expected round count (drives finish/standings)
   startDate?: string | null; // ISO
@@ -40,6 +41,7 @@ export const WTC_2026: TournamentMeta = {
   name: "WTC 2026",
   dataSlug: TEAM_SLUG,
   teamName: TEAM_NAME,
+  teamSize: 8,
   format: "WTC · 7 runder",
   rounds: 7,
   startDate: null,

@@ -45,6 +45,7 @@ export default function TournamentIndexPage() {
 
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
+  const [teamSize, setTeamSize] = useState(8);
   const [busy, setBusy] = useState(false);
   const proposedId = useMemo(() => slugify(name.trim()), [name]);
   const idTaken = list.some((t) => t.id === proposedId);
@@ -59,6 +60,7 @@ export default function TournamentIndexPage() {
         name: nm,
         dataSlug: proposedId,
         teamName: TEAM_NAME,
+        teamSize,
         status: "upcoming",
       });
       setName("");
@@ -104,6 +106,17 @@ export default function TournamentIndexPage() {
                 Opret
               </button>
             </div>
+            <div className="flex items-center gap-2 mt-2">
+              <label className="text-[11px] text-[#8888a0]">Holdstørrelse</label>
+              <select
+                value={teamSize}
+                onChange={(e) => setTeamSize(Number(e.target.value))}
+                className="text-[12px] px-2 py-1 rounded-md bg-[#1a1a22] border border-white/[0.12] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+              >
+                <option value={8}>8 spillere · WTC (skirmish ×2 + main + champion, +12 BP)</option>
+                <option value={5}>5 spillere (initial skirmish + main, +6 BP)</option>
+              </select>
+            </div>
             {proposedId && (
               <p className={`text-[10px] mt-1.5 ${idTaken ? "text-[#f87171]" : "text-[#8888a0]"}`}>
                 {idTaken ? `"${proposedId}" findes allerede` : <>URL: <code className="text-[#c8c8d4]">/tournament/{proposedId}</code></>}
@@ -120,7 +133,9 @@ export default function TournamentIndexPage() {
         ) : (
           list.map((t) => {
             const doc = docs[t.id];
-            const st = doc?.rounds?.length ? computeStandings(doc.rounds) : null;
+            const st = doc?.rounds?.length
+              ? computeStandings(doc.rounds, { teamSize: t.teamSize, totalRounds: t.rounds })
+              : null;
             const played = st?.played ?? 0;
             return (
               <Link
@@ -134,6 +149,7 @@ export default function TournamentIndexPage() {
                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${STATUS[t.status].cls}`}>
                     {STATUS[t.status].label}
                   </span>
+                  <span className="text-[10px] text-[#8888a0]">{t.teamSize ?? 8}v{t.teamSize ?? 8}</span>
                   {t.format && <span className="text-[10px] text-[#8888a0]">{t.format}</span>}
                   <span className="ml-auto text-[#8888a0]">→</span>
                 </div>
@@ -146,6 +162,7 @@ export default function TournamentIndexPage() {
                       <span className="text-[#8888a0]">-</span>
                       <span className="text-[#f87171]">{st.losses}</span>
                     </span>
+                    <span className="text-[#8888a0]">{st.teamPoints} TP</span>
                     <span className="text-[#8888a0]">{st.bpFor}-{st.bpAgainst} BP</span>
                     <span className="text-[#8888a0]">{played} {played === 1 ? "runde" : "runder"}</span>
                   </div>

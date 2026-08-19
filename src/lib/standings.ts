@@ -1,4 +1,5 @@
 import { TOTAL_ROUNDS } from "./team";
+import { DEFAULT_TEAM_SIZE, roundResult, teamPointsFor } from "./team-format";
 
 export interface ScoredRound {
   number: number;
@@ -11,6 +12,7 @@ export interface Standings {
   wins: number;
   draws: number;
   losses: number;
+  teamPoints: number; // WTC/Companion Team Points: win 3 / draw 2 / loss 1
   bpFor: number; // cumulative team BP scored
   bpAgainst: number;
   bpDiff: number;
@@ -20,29 +22,35 @@ export interface Standings {
   projectedFinal: number;
 }
 
-// 8-player WTC team game: 12+ BP differential = team win.
-const WIN_MARGIN = 12;
-
-export function computeStandings(rounds: ScoredRound[]): Standings {
+// Win/draw/loss uses the team-size margin (Companion table): 5-player +6,
+// 8-player +12. `totalRounds` drives roundsLeft/projection (per tournament).
+export function computeStandings(
+  rounds: ScoredRound[],
+  opts: { teamSize?: number; totalRounds?: number } = {}
+): Standings {
+  const teamSize = opts.teamSize ?? DEFAULT_TEAM_SIZE;
+  const totalRounds = opts.totalRounds ?? TOTAL_ROUNDS;
   const scored = rounds.filter((r) => r.score);
-  let wins = 0, draws = 0, losses = 0, bpFor = 0, bpAgainst = 0;
+  let wins = 0, draws = 0, losses = 0, teamPoints = 0, bpFor = 0, bpAgainst = 0;
   for (const r of scored) {
     const { us, them } = r.score!;
     bpFor += us;
     bpAgainst += them;
-    const diff = us - them;
-    if (diff >= WIN_MARGIN) wins++;
-    else if (diff <= -WIN_MARGIN) losses++;
+    const res = roundResult(us, them, teamSize);
+    if (res === "win") wins++;
+    else if (res === "loss") losses++;
     else draws++;
+    teamPoints += teamPointsFor(res);
   }
   const played = scored.length;
   const avgFor = played ? bpFor / played : 0;
-  const roundsLeft = Math.max(0, TOTAL_ROUNDS - played);
+  const roundsLeft = Math.max(0, totalRounds - played);
   return {
     played,
     wins,
     draws,
     losses,
+    teamPoints,
     bpFor,
     bpAgainst,
     bpDiff: bpFor - bpAgainst,

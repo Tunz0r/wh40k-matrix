@@ -1,3 +1,5 @@
+import { DEFAULT_TEAM_SIZE, winMarginFor } from "./team-format";
+
 // VP differential → Battle Points table (from GW Teams Event Companion)
 const BP_TABLE: [number, number, number][] = [
   [5, 10, 10],
@@ -145,13 +147,15 @@ export function teamWinProbability(
   return { win: win / samples, draw: draw / samples, loss: loss / samples };
 }
 
-// 8-player teams need 12 BP differential for a win
+// Win margin scales with team size (Companion table): 5-player +6, 8-player +12.
 export function teamResult(
   teamABP: number,
-  teamBBP: number
+  teamBBP: number,
+  teamSize: number = DEFAULT_TEAM_SIZE
 ): "A" | "B" | "draw" {
+  const margin = winMarginFor(teamSize);
   const diff = teamABP - teamBBP;
-  if (diff >= 12) return "A";
-  if (diff <= -12) return "B";
+  if (diff >= margin) return "A";
+  if (diff <= -margin) return "B";
   return "draw";
 }
