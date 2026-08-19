@@ -75,6 +75,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const unsub = onAuthStateChanged(auth, (u) => {
+      // Reject leftover anonymous sessions from the old app version — they must
+      // not reach the claim screen. Sign them out and show the real login.
+      if (u && u.isAnonymous) {
+        signOut(auth).catch(() => {});
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       setUser(u);
       setLoading(false);
     });

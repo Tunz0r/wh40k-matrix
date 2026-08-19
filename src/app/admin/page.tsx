@@ -90,9 +90,9 @@ export default function AdminPage() {
             >
               <option value="">Vælg spiller…</option>
               {players.map((p) => (
-                <option key={p.id} value={p.id} disabled={!!p.authUid}>
+                <option key={p.id} value={p.id}>
                   {p.name}
-                  {p.authUid ? " (koblet)" : ""}
+                  {p.authUid ? " (allerede koblet — ombind)" : ""}
                 </option>
               ))}
             </select>
