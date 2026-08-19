@@ -12,6 +12,7 @@ import {
 } from "@/lib/data";
 import { DispositionBadge } from "@/components/DispositionBadge";
 import { serializeRoster, deserializeRoster, rosterToArmies } from "@/lib/roster";
+import { useActiveTournament } from "@/lib/active-tournament";
 
 interface DetachmentPick {
   detachment: Detachment;
@@ -23,9 +24,13 @@ interface Army {
   chosenDisposition: Disposition | null;
 }
 
-const MAX_ARMIES = 8;
 const MAX_DP_PER_ARMY = 3;
-const MAX_PER_DISPOSITION = 2;
+// GW Teams Event Companion: within a team, one player per 5 (rounding up) may
+// select a given Force Disposition — so 5-player teams use each disposition once
+// (all different), 8-player teams allow each up to twice.
+const dispMaxFor = (teamSize: number) => Math.ceil(teamSize / 5);
+// Every disposition must be represented once the team can cover all five.
+const requiresAllDispositions = (teamSize: number) => teamSize >= DISPOSITIONS.length;
 
 function emptyArmy(): Army {
   return { detachments: [], chosenDisposition: null };
@@ -35,56 +40,53 @@ function armyDp(army: Army): number {
   return army.detachments.reduce((s, d) => s + d.detachment.dp, 0);
 }
 
-// Detachments with an unpublished disposition (d: null) contribute none —
-// the army's disposition stays unresolved until GW publishes it.
 function armyDispositions(army: Army): Disposition[] {
-  const unique = new Set(
-    army.detachments
-      .map((d) => d.detachment.d)
-      .filter((x): x is Disposition => x !== null)
-  );
-  return [...unique];
+  return [
+    ...new Set(
+      army.detachments
+        .map((d) => d.detachment.d)
+        .filter((x): x is Disposition => x !== null)
+    ),
+  ];
 }
 
 function getChosenDispositionCounts(armies: Army[]): Record<Disposition, number> {
   const counts: Record<string, number> = {};
   for (const d of DISPOSITIONS) counts[d] = 0;
-  for (const army of armies) {
-    if (army.chosenDisposition) counts[army.chosenDisposition]++;
-  }
+  for (const army of armies) if (army.chosenDisposition) counts[army.chosenDisposition]++;
   return counts as Record<Disposition, number>;
 }
 
-function getAvailableDispositionsForTeam(armies: Army[]): Disposition[] {
+function getAvailableDispositionsForTeam(
+  armies: Army[],
+  teamSize: number,
+  dispMax: number
+): Disposition[] {
   const counts = getChosenDispositionCounts(armies);
   const armiesWithChoice = armies.filter((a) => a.chosenDisposition).length;
-  const remaining = MAX_ARMIES - armiesWithChoice;
+  const remaining = teamSize - armiesWithChoice;
   if (remaining <= 0) return [];
-
-  const missingRequired = DISPOSITIONS.filter((d) => counts[d] === 0);
+  const missingRequired = requiresAllDispositions(teamSize)
+    ? DISPOSITIONS.filter((d) => counts[d] === 0)
+    : [];
   const slotsForExtras = remaining - missingRequired.length;
-
-  if (slotsForExtras <= 0 && missingRequired.length > 0) {
-    return missingRequired;
-  }
-
-  return DISPOSITIONS.filter((d) => counts[d] < MAX_PER_DISPOSITION);
+  if (slotsForExtras <= 0 && missingRequired.length > 0) return missingRequired;
+  return DISPOSITIONS.filter((d) => counts[d] < dispMax);
 }
 
 function getAllDetachments(): DetachmentPick[] {
   const all: DetachmentPick[] = [];
-  for (const [faction, dets] of Object.entries(FACTIONS)) {
-    for (const det of dets) {
-      all.push({ detachment: det, faction });
-    }
-  }
+  for (const [faction, dets] of Object.entries(FACTIONS))
+    for (const det of dets) all.push({ detachment: det, faction });
   return all;
 }
 
 export default function RosterPage() {
-  const [armies, setArmies] = useState<Army[]>(
-    () => Array.from({ length: MAX_ARMIES }, emptyArmy)
-  );
+  const { active } = useActiveTournament();
+  const [teamSize, setTeamSize] = useState(active?.teamSize ?? 8);
+  const dispMax = dispMaxFor(teamSize);
+
+  const [armies, setArmies] = useState<Army[]>(() => Array.from({ length: teamSize }, emptyArmy));
   const [activeArmy, setActiveArmy] = useState(0);
   const [filterGroup, setFilterGroup] = useState("");
   const [filterFaction, setFilterFaction] = useState("");
@@ -97,34 +99,32 @@ export default function RosterPage() {
 
   const allDetachments = useMemo(getAllDetachments, []);
   const dispCounts = getChosenDispositionCounts(armies);
-  const availableTeamDispositions = getAvailableDispositionsForTeam(armies);
+  const availableTeamDispositions = getAvailableDispositionsForTeam(armies, teamSize, dispMax);
 
-  const currentArmy = armies[activeArmy];
+  // Resize the roster to a new team size, keeping any armies that still fit.
+  function changeTeamSize(size: number) {
+    setTeamSize(size);
+    setArmies((prev) => {
+      const next = prev.slice(0, size);
+      while (next.length < size) next.push(emptyArmy());
+      return next;
+    });
+    setActiveArmy((i) => Math.min(i, size - 1));
+  }
+
+  const currentArmy = armies[activeArmy] ?? emptyArmy();
   const currentDp = armyDp(currentArmy);
   const remainingDp = MAX_DP_PER_ARMY - currentDp;
-  const currentDispositions = armyDispositions(currentArmy);
-  const lockedFaction =
-    currentArmy.detachments.length > 0
-      ? currentArmy.detachments[0].faction
-      : null;
+  const lockedFaction = currentArmy.detachments.length > 0 ? currentArmy.detachments[0].faction : null;
 
   const takenFactions = useMemo(() => {
-    const smSuperFaction = [
-      "Space Marines",
-      "Dark Angels",
-      "Blood Angels",
-      "Space Wolves",
-      "Black Templars",
-      "Deathwatch",
-    ];
+    const smSuperFaction = ["Space Marines", "Dark Angels", "Blood Angels", "Space Wolves", "Black Templars", "Deathwatch"];
     const set = new Set<string>();
     armies.forEach((a, i) => {
       if (i !== activeArmy && a.detachments.length > 0) {
         const fac = a.detachments[0].faction;
         set.add(fac);
-        if (smSuperFaction.includes(fac)) {
-          smSuperFaction.forEach((f) => set.add(f));
-        }
+        if (smSuperFaction.includes(fac)) smSuperFaction.forEach((f) => set.add(f));
       }
     });
     return set;
@@ -133,44 +133,25 @@ export default function RosterPage() {
   const filteredDetachments = useMemo(() => {
     const query = search.toLowerCase().trim();
     let pool = allDetachments.filter((d) => d.detachment.dp <= remainingDp);
-
     pool = pool.filter((d) => !takenFactions.has(d.faction));
-
-    if (lockedFaction) {
-      pool = pool.filter((d) => d.faction === lockedFaction);
-    } else if (filterFaction) {
-      pool = pool.filter((d) => d.faction === filterFaction);
-    }
-
+    if (lockedFaction) pool = pool.filter((d) => d.faction === lockedFaction);
+    else if (filterFaction) pool = pool.filter((d) => d.faction === filterFaction);
     if (!lockedFaction && filterGroup) {
       const groupFactions = GROUPS[filterGroup] || [];
       pool = pool.filter((d) => groupFactions.includes(d.faction));
     }
-    if (filterDisposition) {
-      pool = pool.filter((d) => d.detachment.d === filterDisposition);
-    }
-    if (query) {
+    if (filterDisposition) pool = pool.filter((d) => d.detachment.d === filterDisposition);
+    if (query)
       pool = pool.filter(
-        (d) =>
-          d.detachment.n.toLowerCase().includes(query) ||
-          d.faction.toLowerCase().includes(query)
+        (d) => d.detachment.n.toLowerCase().includes(query) || d.faction.toLowerCase().includes(query)
       );
-    }
-
-    pool.sort((a, b) => {
-      const fA = a.faction.localeCompare(b.faction);
-      if (fA !== 0) return fA;
-      return a.detachment.n.localeCompare(b.detachment.n);
-    });
-
+    pool.sort((a, b) => a.faction.localeCompare(b.faction) || a.detachment.n.localeCompare(b.detachment.n));
     return pool;
   }, [allDetachments, remainingDp, lockedFaction, takenFactions, filterGroup, filterFaction, filterDisposition, search]);
 
   const factionOptions = useMemo(() => {
     let facs = Object.keys(FACTIONS);
-    if (filterGroup) {
-      facs = GROUPS[filterGroup] || facs;
-    }
+    if (filterGroup) facs = GROUPS[filterGroup] || facs;
     return facs.sort();
   }, [filterGroup]);
 
@@ -182,19 +163,13 @@ export default function RosterPage() {
     if (det.dp > remainingDp) return;
     updateArmy(activeArmy, (a) => {
       const newDets = [...a.detachments, { detachment: det, faction }];
-      const disps = new Set(
-        newDets.map((d) => d.detachment.d).filter((x): x is Disposition => x !== null)
-      );
+      const disps = new Set(newDets.map((d) => d.detachment.d).filter((x): x is Disposition => x !== null));
       let newChosen = a.chosenDisposition;
       if (disps.size === 1) {
         const only = [...disps][0];
         const counts = getChosenDispositionCounts(armies);
         const alreadyCounted = a.chosenDisposition === only ? 1 : 0;
-        if (counts[only] - alreadyCounted < MAX_PER_DISPOSITION) {
-          newChosen = only;
-        } else {
-          newChosen = null;
-        }
+        newChosen = counts[only] - alreadyCounted < dispMax ? only : null;
       }
       return { detachments: newDets, chosenDisposition: newChosen };
     });
@@ -204,44 +179,29 @@ export default function RosterPage() {
     updateArmy(armyIdx, (a) => {
       const newDets = a.detachments.filter((_, i) => i !== detIdx);
       if (newDets.length === 0) return emptyArmy();
-      const disps = new Set(
-        newDets.map((d) => d.detachment.d).filter((x): x is Disposition => x !== null)
-      );
+      const disps = new Set(newDets.map((d) => d.detachment.d).filter((x): x is Disposition => x !== null));
       let newChosen = a.chosenDisposition;
-      if (newChosen && !disps.has(newChosen)) {
-        newChosen = disps.size === 1 ? [...disps][0] : null;
-      }
+      if (newChosen && !disps.has(newChosen)) newChosen = disps.size === 1 ? [...disps][0] : null;
       return { detachments: newDets, chosenDisposition: newChosen };
     });
   }
 
-  function setDisposition(armyIdx: number, disp: Disposition) {
+  const setDisposition = (armyIdx: number, disp: Disposition) =>
     updateArmy(armyIdx, (a) => ({ ...a, chosenDisposition: disp }));
-  }
-
-  function clearArmy(armyIdx: number) {
-    updateArmy(armyIdx, () => emptyArmy());
-  }
-
-  function resetAll() {
-    setArmies(Array.from({ length: MAX_ARMIES }, emptyArmy));
-    setActiveArmy(0);
-  }
+  const clearArmy = (armyIdx: number) => updateArmy(armyIdx, () => emptyArmy());
+  const resetAll = () => { setArmies(Array.from({ length: teamSize }, emptyArmy)); setActiveArmy(0); };
 
   function exportRoster() {
-    const code = serializeRoster(rosterName, armies);
-    navigator.clipboard.writeText(code);
+    navigator.clipboard.writeText(serializeRoster(rosterName, armies));
     setExportCopied(true);
     setTimeout(() => setExportCopied(false), 2000);
   }
 
   function handleImport() {
     const data = deserializeRoster(importText.trim());
-    if (!data) {
-      alert("Ugyldigt roster format.");
-      return;
-    }
+    if (!data) { alert("Ugyldigt roster format."); return; }
     const imported = rosterToArmies(data);
+    setTeamSize(imported.length);
     setArmies(imported);
     setRosterName(data.name);
     setShowImport(false);
@@ -249,31 +209,40 @@ export default function RosterPage() {
     setActiveArmy(0);
   }
 
-  const filledArmies = armies.filter((a) => a.detachments.length > 0).length;
-  const completeArmies = armies.filter(
-    (a) => a.detachments.length > 0 && a.chosenDisposition
-  ).length;
+  const completeArmies = armies.filter((a) => a.detachments.length > 0 && a.chosenDisposition).length;
   const totalDp = armies.reduce((s, a) => s + armyDp(a), 0);
-
   const isComplete =
-    completeArmies === MAX_ARMIES &&
-    DISPOSITIONS.every((d) => dispCounts[d] >= 1) &&
-    DISPOSITIONS.every((d) => dispCounts[d] <= MAX_PER_DISPOSITION);
+    completeArmies === teamSize &&
+    (!requiresAllDispositions(teamSize) || DISPOSITIONS.every((d) => dispCounts[d] >= 1)) &&
+    DISPOSITIONS.every((d) => dispCounts[d] <= dispMax);
 
   const isDetachmentInAnyArmy = (det: Detachment, faction: string) =>
-    armies.some((a) =>
-      a.detachments.some(
-        (d) => d.detachment.n === det.n && d.faction === faction
-      )
-    );
+    armies.some((a) => a.detachments.some((d) => d.detachment.n === det.n && d.faction === faction));
+
+  const rulesLine = `${teamSize} hære · Max ${MAX_DP_PER_ARMY} DP per hær · ${
+    requiresAllDispositions(teamSize) ? "hver disposition mindst 1× · " : ""
+  }max ${dispMax}× per disposition`;
 
   return (
     <>
-      <header className="px-4 sm:px-6 py-6 pb-4 border-b border-white/[0.08]">
-        <div className="flex items-baseline gap-3 flex-wrap">
-          <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
-            Hold Roster Builder
-          </h1>
+      <header className="px-4 sm:px-6 py-4 border-b border-white/[0.08] sticky top-12 bg-[#0f0f13] z-20">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">Roster Builder</h1>
+          {/* Team-size toggle */}
+          <div className="flex items-center rounded-md border border-white/[0.1] overflow-hidden">
+            {[5, 8].map((s) => (
+              <button
+                key={s}
+                onClick={() => changeTeamSize(s)}
+                className={`text-[12px] font-semibold px-2.5 py-1 transition-colors ${
+                  teamSize === s ? "bg-[rgba(168,85,247,0.18)] text-[#c084fc]" : "text-[#8888a0] hover:text-[#e8e8f0]"
+                }`}
+              >
+                {s}v{s}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px] text-[#8888a0] hidden md:inline">{rulesLine}</span>
           <Link
             href="/pairings"
             className="ml-auto text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors bg-[rgba(168,85,247,0.1)] px-3 py-1 rounded-md border border-[rgba(168,85,247,0.2)]"
@@ -281,30 +250,21 @@ export default function RosterPage() {
             Mock Pairings
           </Link>
         </div>
-        <p className="text-xs text-[#8888a0] mt-1">
-          8 hære · Max 3 DP per hær · Hver disposition mindst 1× · Max 2× per
-          disposition · Vælg aktiv disposition per hær
-        </p>
+        <p className="text-[11px] text-[#8888a0] mt-1 md:hidden">{rulesLine}</p>
       </header>
 
       <div className="flex flex-col lg:flex-row">
         {/* Roster panel */}
-        <div className="lg:w-[420px] shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.08] p-4 sm:p-6">
+        <div className="lg:w-[400px] xl:w-[440px] shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.08] p-4 sm:p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-[#e8e8f0]">
-              Dit hold ({completeArmies}/{MAX_ARMIES} klar)
+              Dit hold <span className="text-[#8888a0] font-normal">({completeArmies}/{teamSize} klar · {totalDp} DP)</span>
             </h2>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-[#8888a0]">{totalDp} DP</span>
-              {filledArmies > 0 && (
-                <button
-                  onClick={resetAll}
-                  className="text-[11px] text-red-400 hover:text-red-300 transition-colors"
-                >
-                  Reset alt
-                </button>
-              )}
-            </div>
+            {armies.some((a) => a.detachments.length > 0) && (
+              <button onClick={resetAll} className="text-[11px] text-red-400 hover:text-red-300 transition-colors">
+                Reset alt
+              </button>
+            )}
           </div>
 
           {/* Disposition status */}
@@ -312,15 +272,15 @@ export default function RosterPage() {
             {DISPOSITIONS.map((d) => {
               const s = DISP_STYLES[d];
               const count = dispCounts[d];
-              const full = count >= MAX_PER_DISPOSITION;
-              const missing = count === 0;
+              const full = count >= dispMax;
+              const missing = requiresAllDispositions(teamSize) && count === 0;
               return (
                 <span
                   key={d}
                   className={`text-[10px] font-medium px-2 py-0.5 rounded ${full ? "opacity-40" : ""} ${missing ? "ring-1 ring-current" : ""}`}
                   style={{ background: s.bg, color: s.color }}
                 >
-                  {d} {count}/{MAX_PER_DISPOSITION}
+                  {d} {count}/{dispMax}
                 </span>
               );
             })}
@@ -332,53 +292,28 @@ export default function RosterPage() {
               const dp = armyDp(army);
               const disps = armyDispositions(army);
               const isActive = i === activeArmy;
-              const chosenStyle = army.chosenDisposition
-                ? DISP_STYLES[army.chosenDisposition]
-                : null;
+              const chosenStyle = army.chosenDisposition ? DISP_STYLES[army.chosenDisposition] : null;
               const needsChoice = disps.length > 1 && !army.chosenDisposition;
-              const validChoices = disps.filter((d) =>
-                availableTeamDispositions.includes(d)
-              );
-
               return (
                 <div
                   key={i}
                   onClick={() => setActiveArmy(i)}
                   className={`rounded-lg border transition-colors cursor-pointer ${
-                    isActive
-                      ? "border-[#a855f7]/50 bg-[#1a1a22]"
-                      : "border-white/[0.08] hover:border-white/[0.14]"
+                    isActive ? "border-[#a855f7]/50 bg-[#1a1a22]" : "border-white/[0.08] hover:border-white/[0.14]"
                   } ${needsChoice ? "ring-1 ring-amber-500/40" : ""}`}
                 >
                   <div className="flex items-center gap-2 px-3 py-2">
-                    <span className="text-xs font-semibold text-[#8888a0] w-5 shrink-0">
-                      {i + 1}.
-                    </span>
+                    <span className="text-xs font-semibold text-[#8888a0] w-5 shrink-0">{i + 1}.</span>
                     {army.detachments.length > 0 ? (
                       <>
-                        <div
-                          className="w-1.5 self-stretch rounded-full shrink-0"
-                          style={{
-                            background: chosenStyle?.color || "#8888a0",
-                          }}
-                        />
+                        <div className="w-1.5 self-stretch rounded-full shrink-0" style={{ background: chosenStyle?.color || "#8888a0" }} />
                         <div className="flex-1 min-w-0">
                           {army.detachments.map((d, di) => (
-                            <div
-                              key={di}
-                              className="flex items-center gap-1.5 group/det"
-                            >
-                              <span className="text-[12px] text-[#e8e8f0] truncate">
-                                {d.detachment.n}
-                              </span>
-                              <span className="text-[10px] text-[#8888a0]">
-                                {d.detachment.dp}DP
-                              </span>
+                            <div key={di} className="flex items-center gap-1.5 group/det">
+                              <span className="text-[12px] text-[#e8e8f0] truncate">{d.detachment.n}</span>
+                              <span className="text-[10px] text-[#8888a0]">{d.detachment.dp}DP</span>
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removeDetachment(i, di);
-                                }}
+                                onClick={(e) => { e.stopPropagation(); removeDetachment(i, di); }}
                                 className="text-[#8888a0] hover:text-red-400 transition-colors text-xs opacity-0 group-hover/det:opacity-100"
                                 title="Fjern"
                               >
@@ -386,72 +321,40 @@ export default function RosterPage() {
                               </button>
                             </div>
                           ))}
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] text-[#8888a0]">
-                              {dp}/{MAX_DP_PER_ARMY} DP ·{" "}
-                              <span className="italic">
-                                {army.detachments
-                                  .map((d) => d.faction)
-                                  .filter(
-                                    (v, idx, a) => a.indexOf(v) === idx
-                                  )
-                                  .join(", ")}
-                              </span>
-                            </span>
+                          <div className="text-[10px] text-[#8888a0] mt-0.5">
+                            {dp}/{MAX_DP_PER_ARMY} DP · <span className="italic">{[...new Set(army.detachments.map((d) => d.faction))].join(", ")}</span>
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           {disps.length === 1 ? (
                             <span
                               className={`text-[9px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap ${!army.chosenDisposition ? "opacity-50 ring-1 ring-red-500/50" : ""}`}
-                              style={{
-                                background: DISP_STYLES[disps[0]].bg,
-                                color: DISP_STYLES[disps[0]].color,
-                              }}
-                              title={!army.chosenDisposition ? `${disps[0]} er på max (${MAX_PER_DISPOSITION}×)` : undefined}
+                              style={{ background: DISP_STYLES[disps[0]].bg, color: DISP_STYLES[disps[0]].color }}
+                              title={!army.chosenDisposition ? `${disps[0]} er på max (${dispMax}×)` : undefined}
                             >
-                              {disps[0]}
-                              {!army.chosenDisposition && " ⚠"}
+                              {disps[0]}{!army.chosenDisposition && " ⚠"}
                             </span>
                           ) : (
                             <select
                               value={army.chosenDisposition || ""}
                               onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                setDisposition(
-                                  i,
-                                  e.target.value as Disposition
-                                );
-                              }}
+                              onChange={(e) => { e.stopPropagation(); setDisposition(i, e.target.value as Disposition); }}
                               className="bg-[#22222e] text-[10px] border border-white/[0.14] rounded px-1.5 py-0.5 outline-none cursor-pointer"
-                              style={{
-                                color: chosenStyle?.color || "#e8e8f0",
-                              }}
+                              style={{ color: chosenStyle?.color || "#e8e8f0" }}
                             >
                               <option value="">Vælg disposition...</option>
                               {disps.map((d) => {
-                                const canPick =
-                                  availableTeamDispositions.includes(d) ||
-                                  army.chosenDisposition === d;
+                                const canPick = availableTeamDispositions.includes(d) || army.chosenDisposition === d;
                                 return (
-                                  <option
-                                    key={d}
-                                    value={d}
-                                    disabled={!canPick}
-                                  >
-                                    {d}
-                                    {!canPick ? " (max)" : ""}
+                                  <option key={d} value={d} disabled={!canPick}>
+                                    {d}{!canPick ? " (max)" : ""}
                                   </option>
                                 );
                               })}
                             </select>
                           )}
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              clearArmy(i);
-                            }}
+                            onClick={(e) => { e.stopPropagation(); clearArmy(i); }}
                             className="text-[10px] text-[#8888a0] hover:text-red-400 transition-colors"
                           >
                             Ryd hær
@@ -459,12 +362,8 @@ export default function RosterPage() {
                         </div>
                       </>
                     ) : (
-                      <span
-                        className={`text-[11px] ${isActive ? "text-[#a855f7]" : "text-[#8888a0]/40"}`}
-                      >
-                        {isActive
-                          ? "← Tilføj detachments fra listen"
-                          : "Tom — klik for at vælge"}
+                      <span className={`text-[11px] ${isActive ? "text-[#a855f7]" : "text-[#8888a0]/40"}`}>
+                        {isActive ? "← Tilføj detachments fra listen" : "Tom — klik for at vælge"}
                       </span>
                     )}
                   </div>
@@ -499,16 +398,10 @@ export default function RosterPage() {
                 className="w-full h-16 bg-[#1a1a22] border border-white/[0.14] rounded p-2 text-xs text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-none font-mono focus:border-[#a855f7]"
               />
               <div className="flex gap-2 mt-2">
-                <button
-                  onClick={handleImport}
-                  className="text-[11px] font-medium text-[#a855f7] hover:text-[#c084fc] px-2.5 py-1 rounded-md bg-[rgba(168,85,247,0.1)] border border-[rgba(168,85,247,0.2)]"
-                >
+                <button onClick={handleImport} className="text-[11px] font-medium text-[#a855f7] hover:text-[#c084fc] px-2.5 py-1 rounded-md bg-[rgba(168,85,247,0.1)] border border-[rgba(168,85,247,0.2)]">
                   Importér
                 </button>
-                <button
-                  onClick={() => { setShowImport(false); setImportText(""); }}
-                  className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0] px-2 py-1"
-                >
+                <button onClick={() => { setShowImport(false); setImportText(""); }} className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0] px-2 py-1">
                   Annullér
                 </button>
               </div>
@@ -517,12 +410,8 @@ export default function RosterPage() {
 
           {isComplete && (
             <div className="mt-3 p-3 bg-[rgba(34,197,94,0.08)] border border-[rgba(34,197,94,0.2)] rounded-lg">
-              <div className="text-[13px] font-semibold text-[#4ade80]">
-                Hold komplet!
-              </div>
-              <div className="text-[11px] text-[#8888a0] mt-0.5">
-                {MAX_ARMIES} hære · {totalDp} DP total
-              </div>
+              <div className="text-[13px] font-semibold text-[#4ade80]">Hold komplet!</div>
+              <div className="text-[11px] text-[#8888a0] mt-0.5">{teamSize} hære · {totalDp} DP total</div>
             </div>
           )}
         </div>
@@ -530,9 +419,7 @@ export default function RosterPage() {
         {/* Detachment picker */}
         <div className="flex-1 min-w-0">
           <div className="px-4 sm:px-6 py-2 bg-[#22222e] border-b border-white/[0.08]">
-            <span className="text-[12px] text-[#a855f7] font-medium">
-              Hær {activeArmy + 1}
-            </span>
+            <span className="text-[12px] text-[#a855f7] font-medium">Hær {activeArmy + 1}</span>
             <span className="text-[12px] text-[#8888a0] ml-2">
               {currentDp}/{MAX_DP_PER_ARMY} DP brugt
               {remainingDp > 0 && ` · ${remainingDp} DP ledig`}
@@ -550,10 +437,7 @@ export default function RosterPage() {
             />
             <select
               value={filterGroup}
-              onChange={(e) => {
-                setFilterGroup(e.target.value);
-                setFilterFaction("");
-              }}
+              onChange={(e) => { setFilterGroup(e.target.value); setFilterFaction(""); }}
               className="bg-[#1a1a22] text-[#e8e8f0] border border-white/[0.14] rounded-md px-2.5 py-1.5 text-[13px] font-[inherit] cursor-pointer outline-none hover:border-white/25 focus:border-[#a855f7]"
             >
               <option value="">Alle grupper</option>
@@ -569,9 +453,7 @@ export default function RosterPage() {
             >
               <option value="">Alle factions</option>
               {factionOptions.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
+                <option key={f} value={f}>{f}</option>
               ))}
             </select>
             <select
@@ -581,9 +463,7 @@ export default function RosterPage() {
             >
               <option value="">Alle dispositioner</option>
               {DISPOSITIONS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
+                <option key={d} value={d}>{d}</option>
               ))}
             </select>
             <span className="text-[11px] text-[#8888a0] bg-[#22222e] px-2 py-0.5 rounded-full border border-white/[0.08]">
@@ -593,26 +473,17 @@ export default function RosterPage() {
 
           {remainingDp === 0 ? (
             <div className="px-6 py-12 text-center text-[#8888a0]">
-              Hær {activeArmy + 1} er fuld ({MAX_DP_PER_ARMY} DP) — vælg en
-              anden hær eller fjern en detachment
+              Hær {activeArmy + 1} er fuld ({MAX_DP_PER_ARMY} DP) — vælg en anden hær eller fjern en detachment
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
                   <tr>
-                    <th className="px-4 py-2 text-left text-[11px] font-medium text-[#8888a0] bg-[#1a1a22] border-b border-white/[0.08] sticky top-0 z-10">
-                      Detachment
-                    </th>
-                    <th className="px-4 py-2 text-left text-[11px] font-medium text-[#8888a0] bg-[#1a1a22] border-b border-white/[0.08] sticky top-0 z-10 hidden sm:table-cell">
-                      Faction
-                    </th>
-                    <th className="px-4 py-2 text-center text-[11px] font-medium text-[#8888a0] bg-[#1a1a22] border-b border-white/[0.08] sticky top-0 z-10 w-[40px]">
-                      DP
-                    </th>
-                    <th className="px-4 py-2 text-left text-[11px] font-medium text-[#8888a0] bg-[#1a1a22] border-b border-white/[0.08] sticky top-0 z-10">
-                      Disposition
-                    </th>
+                    <th className="px-4 py-2 text-left text-[11px] font-medium text-[#8888a0] bg-[#1a1a22] border-b border-white/[0.08] sticky top-0 z-10">Detachment</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-medium text-[#8888a0] bg-[#1a1a22] border-b border-white/[0.08] sticky top-0 z-10 hidden sm:table-cell">Faction</th>
+                    <th className="px-4 py-2 text-center text-[11px] font-medium text-[#8888a0] bg-[#1a1a22] border-b border-white/[0.08] sticky top-0 z-10 w-[40px]">DP</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-medium text-[#8888a0] bg-[#1a1a22] border-b border-white/[0.08] sticky top-0 z-10">Disposition</th>
                     <th className="px-4 py-2 bg-[#1a1a22] border-b border-white/[0.08] sticky top-0 z-10 w-[60px]" />
                   </tr>
                 </thead>
@@ -620,38 +491,24 @@ export default function RosterPage() {
                   {filteredDetachments.map(({ detachment: det, faction }) => {
                     const taken = isDetachmentInAnyArmy(det, faction);
                     return (
-                      <tr
-                        key={`${faction}-${det.n}`}
-                        className={`group ${taken ? "opacity-30" : ""}`}
-                      >
+                      <tr key={`${faction}-${det.n}`} className={`group ${taken ? "opacity-30" : ""}`}>
                         <td className="px-4 py-[7px] border-b border-white/[0.08] group-hover:bg-[#1a1a22]">
                           <div className="text-[13px] text-[#e8e8f0]">
                             {det.n}
                             {det.new && (
-                              <span className="ml-1.5 text-[9px] font-semibold px-1 py-px rounded bg-[rgba(34,197,94,0.15)] text-[#4ade80]">
-                                NEW
-                              </span>
+                              <span className="ml-1.5 text-[9px] font-semibold px-1 py-px rounded bg-[rgba(34,197,94,0.15)] text-[#4ade80]">NEW</span>
                             )}
                           </div>
-                          <div className="text-[10px] text-[#8888a0] sm:hidden">
-                            {faction}
-                          </div>
+                          <div className="text-[10px] text-[#8888a0] sm:hidden">{faction}</div>
                         </td>
-                        <td className="px-4 py-[7px] border-b border-white/[0.08] text-[12px] text-[#8888a0] group-hover:bg-[#1a1a22] hidden sm:table-cell">
-                          {faction}
-                        </td>
-                        <td className="px-4 py-[7px] border-b border-white/[0.08] text-xs text-[#8888a0] text-center group-hover:bg-[#1a1a22]">
-                          {det.dp}
-                        </td>
+                        <td className="px-4 py-[7px] border-b border-white/[0.08] text-[12px] text-[#8888a0] group-hover:bg-[#1a1a22] hidden sm:table-cell">{faction}</td>
+                        <td className="px-4 py-[7px] border-b border-white/[0.08] text-xs text-[#8888a0] text-center group-hover:bg-[#1a1a22]">{det.dp}</td>
                         <td className="px-4 py-[7px] border-b border-white/[0.08] group-hover:bg-[#1a1a22]">
                           <DispositionBadge disposition={det.d} />
                         </td>
                         <td className="px-4 py-[7px] border-b border-white/[0.08] group-hover:bg-[#1a1a22]">
                           {!taken && (
-                            <button
-                              onClick={() => addDetachment(det, faction)}
-                              className="text-[11px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors"
-                            >
+                            <button onClick={() => addDetachment(det, faction)} className="text-[11px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors">
                               + Tilføj
                             </button>
                           )}
@@ -661,13 +518,8 @@ export default function RosterPage() {
                   })}
                   {filteredDetachments.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={5}
-                        className="px-4 py-8 text-center text-[#8888a0]"
-                      >
-                        Ingen detachments matcher
-                        {remainingDp < 3 &&
-                          ` (max ${remainingDp} DP ledig i hær ${activeArmy + 1})`}
+                      <td colSpan={5} className="px-4 py-8 text-center text-[#8888a0]">
+                        Ingen detachments matcher{remainingDp < 3 && ` (max ${remainingDp} DP ledig i hær ${activeArmy + 1})`}
                       </td>
                     </tr>
                   )}
