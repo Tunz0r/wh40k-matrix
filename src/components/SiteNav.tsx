@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { TEAM_SLUG, TEAM_NAME } from "@/lib/team";
 import { useActiveTournament } from "@/lib/active-tournament";
+import { useActivePlayer } from "@/lib/active-player";
 
 // The matrix itself lives on "/" — reachable via the brand logo, so it
 // doesn't need its own nav item.
@@ -56,6 +57,7 @@ export default function SiteNav() {
   const [open, setOpen] = useState(false);
   const { active, activeId, activeSlug } = useActiveTournament();
   const activeName = active?.name ?? "Vælg turnering";
+  const { players, activePlayerId, setActivePlayer } = useActivePlayer();
   // Team Room + Turnering follow the active tournament; others are static.
   const links = LINKS.map((l) => {
     if (l.label === "Team Room") return { ...l, href: `/team/${activeSlug}` };
@@ -91,11 +93,28 @@ export default function SiteNav() {
             href="/tournament"
             onClick={() => setOpen(false)}
             title="Skift turnering"
-            className="mr-2 shrink-0 flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md border border-white/[0.1] text-[#c084fc] hover:border-[#a855f7]/50 hover:bg-[rgba(168,85,247,0.08)] transition-colors max-w-[170px]"
+            className="mr-1.5 shrink-0 flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md border border-white/[0.1] text-[#c084fc] hover:border-[#a855f7]/50 hover:bg-[rgba(168,85,247,0.08)] transition-colors max-w-[150px]"
           >
             <span className="truncate">{activeName}</span>
             <span className="text-[#8888a0] text-[10px] shrink-0">⇄</span>
           </Link>
+
+          {/* Who are you — global identity selector */}
+          {players.length > 0 && (
+            <select
+              value={activePlayerId ?? ""}
+              onChange={(e) => setActivePlayer(e.target.value || null)}
+              title="Hvem er du?"
+              className="mr-2 shrink-0 text-[11px] font-medium px-1.5 py-1 rounded-md border border-white/[0.1] bg-[#1a1a22] text-[#4ade80] outline-none focus:border-[#4ade80] max-w-[120px]"
+            >
+              <option value="">Vælg spiller</option>
+              {players.map((p) => (
+                <option key={p.id} value={p.id} className="bg-[#1a1a22] text-[#e8e8f0]">
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Desktop links */}
           <div className="hidden sm:flex items-center gap-1 flex-1">
