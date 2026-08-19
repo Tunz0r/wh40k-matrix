@@ -10,7 +10,7 @@
 // wired and new tournaments share the estimate pool until that lands.
 
 import { ref, set, get, update, onValue, off } from "firebase/database";
-import { getDb, authReady } from "./firebase";
+import { getDb, authReady, currentUser } from "./firebase";
 import { TEAM_SLUG, TEAM_NAME } from "./team";
 
 export type TournamentStatus = "upcoming" | "active" | "completed";
@@ -85,11 +85,23 @@ export async function getTournament(id: string): Promise<TournamentMeta | null> 
   return snap.exists() ? (snap.val() as TournamentMeta) : null;
 }
 
+// Create a tournament. The signed-in user becomes its owner (captain) and it is
+// added to their tournament index — all atomically so ownership + visibility
+// exist the instant the registry entry does. Any signed-in user may create one.
 export async function addTournament(
   meta: Omit<TournamentMeta, "createdAt">
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${REGISTRY}/${meta.id}`), { ...meta, createdAt: Date.now() });
+  const uid = currentUser()?.uid;
+  const entry = { ...meta, createdAt: Date.now() };
+  const updates: Record<string, unknown> = {
+    [`${REGISTRY}/${meta.id}`]: entry,
+  };
+  if (uid) {
+    updates[`tournaments/_owners/${meta.dataSlug}/${uid}`] = true;
+    updates[`tournaments/_myTournaments/${uid}/${meta.id}`] = true;
+  }
+  await update(ref(getDb()), updates);
 }
 
 export async function updateTournament(

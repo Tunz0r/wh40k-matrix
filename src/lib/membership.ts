@@ -21,13 +21,16 @@
 // A Firebase uid's email is NEVER stored in the RTDB — only a display name.
 
 import { ref, get, set, update, onValue, off } from "firebase/database";
-import { getDb, authReady } from "./firebase";
+import { getDb, authReady, currentUser } from "./firebase";
 import type { Player } from "./players";
 import type { TournamentMeta } from "./tournaments-registry";
 import type { TournamentDoc } from "./tournament-db";
 
 const ADMINS = "tournaments/_admins";
 const COACHES = "tournaments/_coaches";
+// Per-tournament ownership (captains), keyed by dataSlug — same key space the
+// tournament-doc + estimate nodes use, so rules can check ownership directly.
+const OWNERS = "tournaments/_owners";
 const MY_TOURNAMENTS = "tournaments/_myTournaments";
 const USERS = "tournaments/_users";
 const REGISTRY = "tournaments/_registry";
@@ -135,6 +138,20 @@ export function subscribeToCoaches(callback: (coaches: CoachMap) => void): () =>
   return adminSubscribe(COACHES, (val) => callback((val as CoachMap) || {}));
 }
 
+export type OwnerMap = Record<string, Record<string, true>>; // dataSlug -> {uid: true}
+
+export function subscribeToOwners(callback: (owners: OwnerMap) => void): () => void {
+  return adminSubscribe(OWNERS, (val) => callback((val as OwnerMap) || {}));
+}
+
+// Add/remove a co-captain on a tournament (by its dataSlug), then refresh the
+// index. Callable by an existing owner or the super-admin (rules enforce).
+export async function setOwner(dataSlug: string, uid: string, on: boolean): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `${OWNERS}/${dataSlug}/${uid}`), on ? true : null);
+  await recomputeMembership();
+}
+
 // Assign/unassign a coach to one tournament, then refresh the index so it takes
 // effect immediately.
 export async function assignCoach(
@@ -188,15 +205,33 @@ export async function recomputeMembership(): Promise<void> {
   await authReady();
   const db = getDb();
 
-  const [registrySnap, playersSnap, coachesSnap] = await Promise.all([
+  const [registrySnap, playersSnap, coachesSnap, ownersSnap] = await Promise.all([
     get(ref(db, REGISTRY)),
     get(ref(db, PLAYERS)),
     get(ref(db, COACHES)),
+    get(ref(db, OWNERS)),
   ]);
 
   const registry = (registrySnap.val() as Record<string, TournamentMeta>) || {};
   const players = (playersSnap.val() as Record<string, Player>) || {};
   const coaches = (coachesSnap.val() as CoachMap) || {};
+  // Ownership keyed by dataSlug: { dataSlug: { uid: true } }
+  const owners = (ownersSnap.val() as Record<string, Record<string, true>>) || {};
+
+  // Super-admin bootstrap: claim ownership of any owner-less tournament (e.g.
+  // WTC 2026, created before ownership existed) for the super-admin running this.
+  const meUid = currentUser()?.uid;
+  if (meUid && (await get(ref(db, `${ADMINS}/${meUid}`))).exists()) {
+    const claims: Record<string, true> = {};
+    for (const meta of Object.values(registry)) {
+      const slug = meta.dataSlug;
+      if (!owners[slug] || Object.keys(owners[slug]).length === 0) {
+        owners[slug] = { ...(owners[slug] || {}), [meUid]: true };
+        claims[`${OWNERS}/${slug}/${meUid}`] = true;
+      }
+    }
+    if (Object.keys(claims).length) await update(ref(db), claims);
+  }
 
   const uidByPlayer = new Map<string, string>();
   for (const p of Object.values(players)) if (p.authUid) uidByPlayer.set(p.id, p.authUid);
@@ -241,6 +276,9 @@ export async function recomputeMembership(): Promise<void> {
 
       // Coaches assigned to this tournament
       for (const uid of coachUidsByTournament.get(meta.id) || []) grant(uid, meta);
+
+      // Owners (captains) of this tournament
+      for (const uid of Object.keys(owners[meta.dataSlug] || {})) grant(uid, meta);
     })
   );
 

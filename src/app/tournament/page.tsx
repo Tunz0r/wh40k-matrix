@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { TEAM_NAME } from "@/lib/team";
 import {
   ensureRegistry,
   subscribeToRegistry,
@@ -56,6 +55,7 @@ export default function TournamentIndexPage() {
 
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
+  const [teamName, setTeamName] = useState("");
   const [teamSize, setTeamSize] = useState(8);
   const [busy, setBusy] = useState(false);
   const proposedId = useMemo(() => slugify(name.trim()), [name]);
@@ -63,18 +63,20 @@ export default function TournamentIndexPage() {
 
   async function create() {
     const nm = name.trim();
-    if (!nm || !proposedId || idTaken || busy) return;
+    if (!nm || !proposedId || idTaken || !teamName.trim() || busy) return;
     setBusy(true);
     try {
       await addTournament({
         id: proposedId,
         name: nm,
         dataSlug: proposedId,
-        teamName: TEAM_NAME,
+        teamName: teamName.trim(),
         teamSize,
         status: "upcoming",
       });
+      setActive(proposedId);
       setName("");
+      setTeamName("");
       setAdding(false);
     } finally {
       setBusy(false);
@@ -87,14 +89,12 @@ export default function TournamentIndexPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">Turneringer</h1>
           <span className="text-[11px] text-[#8888a0]">{list.length} i alt</span>
-          {isAdmin && (
-            <button
-              onClick={() => setAdding((v) => !v)}
-              className="ml-auto text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-3 py-1.5 rounded-lg transition-colors"
-            >
-              {adding ? "Annullér" : "+ Tilføj turnering"}
-            </button>
-          )}
+          <button
+            onClick={() => setAdding((v) => !v)}
+            className="ml-auto text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-3 py-1.5 rounded-lg transition-colors"
+          >
+            {adding ? "Annullér" : "+ Ny turnering"}
+          </button>
         </div>
       </header>
 
@@ -113,11 +113,21 @@ export default function TournamentIndexPage() {
               />
               <button
                 onClick={create}
-                disabled={!proposedId || idTaken || busy}
+                disabled={!proposedId || idTaken || !teamName.trim() || busy}
                 className="text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-4 py-2 rounded-lg transition-colors disabled:opacity-40"
               >
                 Opret
               </button>
+            </div>
+            <div className="mt-2">
+              <label className="text-[11px] text-[#8888a0] font-semibold">Holdnavn</label>
+              <input
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") create(); }}
+                placeholder="f.eks. Team Danmark"
+                className="w-full h-9 mt-1 px-3 text-[13px] rounded-lg bg-[#1a1a22] border border-white/[0.12] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+              />
             </div>
             <div className="flex items-center gap-2 mt-2">
               <label className="text-[11px] text-[#8888a0]">Holdstørrelse</label>

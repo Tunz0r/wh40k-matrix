@@ -4,13 +4,13 @@ import { type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
 import { useActivePlayer } from "@/lib/active-player";
 import LoginScreen from "./LoginScreen";
-import PendingScreen from "./PendingScreen";
+import Landing from "./Landing";
 
 // The single gate in front of the whole app:
 //   loading                    -> spinner
 //   not signed in              -> LoginScreen
-//   signed in, no access grant -> PendingScreen (awaiting approval)
-//   player / coach / admin      -> the app
+//   signed in, no access grant -> Landing (create your own tournament / join)
+//   owner / player / coach / admin -> the app
 export default function AuthGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const { access } = useActivePlayer();
@@ -24,7 +24,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (!user) return <LoginScreen />;
-  if (!access) return <PendingScreen />;
+  if (!access) return <Landing />;
 
   return <>{children}</>;
 }
