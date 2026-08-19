@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import SiteNav from "@/components/SiteNav";
 import AuthGate from "@/components/AuthGate";
 import { AuthProvider } from "@/lib/auth";
 import { ActiveTournamentProvider } from "@/lib/active-tournament";
@@ -28,10 +27,7 @@ export default function RootLayout({
         <AuthProvider>
           <ActiveTournamentProvider>
             <ActivePlayerProvider>
-              <AuthGate>
-                <SiteNav />
-                {children}
-              </AuthGate>
+              <AuthGate>{children}</AuthGate>
             </ActivePlayerProvider>
           </ActiveTournamentProvider>
         </AuthProvider>

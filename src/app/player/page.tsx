@@ -84,15 +84,12 @@ export default function PlayerPage() {
     } catch {}
   }, [activeSlug]);
 
-  const { activePlayer, activePlayerId, players, setActivePlayer } = useActivePlayer();
+  const { activePlayer, activePlayerId, players, setActivePlayer, effectiveIdx, canManage } = useActivePlayer();
 
   const armies = useMemo(() => doc?.roster?.armies || [], [doc]);
-  // "My army" = the roster slot in the ACTIVE tournament linked to my identity,
-  // resolved from playerId (login-ready) rather than a local army pick.
-  const myIdx = useMemo(() => {
-    const i = armies.findIndex((a) => a.playerId && a.playerId === activePlayerId);
-    return i >= 0 ? i : null;
-  }, [armies, activePlayerId]);
+  // "My army" = the roster slot I've claimed in the ACTIVE tournament (or the
+  // slot an owner/admin is acting as). Resolved by active-player from claimedByUid.
+  const myIdx = effectiveIdx !== null && effectiveIdx < armies.length ? effectiveIdx : null;
   const myArmy = myIdx !== null ? armies[myIdx] : null;
   const myFaction = myArmy?.faction || "";
 
@@ -545,35 +542,42 @@ export default function PlayerPage() {
       </header>
 
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
-        {/* Identity — who are you (stand-in for login) */}
-        <div className="rounded-xl border border-white/[0.08] p-4">
-          <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-2">Hvem er du?</h2>
-          {players.length === 0 ? (
-            <p className="text-[11px] text-[#8888a0]">Ingen spillere endnu.</p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-              {players.map((p) => {
-                const army = armies.find((a) => a.playerId === p.id);
-                const isMe = p.id === activePlayerId;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => setActivePlayer(p.id)}
-                    className={`text-left rounded-lg border p-2 transition-colors ${isMe ? "border-[#a855f7]/60 bg-[#a855f7]/10" : "border-white/[0.08] hover:border-white/[0.18]"}`}
-                  >
-                    <div className="text-[11px] text-[#e8e8f0] font-medium truncate">{p.name}</div>
-                    <div className="text-[9px] text-[#8888a0] truncate">{army ? army.faction : "ikke i denne turnering"}</div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {activePlayer && myIdx === null && (
-            <p className="text-[10px] text-[#facc15] mt-2">
-              {activePlayer.name} er ikke tildelt en hær i denne turnering.
+        {/* Identity. Owners/admins can act as any slot; a normal player is
+            simply their claimed slot (or is prompted to claim one). */}
+        {canManage ? (
+          <div className="rounded-xl border border-white/[0.08] p-4">
+            <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-2">Optræd som plads</h2>
+            {players.length === 0 ? (
+              <p className="text-[11px] text-[#8888a0]">Ingen pladser på rosteret endnu.</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {players.map((p) => {
+                  const idx = parseInt(p.id.slice(1), 10);
+                  const army = armies[idx];
+                  const isMe = p.id === activePlayerId;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setActivePlayer(p.id)}
+                      className={`text-left rounded-lg border p-2 transition-colors ${isMe ? "border-[#a855f7]/60 bg-[#a855f7]/10" : "border-white/[0.08] hover:border-white/[0.18]"}`}
+                    >
+                      <div className="text-[11px] text-[#e8e8f0] font-medium truncate">{army?.player?.trim() || p.name}</div>
+                      <div className="text-[9px] text-[#8888a0] truncate">{army ? army.faction : "—"}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : myIdx === null ? (
+          <div className="rounded-xl border border-white/[0.08] p-4">
+            <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-2">Min plads</h2>
+            <p className="text-[11px] text-[#8888a0]">
+              Du har ikke gjort krav på en plads i denne turnering endnu. Bed din kaptajn om at åbne
+              holdet, så kan du vælge din plads.
             </p>
-          )}
-        </div>
+          </div>
+        ) : null}
 
         {myIdx !== null && myArmy && (
           <>

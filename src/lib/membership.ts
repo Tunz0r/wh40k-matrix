@@ -123,6 +123,36 @@ export function subscribeToIsAdmin(
   };
 }
 
+// Whether the signed-in user owns (is a captain of) a given tournament dataSlug.
+// The _owners/{slug} node is readable by its owners, so a non-owner just gets a
+// denied read -> false.
+export function subscribeToIsOwner(
+  slug: string | null,
+  uid: string | null,
+  callback: (isOwner: boolean) => void
+): () => void {
+  if (!slug || !uid) {
+    callback(false);
+    return () => {};
+  }
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const r = ref(getDb(), `${OWNERS}/${slug}/${uid}`);
+    onValue(
+      r,
+      (snap) => callback(snap.exists()),
+      () => callback(false)
+    );
+    cleanup = () => off(r);
+  });
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
+}
+
 export async function setAdmin(uid: string, on: boolean): Promise<void> {
   await authReady();
   await set(ref(getDb(), `${ADMINS}/${uid}`), on ? true : null);
@@ -221,13 +251,14 @@ export async function recomputeMembership(): Promise<void> {
   // Super-admin bootstrap: claim ownership of any owner-less tournament (e.g.
   // WTC 2026, created before ownership existed) for the super-admin running this.
   const meUid = currentUser()?.uid;
-  if (meUid && (await get(ref(db, `${ADMINS}/${meUid}`))).exists()) {
+  const isSuperAdmin = !!meUid && (await get(ref(db, `${ADMINS}/${meUid}`))).exists();
+  if (isSuperAdmin) {
     const claims: Record<string, true> = {};
     for (const meta of Object.values(registry)) {
       const slug = meta.dataSlug;
       if (!owners[slug] || Object.keys(owners[slug]).length === 0) {
-        owners[slug] = { ...(owners[slug] || {}), [meUid]: true };
-        claims[`${OWNERS}/${slug}/${meUid}`] = true;
+        owners[slug] = { ...(owners[slug] || {}), [meUid!]: true };
+        claims[`${OWNERS}/${slug}/${meUid!}`] = true;
       }
     }
     if (Object.keys(claims).length) await update(ref(db), claims);
@@ -249,6 +280,10 @@ export async function recomputeMembership(): Promise<void> {
   const teamMembers: Record<string, true> = {};
   const myTournaments: Record<string, Record<string, true>> = {};
   const profileOwners: Record<string, Record<string, string>> = {};
+  // One-time migration (super-admin only): backfill roster slots that still use
+  // the legacy global playerId with claimedByUid, so per-tournament identity
+  // resolves. Path -> uid.
+  const rosterClaims: Record<string, string> = {};
 
   const grant = (uid: string, meta: TournamentMeta) => {
     teamMembers[uid] = true;
@@ -265,13 +300,19 @@ export async function recomputeMembership(): Promise<void> {
       const doc = (await get(ref(db, `tournaments/${meta.dataSlug}`))).val() as TournamentDoc | null;
       const armies = doc?.roster?.armies || [];
 
-      // Rostered players
+      // Rostered players — per-tournament identity is the slot's claimedByUid;
+      // fall back to the legacy global playerId->authUid until a roster is
+      // migrated, so nothing breaks mid-transition.
       armies.forEach((army, idx) => {
-        const uid = army.playerId ? uidByPlayer.get(army.playerId) : undefined;
+        const legacyUid = army.playerId ? uidByPlayer.get(army.playerId) : undefined;
+        const uid = army.claimedByUid || legacyUid;
         if (!uid) return;
         grant(uid, meta);
         profileOwners[meta.dataSlug] = profileOwners[meta.dataSlug] || {};
         profileOwners[meta.dataSlug][`a${idx}`] = uid;
+        if (isSuperAdmin && !army.claimedByUid && legacyUid) {
+          rosterClaims[`tournaments/${meta.dataSlug}/roster/armies/${idx}/claimedByUid`] = legacyUid;
+        }
       });
 
       // Coaches assigned to this tournament
@@ -288,6 +329,9 @@ export async function recomputeMembership(): Promise<void> {
     _myTournaments: myTournaments,
     _profileOwners: profileOwners,
   });
+
+  // Apply the legacy->claimedByUid roster migration (super-admin only).
+  if (Object.keys(rosterClaims).length) await update(ref(db), rosterClaims);
 }
 
 // --- Access + tournament listing (client, self-readable) -------------------

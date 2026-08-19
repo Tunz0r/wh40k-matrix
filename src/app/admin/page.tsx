@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useActivePlayer } from "@/lib/active-player";
 import { useAuth } from "@/lib/auth";
-import { addPlayer, type Player } from "@/lib/players";
+import { addPlayer, subscribeToPlayers, type Player } from "@/lib/players";
 import {
   subscribeToUsers,
   subscribeToAdmins,
@@ -24,9 +24,13 @@ import { subscribeToRegistry, type TournamentMeta } from "@/lib/tournaments-regi
 // specific tournaments, or make admin. Roles are computed from the sources of
 // truth, never stored, so they can't drift.
 export default function AdminPage() {
-  const { players, isAdmin } = useActivePlayer();
+  const { isAdmin } = useActivePlayer();
   const { user } = useAuth();
   const currentUid = user?.uid;
+  // The legacy global player pool (super-admin tool). Per-tournament identity now
+  // lives on roster slots (claimedByUid); this pool + binding stays for WTC 2026.
+  const [players, setPlayers] = useState<Player[]>([]);
+  useEffect(() => subscribeToPlayers(setPlayers), []);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [admins, setAdmins] = useState<Set<string>>(new Set());
   const [coaches, setCoaches] = useState<CoachMap>({});

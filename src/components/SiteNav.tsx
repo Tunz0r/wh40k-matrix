@@ -58,7 +58,7 @@ export default function SiteNav() {
   const [open, setOpen] = useState(false);
   const { active, activeId, activeSlug } = useActiveTournament();
   const activeName = active?.name ?? "Vælg turnering";
-  const { players, activePlayer, activePlayerId, setActivePlayer, isAdmin } = useActivePlayer();
+  const { players, activePlayer, activePlayerId, setActivePlayer, isAdmin, canManage } = useActivePlayer();
   const { signOutUser } = useAuth();
   // Team Room + Turnering follow the active tournament; others are static.
   const links = LINKS.map((l) => {
@@ -99,16 +99,16 @@ export default function SiteNav() {
             <span className="text-[#8888a0] text-[10px] shrink-0">⇄</span>
           </Link>
 
-          {/* Identity. Admins get an override <select> (act as any player);
-              a normal player sees a fixed chip of who they're logged in as. */}
-          {isAdmin ? (
+          {/* Identity. Owners/admins get an override <select> (act as any slot
+              in this tournament); a normal player sees a chip of their slot. */}
+          {canManage ? (
             <select
               value={activePlayerId ?? ""}
               onChange={(e) => setActivePlayer(e.target.value || null)}
-              title="Optræd som spiller (admin)"
+              title="Optræd som spiller"
               className="mr-2 shrink-0 text-[11px] font-medium px-1.5 py-1 rounded-md border border-[#f0b429]/40 bg-[#1a1a22] text-[#f0b429] outline-none focus:border-[#f0b429] max-w-[130px]"
             >
-              <option value="">Admin</option>
+              <option value="">{isAdmin ? "Admin" : "Kaptajn"}</option>
               {players.map((p) => (
                 <option key={p.id} value={p.id} className="bg-[#1a1a22] text-[#e8e8f0]">
                   {p.name}
@@ -142,6 +142,18 @@ export default function SiteNav() {
                 </Link>
               );
             })}
+            {canManage && (
+              <Link
+                href="/manage"
+                className={`px-2 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                  pathname.startsWith("/manage")
+                    ? "bg-[rgba(168,85,247,0.15)] text-[#c084fc]"
+                    : "text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04]"
+                }`}
+              >
+                Administrér
+              </Link>
+            )}
             {isAdmin && (
               <Link
                 href="/admin"
@@ -203,6 +215,15 @@ export default function SiteNav() {
               </Link>
             );
           })}
+          {canManage && (
+            <Link
+              href="/manage"
+              onClick={() => setOpen(false)}
+              className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#c084fc] hover:bg-white/[0.04] transition-colors"
+            >
+              Administrér
+            </Link>
+          )}
           {isAdmin && (
             <Link
               href="/admin"

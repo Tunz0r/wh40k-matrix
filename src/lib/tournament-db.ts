@@ -60,6 +60,7 @@ export interface TournamentDoc {
   eventDate?: string | null; // ISO date of the tournament, for the readiness countdown
   warmups?: WarmupsNode; // prep-game history, survives tournament resets
   profiles?: ProfilesNode; // players' own archetypes, survives tournament resets
+  _join?: { open?: boolean }; // owner-controlled onboarding window (Phase 2 self-claim)
 }
 
 // Patch tournament-level settings (event date etc.) without touching rounds.
@@ -230,6 +231,53 @@ export async function deleteWarmupGame(
 ): Promise<void> {
   await authReady();
   await remove(ref(getDb(), `tournaments/${slug}/warmups/a${armyIdx}/${id}`));
+}
+
+// --- Join window + slot claiming (Phase 2 self-service onboarding) ---
+
+// Owner toggles the onboarding window. While open, invited teammates can read
+// the roster and claim an unclaimed slot themselves.
+export async function setJoinOpen(slug: string, open: boolean): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `tournaments/${slug}/_join/open`), open ? true : null);
+}
+
+// A teammate self-claims a roster slot (writes their uid onto it). Rules allow
+// this only for an unclaimed slot while the join window is open, as yourself.
+export async function claimSlot(slug: string, armyIdx: number, uid: string): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}/claimedByUid`), uid);
+}
+
+// Owner/admin frees a slot (un-claim / kick).
+export async function releaseSlot(slug: string, armyIdx: number): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}/claimedByUid`), null);
+}
+
+// Roster-only subscription — readable by members/owners always, and by anyone
+// while the join window is open (so a joiner can pick a slot without seeing the
+// rest of the tournament's data).
+export function subscribeToRoster(
+  slug: string,
+  callback: (roster: RosterExport | null) => void
+): () => void {
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const r = ref(getDb(), `tournaments/${slug}/roster`);
+    onValue(
+      r,
+      (snap) => callback((snap.val() as RosterExport | null) || null),
+      () => callback(null)
+    );
+    cleanup = () => off(r);
+  });
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
 }
 
 export function subscribeToTournament(

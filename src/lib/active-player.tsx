@@ -1,12 +1,10 @@
 "use client";
 
-// The current identity, resolved from the signed-in Firebase user: the active
-// player is the Player whose `authUid` matches the user's uid. Pages read
-// `activePlayer` and nothing downstream changed when real auth landed.
-//
-// Admins keep a localStorage override (the old "who are you" pick) so a captain
-// can act as any player during coaching/testing; for a normal player identity
-// is fixed by their login and `setActivePlayer` is a no-op.
+// The current identity is now PER-TOURNAMENT: you are whichever roster slot in
+// the ACTIVE tournament you've claimed (roster.armies[i].claimedByUid === your
+// uid). No global player pool. Owners/admins can "act as" any slot via an
+// override. Back-compat shims (activePlayer / activePlayerId / players, with ids
+// "a{idx}") keep existing consumers working.
 
 import {
   createContext,
@@ -16,77 +14,90 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { subscribeToPlayers, type Player } from "./players";
-import { subscribeToIsAdmin, subscribeToHasAccess } from "./membership";
+import { subscribeToIsAdmin, subscribeToHasAccess, subscribeToIsOwner } from "./membership";
+import { subscribeToRoster } from "./tournament-db";
+import { useActiveTournament } from "./active-tournament";
 import { useAuth } from "./auth";
 
-const KEY = "wtc-active-player"; // admin-only override
+interface Slot {
+  idx: number;
+  name: string;
+  claimedByUid?: string;
+}
 
 interface ActivePlayerCtx {
-  players: Player[];
-  activePlayer: Player | null;
+  slots: Slot[];
+  myArmyIdx: number | null; // the slot I've claimed in the active tournament
+  effectiveIdx: number | null; // my slot, or the owner/admin "act as" override
+  isAdmin: boolean; // global super-admin
+  isOwner: boolean; // owner (captain) of the active tournament
+  canManage: boolean; // isAdmin || isOwner
+  access: boolean;
+  setOverrideIdx: (i: number | null) => void;
+  // --- back-compat shims (ids are "a{idx}") ---
+  players: { id: string; name: string }[];
   activePlayerId: string | null;
-  isAdmin: boolean;
-  bound: boolean; // a Player matched the signed-in uid
-  access: boolean; // granted access to anything (player OR coach OR admin)
-  setActivePlayer: (id: string | null) => void; // admin override only
+  activePlayer: { id: string; name: string } | null;
+  setActivePlayer: (id: string | null) => void;
 }
 
 const Ctx = createContext<ActivePlayerCtx | null>(null);
 
 export function ActivePlayerProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [players, setPlayers] = useState<Player[]>([]);
+  const { activeSlug } = useActiveTournament();
+  const [slots, setSlots] = useState<Slot[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const [hasGrant, setHasGrant] = useState(false);
-  const [overrideId, setOverrideId] = useState<string | null>(null);
+  const [overrideIdx, setOverrideIdx] = useState<number | null>(null);
 
-  useEffect(() => subscribeToPlayers(setPlayers), []);
   useEffect(() => subscribeToIsAdmin(user?.uid ?? null, setIsAdmin), [user?.uid]);
   useEffect(() => subscribeToHasAccess(user?.uid ?? null, setHasGrant), [user?.uid]);
+  useEffect(() => subscribeToIsOwner(activeSlug, user?.uid ?? null, setIsOwner), [activeSlug, user?.uid]);
 
+  // The active tournament's roster slots.
   useEffect(() => {
-    const saved = typeof localStorage !== "undefined" ? localStorage.getItem(KEY) : null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (saved) setOverrideId(saved);
-  }, []);
+    setOverrideIdx(null); // an override is tournament-specific
+    return subscribeToRoster(activeSlug, (roster) => {
+      const armies = roster?.armies || [];
+      setSlots(armies.map((a, idx) => ({ idx, name: a.player?.trim() || `Plads ${idx + 1}`, claimedByUid: a.claimedByUid })));
+    });
+  }, [activeSlug]);
+
+  const canManage = isAdmin || isOwner;
+
+  const myArmyIdx = useMemo(
+    () => (user ? slots.find((s) => s.claimedByUid === user.uid)?.idx ?? null : null),
+    [slots, user]
+  );
+
+  const effectiveIdx = canManage && overrideIdx !== null ? overrideIdx : myArmyIdx;
 
   const setActivePlayer = (id: string | null) => {
-    if (!isAdmin) return; // identity is fixed by login for normal players
-    setOverrideId(id);
-    try {
-      if (id) localStorage.setItem(KEY, id);
-      else localStorage.removeItem(KEY);
-    } catch {}
+    if (!canManage) return;
+    setOverrideIdx(id ? parseInt(id.slice(1), 10) : null);
   };
 
-  // The player bound to this login.
-  const boundPlayer = useMemo(
-    () => (user ? players.find((p) => p.authUid === user.uid) ?? null : null),
-    [players, user]
-  );
-
-  // Admins may override; everyone else is their bound player.
-  const activePlayer = useMemo(() => {
-    if (isAdmin && overrideId) {
-      return players.find((p) => p.id === overrideId) ?? boundPlayer;
-    }
-    return boundPlayer;
-  }, [isAdmin, overrideId, players, boundPlayer]);
-
-  const value = useMemo<ActivePlayerCtx>(
-    () => ({
-      players,
-      activePlayer,
-      activePlayerId: activePlayer?.id ?? null,
+  const value = useMemo<ActivePlayerCtx>(() => {
+    const players = slots.map((s) => ({ id: `a${s.idx}`, name: s.name }));
+    const activePlayer = effectiveIdx !== null ? players.find((p) => p.id === `a${effectiveIdx}`) ?? null : null;
+    return {
+      slots,
+      myArmyIdx,
+      effectiveIdx,
       isAdmin,
-      bound: boundPlayer !== null,
-      access: isAdmin || boundPlayer !== null || hasGrant,
+      isOwner,
+      canManage,
+      access: isAdmin || hasGrant || myArmyIdx !== null,
+      setOverrideIdx: (i) => canManage && setOverrideIdx(i),
+      players,
+      activePlayerId: effectiveIdx !== null ? `a${effectiveIdx}` : null,
+      activePlayer,
       setActivePlayer,
-    }),
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [players, activePlayer, isAdmin, boundPlayer, hasGrant]
-  );
+  }, [slots, myArmyIdx, effectiveIdx, isAdmin, isOwner, canManage, hasGrant]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -94,12 +105,17 @@ export function ActivePlayerProvider({ children }: { children: ReactNode }) {
 export function useActivePlayer(): ActivePlayerCtx {
   return (
     useContext(Ctx) ?? {
-      players: [],
-      activePlayer: null,
-      activePlayerId: null,
+      slots: [],
+      myArmyIdx: null,
+      effectiveIdx: null,
       isAdmin: false,
-      bound: false,
+      isOwner: false,
+      canManage: false,
       access: false,
+      setOverrideIdx: () => {},
+      players: [],
+      activePlayerId: null,
+      activePlayer: null,
       setActivePlayer: () => {},
     }
   );

@@ -4,8 +4,9 @@ export interface RosterArmy {
   faction: string;
   detachments: string[];
   disposition: Disposition | null;
-  player?: string; // display name (legacy / fallback)
-  playerId?: string; // link to the Player entity (see lib/players)
+  player?: string; // display name (label)
+  playerId?: string; // DEPRECATED: legacy link to the global Player pool
+  claimedByUid?: string; // the login that owns this slot in THIS tournament (per-tournament identity)
 }
 
 export interface RosterExport {
