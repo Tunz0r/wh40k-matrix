@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { subscribeToRoster, claimSlot, setSlotName } from "@/lib/tournament-db";
 import type { RosterExport } from "@/lib/roster";
@@ -57,15 +56,18 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
             Kaptajnen har åbnet tilmelding, men der er ingen pladser på rosteret endnu.
           </p>
         ) : claimedMine ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="text-[12px] text-[#4ade80] leading-relaxed">
-              Du har valgt <span className="font-semibold">{roster.armies[myIdx].player?.trim() || `Plads ${myIdx + 1}`}</span>{" "}
-              ({roster.armies[myIdx].faction}). Afventer at kaptajnen færdiggør — genindlæs siden
-              bagefter, så har du adgang.
+              Du er med på holdet — plads{" "}
+              <span className="font-semibold">{roster.armies[myIdx].player?.trim() || `${myIdx + 1}`}</span>. Du
+              har adgang med det samme; din hær vælger du senere.
             </p>
-            <Link href="/tournament" className="text-[11px] text-[#c084fc] hover:underline">
-              Til turneringer
-            </Link>
+            <button
+              onClick={() => (window.location.href = "/")}
+              className="text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-4 py-2 rounded-lg transition-colors"
+            >
+              Gå ind på holdet
+            </button>
           </div>
         ) : (
           <div className="space-y-2">

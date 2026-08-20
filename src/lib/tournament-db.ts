@@ -242,11 +242,21 @@ export async function setJoinOpen(slug: string, open: boolean): Promise<void> {
   await set(ref(getDb(), `tournaments/${slug}/_join/open`), open ? true : null);
 }
 
-// A teammate self-claims a roster slot (writes their uid onto it). Rules allow
-// this only for an unclaimed slot while the join window is open, as yourself.
+// A teammate self-claims a roster slot AND admits themselves — no captain
+// action needed. One atomic write: the slot's claimedByUid, plus the two
+// self-writable access markers (`_myTournaments` so the app lets them in, and
+// `_claimants` so the tightened rules grant them read/estimate access). The
+// captain's later recompute folds them into full membership (incl. profile
+// SoD), but they're in immediately. Rules gate every path (unclaimed slot,
+// self, join open). `slug` doubles as the tournament id (new tournaments have
+// id === dataSlug).
 export async function claimSlot(slug: string, armyIdx: number, uid: string): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}/claimedByUid`), uid);
+  await update(ref(getDb()), {
+    [`tournaments/${slug}/roster/armies/${armyIdx}/claimedByUid`]: uid,
+    [`tournaments/_myTournaments/${uid}/${slug}`]: true,
+    [`tournaments/_claimants/${slug}/${uid}`]: true,
+  });
 }
 
 // Set the display name on a slot. A claimer may set their own name on the slot
