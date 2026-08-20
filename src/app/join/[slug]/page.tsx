@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { subscribeToRoster, claimSlot } from "@/lib/tournament-db";
+import { subscribeToRoster, claimSlot, setSlotName } from "@/lib/tournament-db";
 import type { RosterExport } from "@/lib/roster";
 
 // Invite landing: a signed-in user opens /join/{dataSlug} (shared by the owner
@@ -28,6 +28,8 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
     setErr(null);
     try {
       await claimSlot(slug, idx, user.uid);
+      // Put my name on the seat now that I own it (empty seats have no label yet).
+      await setSlotName(slug, idx, user.displayName || user.email || "Spiller").catch(() => {});
     } catch {
       setErr("Kunne ikke vælge pladsen. Måske er den lige blevet taget, eller holdet er lukket.");
     }
@@ -84,7 +86,7 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
                   >
                     <span className="text-[12px] text-[#e8e8f0] flex-1">
                       {a.player?.trim() || `Plads ${idx + 1}`}
-                      <span className="text-[#8888a0]"> · {a.faction}</span>
+                      {a.faction && <span className="text-[#8888a0]"> · {a.faction}</span>}
                     </span>
                     <span className="text-[10px] text-[#8888a0]">{taken ? "optaget" : busy === idx ? "…" : "vælg"}</span>
                   </button>

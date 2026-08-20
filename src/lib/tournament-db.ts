@@ -249,6 +249,14 @@ export async function claimSlot(slug: string, armyIdx: number, uid: string): Pro
   await set(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}/claimedByUid`), uid);
 }
 
+// Set the display name on a slot. A claimer may set their own name on the slot
+// they've just claimed (rules allow it once claimedByUid is theirs); owners can
+// set any slot's name.
+export async function setSlotName(slug: string, armyIdx: number, name: string): Promise<void> {
+  await authReady();
+  await set(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}/player`), name);
+}
+
 // Owner/admin frees a slot (un-claim / kick).
 export async function releaseSlot(slug: string, armyIdx: number): Promise<void> {
   await authReady();

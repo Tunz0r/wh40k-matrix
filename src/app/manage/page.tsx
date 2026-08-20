@@ -9,8 +9,10 @@ import {
   setJoinOpen,
   releaseSlot,
   assignSlot,
+  saveTeamSetup,
   type TournamentDoc,
 } from "@/lib/tournament-db";
+import type { RosterArmy } from "@/lib/roster";
 import { recomputeMembership, fetchKnownPeople } from "@/lib/membership";
 
 // Owner/captain (or super-admin) management of the ACTIVE tournament: open the
@@ -25,6 +27,7 @@ export default function ManagePage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
   const [known, setKnown] = useState<{ uid: string; name: string }[]>([]);
+  const [seatInput, setSeatInput] = useState("");
 
   useEffect(() => subscribeToTournament(activeSlug, setDoc), [activeSlug]);
   useEffect(() => setOrigin(window.location.origin), []);
@@ -60,6 +63,20 @@ export default function ManagePage() {
     }
     setBusy(null);
   }
+
+  // Create/resize the team to N EMPTY seats — people can join and claim a seat
+  // by name before anyone has decided their army; the faction is filled in later.
+  // Existing seats (with claims / armies) are preserved.
+  async function applySeatCount(n: number) {
+    const existing = doc?.roster?.armies || [];
+    const emptySeat = (): RosterArmy => ({ faction: "", detachments: [], disposition: null });
+    const nextArmies: RosterArmy[] = Array.from({ length: n }, (_, i) => existing[i] || emptySeat());
+    await saveTeamSetup(activeSlug, {
+      roster: { v: 1, name: doc?.teamName || active?.teamName || "Hold", armies: nextArmies },
+    });
+  }
+
+  const defaultSeats = active?.teamSize ?? 5;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
@@ -121,16 +138,38 @@ export default function ManagePage() {
             {busy === "recompute" ? "…" : "Opdatér adgang"}
           </button>
         </div>
+        {/* Seat count — create empty seats before armies are known. */}
+        <div className="flex items-center gap-2 flex-wrap text-[11px]">
+          <span className="text-[#8888a0]">Antal pladser på holdet:</span>
+          <input
+            type="number"
+            min={1}
+            max={12}
+            value={seatInput}
+            onChange={(e) => setSeatInput(e.target.value)}
+            placeholder={String(armies.length || defaultSeats)}
+            className="w-16 px-2 py-1 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+          />
+          <button
+            onClick={() => {
+              const n = Number(seatInput || armies.length || defaultSeats);
+              if (n >= 1 && n <= 12) run("seats", () => applySeatCount(n).then(() => recomputeMembership()), `${n} pladser sat.`);
+            }}
+            disabled={busy === "seats"}
+            className="px-2.5 py-1 rounded-md bg-[#a855f7] hover:bg-[#9333ea] text-white font-semibold transition-colors disabled:opacity-50"
+          >
+            {busy === "seats" ? "…" : "Sæt pladser"}
+          </button>
+          <span className="text-[#8888a0]">Hærene vælges senere.</span>
+        </div>
         {armies.length === 0 && (
-          <p className="text-[12px] text-[#8888a0]">
-            Ingen pladser endnu — byg rosteret under <span className="text-[#c084fc]">Roster</span> først.
-          </p>
+          <p className="text-[12px] text-[#8888a0]">Sæt antal pladser, så holdet kan tilmelde sig.</p>
         )}
         {armies.map((a, idx) => (
           <div key={idx} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-[#131318] px-3 py-2">
             <span className="text-[13px] text-[#e8e8f0] flex-1">
               {a.player?.trim() || `Plads ${idx + 1}`}
-              <span className="text-[10px] text-[#8888a0]"> · {a.faction}</span>
+              {a.faction ? <span className="text-[10px] text-[#8888a0]"> · {a.faction}</span> : <span className="text-[10px] text-[#8888a0]"> · hær ikke valgt</span>}
             </span>
             {a.claimedByUid ? (
               <>
