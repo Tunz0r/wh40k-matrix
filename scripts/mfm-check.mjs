@@ -90,6 +90,69 @@ function diff(oldSnap, newSnap) {
   return lines.join("\n\n");
 }
 
+// MFM faction slug -> the faction NAME as stored on lists (data.ts FACTIONS
+// keys / OpponentList.faction). Deprecations are keyed by this name.
+const SLUG_TO_FACTION = {
+  "adepta-sororitas": "Adepta Sororitas", "adeptus-custodes": "Adeptus Custodes",
+  "adeptus-mechanicus": "Adeptus Mechanicus", "aeldari": "Aeldari", "astra-militarum": "Astra Militarum",
+  "blood-angels": "Blood Angels", "chaos-daemons": "Chaos Daemons", "chaos-knights": "Chaos Knights",
+  "chaos-space-marines": "Chaos Space Marines", "dark-angels": "Dark Angels", "death-guard": "Death Guard",
+  "deathwatch": "Deathwatch", "drukhari": "Drukhari", "emperors-children": "Emperor's Children",
+  "genestealer-cults": "Genestealer Cults", "grey-knights": "Grey Knights", "imperial-knights": "Imperial Knights",
+  "leagues-of-votann": "Leagues of Votann", "necrons": "Necrons", "orks": "Orks",
+  "space-marines": "Space Marines", "space-wolves": "Space Wolves", "tau-empire": "T'au Empire",
+  "thousand-sons": "Thousand Sons", "tyranids": "Tyranids", "world-eaters": "World Eaters",
+};
+
+// Factions whose rules materially changed: an EXISTING detachment's DP or
+// Disposition moved. New/removed detachments alone don't deprecate lists.
+function significantlyChangedFactions(oldSnap, newSnap) {
+  const out = [];
+  for (const slug of Object.keys(newSnap)) {
+    const before = oldSnap[slug] || {};
+    const after = newSnap[slug];
+    const changed = Object.keys(after).some(
+      (name) => before[name] && (before[name].dp !== after[name].dp || before[name].disposition !== after[name].disposition)
+    );
+    if (changed) out.push(slug);
+  }
+  return out;
+}
+
+// Stamp the changed codexes as deprecated in Firebase, signing in as the MFM
+// bot (a dedicated Firebase user; credentials from GitHub secrets). Best-effort:
+// missing creds or a failed write just logs and doesn't fail the run.
+async function writeDeprecations(slugs) {
+  const email = process.env.FIREBASE_BOT_EMAIL;
+  const password = process.env.FIREBASE_BOT_PASSWORD;
+  const key = process.env.FIREBASE_API_KEY || "AIzaSyB8Zy8X5JY44SFacjfgb-jU_wWrcVGfP-4";
+  const db = process.env.FIREBASE_DB_URL || "https://wtcpairing-default-rtdb.europe-west1.firebasedatabase.app";
+  if (!email || !password) {
+    console.log("(no bot credentials — skipping library deprecation write)");
+    return;
+  }
+  try {
+    const auth = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${key}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    }).then((r) => r.json());
+    if (!auth.idToken) throw new Error("bot sign-in failed: " + JSON.stringify(auth.error || auth));
+    const now = Date.now();
+    const updates = {};
+    for (const slug of slugs) {
+      const faction = SLUG_TO_FACTION[slug] || slug;
+      updates[faction] = { deprecatedAt: now, note: "MFM change" };
+    }
+    const res = await fetch(`${db}/estimates/_library/_deprecated.json?auth=${auth.idToken}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error(`PATCH _deprecated -> ${res.status} ${await res.text()}`);
+    console.log(`Deprecated ${slugs.length} codex(es) in library: ${slugs.map((s) => SLUG_TO_FACTION[s] || s).join(", ")}`);
+  } catch (e) {
+    console.log("Deprecation write failed (non-fatal): " + e.message);
+  }
+}
+
 const newSnap = await build();
 const count = Object.values(newSnap).reduce((n, f) => n + Object.keys(f).length, 0);
 const oldSnap = fs.existsSync(SNAPSHOT) ? JSON.parse(fs.readFileSync(SNAPSHOT, "utf8")) : null;
@@ -104,6 +167,9 @@ if (!oldSnap) {
   const md = `# MFM update detected (${new Date().toISOString().slice(0, 10)})\n\nDetachment Points / Force Disposition changes on mfm.warhammer-community.com:\n\n${body}\n\nRe-sync \`src/lib/data.ts\` FACTIONS (see the MFM v1.1 sync procedure in memory).\n`;
   fs.writeFileSync(CHANGES, md);
   console.log(md);
+  // Stamp codexes whose existing rules changed as deprecated in the library.
+  const changed = significantlyChangedFactions(oldSnap, newSnap);
+  if (changed.length) await writeDeprecations(changed);
 } else {
   console.log(`No MFM changes. ${Object.keys(newSnap).length} factions, ${count} detachments.`);
   if (fs.existsSync(CHANGES)) fs.unlinkSync(CHANGES);

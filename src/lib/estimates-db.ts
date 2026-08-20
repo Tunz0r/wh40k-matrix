@@ -139,7 +139,11 @@ export function subscribeToOpponents(
     if (includeLibrary) {
       const rl = ref(getDb(), LIBRARY);
       onValue(rl, (snap) => {
-        libTeams = (snap.val() as OpponentMap) || {};
+        const raw = (snap.val() as OpponentMap) || {};
+        // `_deprecated` is a per-faction deprecation map, not a team.
+        const { _deprecated, ...teams } = raw as OpponentMap & { _deprecated?: unknown };
+        void _deprecated;
+        libTeams = teams;
         LIB_SLUGS = new Set(Object.keys(libTeams));
         libReady = true;
         emit();
@@ -175,6 +179,48 @@ export function subscribeToLibraryTeams(
     cancelled = true;
     cleanup?.();
   };
+}
+
+// Per-faction deprecation: when a codex's rules change (points/detachment/
+// disposition) beyond trivia, the MFM watcher bot stamps its faction here. A
+// library list is STALE if its source entry predates that stamp.
+export interface Deprecation {
+  deprecatedAt: number;
+  note?: string;
+}
+export type DeprecationMap = Record<string, Deprecation>;
+
+export function subscribeToDeprecations(
+  callback: (deprecations: DeprecationMap) => void
+): () => void {
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const r = ref(getDb(), `${LIBRARY}/_deprecated`);
+    onValue(
+      r,
+      (snap) => callback((snap.val() as DeprecationMap) || {}),
+      () => callback({})
+    );
+    cleanup = () => off(r);
+  });
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
+}
+
+// The factions in a library source that are now stale — their codex changed
+// AFTER this source's lists were captured.
+export function staleFactionsIn(team: OpponentTeam, deprecations: DeprecationMap): string[] {
+  const created = team.createdAt || 0;
+  const stale = new Set<string>();
+  for (const a of team.armies || []) {
+    const dep = deprecations[a.faction];
+    if (dep && dep.deprecatedAt > created) stale.add(a.faction);
+  }
+  return [...stale];
 }
 
 // Pull a catalog archetype INTO this tournament's estimate view (opt-in). Merges

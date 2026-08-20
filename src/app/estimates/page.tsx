@@ -44,6 +44,9 @@ import {
   subscribeToLibraryTeams,
   optInArchetype,
   optOutArchetype,
+  subscribeToDeprecations,
+  staleFactionsIn,
+  type DeprecationMap,
 } from "@/lib/estimates-db";
 
 const OTHER_TIER = "Andre hold";
@@ -196,6 +199,8 @@ export default function EstimatesPage() {
 
   const { activeSlug, active } = useActiveTournament();
   const [catalog, setCatalog] = useState<OpponentMap>({});
+  const [deprecations, setDeprecations] = useState<DeprecationMap>({});
+  useEffect(() => subscribeToDeprecations(setDeprecations), []);
   useEffect(() => {
     try {
       const unsub1 = subscribeToOpponents(setOpponents, activeSlug);
@@ -215,9 +220,10 @@ export default function EstimatesPage() {
   const catalogRows = useMemo(
     () =>
       Object.entries(catalog)
-        .map(([slug, team]) => ({ slug, name: team.name, tier: team.tier, createdAt: team.createdAt, in: !!opponents[slug] }))
+        .filter(([slug]) => slug !== "_deprecated")
+        .map(([slug, team]) => ({ slug, name: team.name, tier: team.tier, createdAt: team.createdAt, in: !!opponents[slug], stale: staleFactionsIn(team, deprecations).length }))
         .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0) || (a.name || a.slug).localeCompare(b.name || b.slug, "da")),
-    [catalog, opponents]
+    [catalog, opponents, deprecations]
   );
 
   const currentVersion = versions.current;
@@ -730,6 +736,11 @@ export default function EstimatesPage() {
                   {a.createdAt ? (
                     <span className="opacity-60 ml-1">
                       {new Date(a.createdAt).toLocaleDateString("da", { month: "short", year: "numeric" })}
+                    </span>
+                  ) : null}
+                  {a.stale > 0 ? (
+                    <span className="ml-1 text-[#f0b429]" title={`${a.stale} codex(er) opdateret siden — nogle arketyper er forældede`}>
+                      ⚠
                     </span>
                   ) : null}
                 </button>

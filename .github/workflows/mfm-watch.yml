@@ -22,6 +22,9 @@ jobs:
 
       - name: Check MFM for changes
         run: node scripts/mfm-check.mjs
+        env:
+          FIREBASE_BOT_EMAIL: ${{ secrets.FIREBASE_BOT_EMAIL }}
+          FIREBASE_BOT_PASSWORD: ${{ secrets.FIREBASE_BOT_PASSWORD }}
 
       - name: Commit snapshot if it changed
         id: snap
