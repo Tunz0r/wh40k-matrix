@@ -789,7 +789,7 @@ function MatchupCard({
               {matchup.module}
             </span>
             <span className="text-[#8888a0] break-words">
-              {matchup.aDetachments.join(", ")} vs {matchup.bDetachments.join(", ")}
+              {(matchup.aDetachments || []).join(", ")} vs {(matchup.bDetachments || []).join(", ")}
             </span>
           </div>
 
