@@ -5,12 +5,17 @@ import Link from "next/link";
 import { TEAM_NAME } from "@/lib/team";
 import { useActiveTournament } from "@/lib/active-tournament";
 import { useActivePlayer } from "@/lib/active-player";
+import { useAuth } from "@/lib/auth";
+import { subscribeToMyTournaments } from "@/lib/membership";
+import type { TournamentMeta } from "@/lib/tournaments-registry";
+import ArmyEditor from "@/components/ArmyEditor";
 import { DISP_STYLES, FACTIONS } from "@/lib/data";
 import {
   subscribeToTournament,
   addWarmupGame,
   deleteWarmupGame,
   savePlayerProfile,
+  setSlotArmy,
   type TournamentDoc,
   type TournamentRound,
   type WarmupGame,
@@ -75,7 +80,10 @@ export default function PlayerPage() {
   const [activeSession, setActiveSession] = useState<SessionData | null>(null);
   const [pastSessions, setPastSessions] = useState<Record<string, SessionData>>({});
 
-  const { activeSlug } = useActiveTournament();
+  const { activeSlug, active, setActive } = useActiveTournament();
+  const { user } = useAuth();
+  const [myTournaments, setMyTournaments] = useState<TournamentMeta[]>([]);
+  useEffect(() => (user?.uid ? subscribeToMyTournaments(user.uid, setMyTournaments) : undefined), [user?.uid]);
   useEffect(() => {
     try {
       const u1 = subscribeToTournament(activeSlug, setDoc);
@@ -531,7 +539,7 @@ export default function PlayerPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
             Min side
-            <span className="text-[#4ade80] ml-2 text-sm font-normal">— {TEAM_NAME}</span>
+            <span className="text-[#4ade80] ml-2 text-sm font-normal">— {active?.teamName ?? TEAM_NAME}</span>
           </h1>
           {activePlayer && (
             <span className="text-[12px] text-[#8888a0]">
@@ -542,6 +550,26 @@ export default function PlayerPage() {
       </header>
 
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
+        {/* My tournaments — this page is mine across every team I'm on. */}
+        {myTournaments.length > 1 && (
+          <div className="flex items-center gap-2 flex-wrap text-[11px]">
+            <span className="text-[#8888a0]">Mine turneringer:</span>
+            {myTournaments.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setActive(t.id)}
+                className={`px-2 py-1 rounded-md border transition-colors ${
+                  t.id === active?.id
+                    ? "border-[#a855f7] bg-[#a855f7]/10 text-[#c084fc]"
+                    : "border-white/[0.12] text-[#c8c8d8] hover:border-[#a855f7]"
+                }`}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Identity. Owners/admins can act as any slot; a normal player is
             simply their claimed slot (or is prompted to claim one). */}
         {canManage ? (
@@ -579,7 +607,25 @@ export default function PlayerPage() {
           </div>
         ) : null}
 
-        {myIdx !== null && myArmy && (
+        {/* Pick your army — for a claimed seat with no army chosen yet. */}
+        {myIdx !== null && myArmy && !myArmy.faction && (
+          <div className="rounded-xl border border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.04)] p-4 space-y-2">
+            <h2 className="text-sm font-semibold text-[#e8e8f0]">Vælg din hær</h2>
+            <p className="text-[11px] text-[#8888a0]">
+              Du er på holdet i {active?.name ?? "turneringen"}, men har ikke valgt en hær endnu.
+              Vælg faction, detachment og disposition.
+            </p>
+            <ArmyEditor
+              initial={myArmy}
+              onSave={(a) => {
+                if (myIdx !== null) setSlotArmy(activeSlug, myIdx, a).catch(() => {});
+              }}
+              onCancel={() => {}}
+            />
+          </div>
+        )}
+
+        {myIdx !== null && myArmy && myArmy.faction && (
           <>
             {/* Min arketype: map own army to a field archetype */}
             <div className="rounded-xl border border-white/[0.08] p-4">

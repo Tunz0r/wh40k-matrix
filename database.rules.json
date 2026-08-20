@@ -97,11 +97,9 @@
           ".read": "auth != null && root.child('tournaments/'+$slug+'/_join/open').val() === true",
           "armies": {
             "$i": {
+              ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_owners/'+$slug+'/'+auth.uid).exists() || root.child('tournaments/'+$slug+'/roster/armies/'+$i+'/claimedByUid').val() === auth.uid)",
               "claimedByUid": {
-                ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_owners/'+$slug+'/'+auth.uid).exists() || (newData.val() === auth.uid && !data.exists() && root.child('tournaments/'+$slug+'/_join/open').val() === true))"
-              },
-              "player": {
-                ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_owners/'+$slug+'/'+auth.uid).exists() || root.child('tournaments/'+$slug+'/roster/armies/'+$i+'/claimedByUid').val() === auth.uid)"
+                ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_owners/'+$slug+'/'+auth.uid).exists() || root.child('tournaments/'+$slug+'/roster/armies/'+$i+'/claimedByUid').val() === auth.uid || (newData.val() === auth.uid && !data.exists() && root.child('tournaments/'+$slug+'/_join/open').val() === true))"
               }
             }
           }

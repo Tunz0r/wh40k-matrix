@@ -267,6 +267,22 @@ export async function setSlotName(slug: string, armyIdx: number, name: string): 
   await set(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}/player`), name);
 }
 
+// A player sets the army on THEIR OWN claimed seat (faction/detachments/
+// disposition) — "pick your army" on Min side. Rules allow the seat's claimant
+// (and owner/admin) to write it. Preserves player/claimedByUid (partial update).
+export async function setSlotArmy(
+  slug: string,
+  armyIdx: number,
+  army: { faction: string; detachments: string[]; disposition: string | null }
+): Promise<void> {
+  await authReady();
+  await update(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}`), {
+    faction: army.faction,
+    detachments: army.detachments,
+    disposition: army.disposition,
+  });
+}
+
 // Owner/admin frees a slot (un-claim / kick).
 export async function releaseSlot(slug: string, armyIdx: number): Promise<void> {
   await authReady();
