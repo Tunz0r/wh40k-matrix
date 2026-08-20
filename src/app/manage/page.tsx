@@ -31,6 +31,11 @@ export default function ManagePage() {
   useEffect(() => {
     if (user?.uid) fetchKnownPeople(user.uid, activeSlug).then(setKnown).catch(() => setKnown([]));
   }, [user?.uid, activeSlug]);
+  // Auto-admit: whenever the captain opens this page, fold any new claims into
+  // membership so claimants get access without a separate "finalize" click.
+  useEffect(() => {
+    if (canManage) recomputeMembership().catch(() => {});
+  }, [canManage, activeSlug]);
 
   if (!canManage) {
     return (
@@ -65,39 +70,42 @@ export default function ManagePage() {
 
       {msg && <p className="text-[12px] text-[#4ade80]">{msg}</p>}
 
-      {/* Join window */}
-      <section className="space-y-3">
-        <h2 className="text-[11px] uppercase tracking-wider text-[#8888a0] font-semibold">Tilmelding</h2>
-        <div className="flex items-center gap-3 flex-wrap">
+      {/* Invite the team */}
+      <section className="rounded-xl border border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.04)] p-4 space-y-3">
+        <h2 className="text-[13px] font-semibold text-[#e8e8f0]">Invitér holdet</h2>
+        <ol className="text-[11px] text-[#c8c8d8] leading-relaxed list-decimal pl-4 space-y-0.5">
+          <li>Aktivér tilmelding.</li>
+          <li>Del linket herunder med holdet (fx på Discord).</li>
+          <li>De logger ind, vælger deres plads — og får automatisk adgang.</li>
+        </ol>
+
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => run("join", () => setJoinOpen(activeSlug, !open), open ? "Tilmelding lukket." : "Tilmelding åben.")}
+            onClick={() => run("join", () => setJoinOpen(activeSlug, !open), open ? "Tilmelding lukket." : "Tilmelding aktiv — del linket.")}
             disabled={busy === "join"}
             className={`text-[12px] font-semibold px-3 py-1.5 rounded-md transition-colors ${
-              open ? "bg-[#4ade80]/15 text-[#4ade80] border border-[#4ade80]/40" : "bg-[#1a1a22] text-[#c8c8d8] border border-white/[0.14] hover:border-[#a855f7]"
+              open ? "bg-[#4ade80]/15 text-[#4ade80] border border-[#4ade80]/40" : "bg-[#a855f7] hover:bg-[#9333ea] text-white"
             }`}
           >
-            {open ? "● Åben — luk tilmelding" : "○ Lukket — åbn tilmelding"}
+            {open ? "● Tilmelding aktiv — klik for at lukke" : "Aktivér tilmelding"}
           </button>
-          <span className="text-[11px] text-[#8888a0]">
-            Mens den er åben kan holdkammerater vælge deres plads via linket.
-          </span>
         </div>
-        {open && (
-          <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={inviteLink}
-              onFocus={(e) => e.target.select()}
-              className="flex-1 text-[11px] px-3 py-1.5 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#c8c8d8] outline-none"
-            />
-            <button
-              onClick={() => { navigator.clipboard?.writeText(inviteLink); setMsg("Link kopieret."); }}
-              className="text-[11px] px-2.5 py-1.5 rounded-md border border-white/[0.14] text-[#c8c8d8] hover:border-[#a855f7]"
-            >
-              Kopiér
-            </button>
-          </div>
-        )}
+
+        <div className={`flex items-center gap-2 ${open ? "" : "opacity-40 pointer-events-none"}`}>
+          <input
+            readOnly
+            value={inviteLink}
+            onFocus={(e) => e.target.select()}
+            className="flex-1 text-[11px] px-3 py-1.5 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#c8c8d8] outline-none"
+          />
+          <button
+            onClick={() => { navigator.clipboard?.writeText(inviteLink); setMsg("Link kopieret."); }}
+            className="text-[11px] px-2.5 py-1.5 rounded-md border border-white/[0.14] text-[#c8c8d8] hover:border-[#a855f7]"
+          >
+            Kopiér link
+          </button>
+        </div>
+        {!open && <p className="text-[10px] text-[#8888a0]">Aktivér tilmelding for at linket virker. Luk det igen, når holdet er samlet.</p>}
       </section>
 
       {/* Slots + claims */}
@@ -105,11 +113,12 @@ export default function ManagePage() {
         <div className="flex items-center justify-between">
           <h2 className="text-[11px] uppercase tracking-wider text-[#8888a0] font-semibold">Pladser ({armies.length})</h2>
           <button
-            onClick={() => run("recompute", recomputeMembership, "Færdiggjort — nye spillere har adgang.")}
+            onClick={() => run("recompute", recomputeMembership, "Adgang opdateret.")}
             disabled={busy === "recompute"}
-            className="text-[12px] px-3 py-1.5 rounded-md bg-[#a855f7] hover:bg-[#9333ea] text-white font-semibold transition-colors disabled:opacity-50"
+            title="Kører automatisk når du åbner siden"
+            className="text-[11px] px-2.5 py-1.5 rounded-md border border-white/[0.14] text-[#c8c8d8] hover:border-[#a855f7] transition-colors disabled:opacity-50"
           >
-            {busy === "recompute" ? "…" : "Færdiggør (giv adgang)"}
+            {busy === "recompute" ? "…" : "Opdatér adgang"}
           </button>
         </div>
         {armies.length === 0 && (
