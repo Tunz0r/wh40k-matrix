@@ -32,6 +32,8 @@ export interface OpponentTeam {
   estimates?: Record<string, EstimateCell>;
   notes?: string; // scouting intel about the team / captain / pairing habits
   wtc?: boolean; // true = a real WTC 2026 roster (loaded from the doc), vs a stale/placeholder team
+  createdAt?: number; // for library sources: when the event/lists are from (freshness)
+  optIn?: boolean; // per-tournament marker: this archetype is pulled into the tournament's view
 }
 
 export type OpponentMap = Record<string, OpponentTeam>;
@@ -110,10 +112,14 @@ export function subscribeToOpponents(
     // disappears pre-migration and a partial write can't shadow the old values.
     // Other tournaments get NO fallback → true isolation.
     for (const [teamKey, libTeam] of Object.entries(libTeams)) {
+      // The legacy team (WTC 2026) shows its whole curated library, EXCEPT the
+      // WTC-2026 tier entries promoted from its own opponents — those would be
+      // circular there. Other tournaments opt these in like anything else.
+      if (slug === TEAM_SLUG && libTeam.wtc) continue;
       // Global catalog, OPT-IN per tournament: a library archetype only appears
       // if this tournament has pulled it in (a per-tournament entry exists —
       // an optIn marker or actual estimates). The legacy team (TEAM_SLUG) shows
-      // all of them (its curated library) for backward-compatibility.
+      // all of the rest of its curated library for backward-compatibility.
       const optedIn = slug === TEAM_SLUG || baseTeams[teamKey] !== undefined;
       if (!optedIn) continue;
       const legacy = slug === TEAM_SLUG ? libTeam.estimates || {} : {};

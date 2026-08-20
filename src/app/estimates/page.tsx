@@ -215,8 +215,8 @@ export default function EstimatesPage() {
   const catalogRows = useMemo(
     () =>
       Object.entries(catalog)
-        .map(([slug, team]) => ({ slug, name: team.name, tier: team.tier, in: !!opponents[slug] }))
-        .sort((a, b) => (a.name || a.slug).localeCompare(b.name || b.slug, "da")),
+        .map(([slug, team]) => ({ slug, name: team.name, tier: team.tier, createdAt: team.createdAt, in: !!opponents[slug] }))
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0) || (a.name || a.slug).localeCompare(b.name || b.slug, "da")),
     [catalog, opponents]
   );
 
@@ -727,6 +727,11 @@ export default function EstimatesPage() {
                 >
                   {a.in ? "✓ " : "+ "}
                   {a.name || a.slug}
+                  {a.createdAt ? (
+                    <span className="opacity-60 ml-1">
+                      {new Date(a.createdAt).toLocaleDateString("da", { month: "short", year: "numeric" })}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
