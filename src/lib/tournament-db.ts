@@ -255,6 +255,21 @@ export async function releaseSlot(slug: string, armyIdx: number): Promise<void> 
   await set(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}/claimedByUid`), null);
 }
 
+// Owner/admin assigns an existing user (uid) to a slot and labels it with their
+// name — for carrying known people onto a new team without an invite round-trip.
+export async function assignSlot(
+  slug: string,
+  armyIdx: number,
+  uid: string,
+  name: string
+): Promise<void> {
+  await authReady();
+  await update(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}`), {
+    claimedByUid: uid,
+    player: name,
+  });
+}
+
 // Roster-only subscription — readable by members/owners always, and by anyone
 // while the join window is open (so a joiner can pick a slot without seeing the
 // rest of the tournament's data).

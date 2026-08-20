@@ -406,6 +406,34 @@ export function subscribeToMyTournaments(
   };
 }
 
+// People the signed-in user already knows: everyone who has claimed a slot in
+// any of THEIR tournaments (except `exceptSlug`). Used to add existing users to
+// a new team without exposing the global user directory. Deduped by uid.
+export async function fetchKnownPeople(
+  myUid: string,
+  exceptSlug?: string
+): Promise<{ uid: string; name: string }[]> {
+  await authReady();
+  const db = getDb();
+  const myT = ((await get(ref(db, `${MY_TOURNAMENTS}/${myUid}`))).val() as Record<string, true>) || {};
+  const people = new Map<string, string>();
+  await Promise.all(
+    Object.keys(myT).map(async (id) => {
+      const meta = (await get(ref(db, `${REGISTRY}/${id}`))).val() as TournamentMeta | null;
+      if (!meta || meta.dataSlug === exceptSlug) return;
+      const roster = (await get(ref(db, `tournaments/${meta.dataSlug}/roster`))).val() as
+        | { armies?: { player?: string; claimedByUid?: string }[] }
+        | null;
+      for (const a of roster?.armies || []) {
+        if (a.claimedByUid && !people.has(a.claimedByUid)) {
+          people.set(a.claimedByUid, a.player?.trim() || a.claimedByUid.slice(0, 6));
+        }
+      }
+    })
+  );
+  return [...people].map(([uid, name]) => ({ uid, name }));
+}
+
 // --- helpers ---------------------------------------------------------------
 
 // Subscribe to an admin-only node, tolerating the permission-denied a non-admin

@@ -21,6 +21,16 @@ export default function Landing() {
   const [err, setErr] = useState<string | null>(null);
 
   const id = useMemo(() => slugify(name.trim()), [name]);
+  const [invite, setInvite] = useState("");
+
+  // Accept a full invite link (…/join/{slug}) or a bare slug/code.
+  function goJoin() {
+    const v = invite.trim();
+    if (!v) return;
+    const m = v.match(/\/join\/([^/?#]+)/);
+    const slug = m ? m[1] : slugify(v);
+    if (slug) window.location.href = `/join/${slug}`;
+  }
 
   async function create() {
     if (!name.trim() || !id || !teamName.trim() || busy) return;
@@ -50,8 +60,31 @@ export default function Landing() {
         <div>
           <div className="text-[15px] font-semibold text-[#e8e8f0]">Velkommen{user?.displayName ? `, ${user.displayName.split(" ")[0]}` : ""}</div>
           <div className="text-[12px] text-[#8888a0] mt-1 leading-relaxed">
-            Du er ikke med på et hold endnu. Opret din egen turnering — så bliver du kaptajn og kan
-            bygge roster og invitere holdet. (Er du inviteret til et hold, kommer den mulighed snart.)
+            Du er ikke med på et hold endnu. Har du fået et invitationslink, så tilslut dig herunder
+            — ellers kan du oprette din egen turnering og blive kaptajn.
+          </div>
+        </div>
+
+        {/* Join an existing team via invite link/code */}
+        <div className="space-y-2 pb-4 border-b border-white/[0.08]">
+          <label className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold block">
+            Tilslut dig et hold (invitationslink)
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              value={invite}
+              onChange={(e) => setInvite(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") goJoin(); }}
+              placeholder="Indsæt link, fx …/join/team-danmark"
+              className="flex-1 bg-[#1a1a22] border border-white/[0.14] rounded-lg px-3 py-2 text-sm text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+            />
+            <button
+              onClick={goJoin}
+              disabled={!invite.trim()}
+              className="text-[12px] font-semibold px-4 py-2 rounded-md bg-[#1a1a22] border border-white/[0.14] text-[#c8c8d8] hover:border-[#a855f7] transition-colors disabled:opacity-40"
+            >
+              Tilslut
+            </button>
           </div>
         </div>
 

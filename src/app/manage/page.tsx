@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import { useActiveTournament } from "@/lib/active-tournament";
 import { useActivePlayer } from "@/lib/active-player";
+import { useAuth } from "@/lib/auth";
 import {
   subscribeToTournament,
   setJoinOpen,
   releaseSlot,
+  assignSlot,
   type TournamentDoc,
 } from "@/lib/tournament-db";
-import { recomputeMembership } from "@/lib/membership";
+import { recomputeMembership, fetchKnownPeople } from "@/lib/membership";
 
 // Owner/captain (or super-admin) management of the ACTIVE tournament: open the
 // join window, share the invite link, see who has claimed which slot, kick, and
@@ -17,13 +19,18 @@ import { recomputeMembership } from "@/lib/membership";
 export default function ManagePage() {
   const { active, activeSlug } = useActiveTournament();
   const { canManage } = useActivePlayer();
+  const { user } = useAuth();
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
+  const [known, setKnown] = useState<{ uid: string; name: string }[]>([]);
 
   useEffect(() => subscribeToTournament(activeSlug, setDoc), [activeSlug]);
   useEffect(() => setOrigin(window.location.origin), []);
+  useEffect(() => {
+    if (user?.uid) fetchKnownPeople(user.uid, activeSlug).then(setKnown).catch(() => setKnown([]));
+  }, [user?.uid, activeSlug]);
 
   if (!canManage) {
     return (
@@ -128,7 +135,29 @@ export default function ManagePage() {
                 </button>
               </>
             ) : (
-              <span className="text-[10px] text-[#8888a0]">ledig</span>
+              <>
+                <span className="text-[10px] text-[#8888a0]">ledig</span>
+                {(() => {
+                  const taken = new Set(armies.map((x) => x.claimedByUid).filter(Boolean) as string[]);
+                  const avail = known.filter((k) => !taken.has(k.uid));
+                  return avail.length > 0 ? (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const p = avail.find((k) => k.uid === e.target.value);
+                        if (p) run(`asg${idx}`, () => assignSlot(activeSlug, idx, p.uid, p.name).then(() => recomputeMembership()), `${p.name} tilføjet.`);
+                      }}
+                      disabled={busy === `asg${idx}`}
+                      className="text-[11px] px-2 py-1 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+                    >
+                      <option value="">+ Tilføj kendt spiller…</option>
+                      {avail.map((k) => (
+                        <option key={k.uid} value={k.uid}>{k.name}</option>
+                      ))}
+                    </select>
+                  ) : null;
+                })()}
+              </>
             )}
           </div>
         ))}
