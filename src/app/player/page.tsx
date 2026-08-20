@@ -296,7 +296,7 @@ export default function PlayerPage() {
     setProfBusy(true);
     try {
       if (oldDesc && archetypeId(oldDesc) !== archetypeId(newDesc)) {
-        const bank = await fetchArchetypeBank(archetypeId(newDesc));
+        const bank = await fetchArchetypeBank(archetypeId(newDesc), activeSlug);
         const m = Object.keys(bank).length;
         if (
           !confirm(
@@ -311,7 +311,7 @@ export default function PlayerPage() {
           return;
         }
       } else if (!oldDesc && ownCount > 0) {
-        const bank = await fetchArchetypeBank(archetypeId(newDesc));
+        const bank = await fetchArchetypeBank(archetypeId(newDesc), activeSlug);
         const m = Object.keys(bank).length;
         if (
           !confirm(

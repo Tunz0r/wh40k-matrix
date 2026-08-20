@@ -143,8 +143,8 @@ export default function SanityPage() {
     try {
       const u1 = subscribeToTournament(activeSlug, setDoc);
       const u2 = subscribeToOpponents(setOpponents, activeSlug, false); // tournament-local field only
-      const u3 = subscribeToSanityAcks(setAcks);
-      const u4 = subscribeToVersions(setVersions);
+      const u3 = subscribeToSanityAcks(setAcks, activeSlug);
+      const u4 = subscribeToVersions(setVersions, activeSlug);
       return () => { u1(); u2(); u3(); u4(); };
     } catch {}
   }, [activeSlug]);
@@ -371,7 +371,7 @@ export default function SanityPage() {
   const ackedCount = findings.length - outstandingCount;
 
   const toggleAck = (f: Finding) => {
-    setSanityAck(f.sig, !isAcked(f)).catch(() => {});
+    setSanityAck(f.sig, !isAcked(f), activeSlug).catch(() => {});
   };
 
   return (

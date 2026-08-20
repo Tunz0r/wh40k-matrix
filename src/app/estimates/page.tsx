@@ -196,10 +196,10 @@ export default function EstimatesPage() {
     try {
       const unsub1 = subscribeToOpponents(setOpponents, activeSlug);
       const unsub2 = subscribeToTournament(activeSlug, setFbDoc);
-      const unsub3 = subscribeToVersions(setVersions);
+      const unsub3 = subscribeToVersions(setVersions, activeSlug);
       // Writes the "11th fresh" base version the first time anyone opens the
       // page; existing estimate cells stay untouched and count as that version.
-      ensureVersions().catch(() => {});
+      ensureVersions(activeSlug).catch(() => {});
       return () => { unsub1(); unsub2(); unsub3(); };
     } catch {}
   }, [activeSlug]);
@@ -221,7 +221,7 @@ export default function EstimatesPage() {
     );
     if (!label?.trim()) return;
     try {
-      await createVersion(label.trim());
+      await createVersion(label.trim(), activeSlug);
     } catch {
       alert("Kunne ikke oprette versionen — tjek Firebase.");
     }
@@ -591,7 +591,7 @@ export default function EstimatesPage() {
           <div className="flex items-center gap-1">
             <select
               value={currentVersion}
-              onChange={(e) => setCurrentVersion(e.target.value).catch(() => {})}
+              onChange={(e) => setCurrentVersion(e.target.value, activeSlug).catch(() => {})}
               title="Version af estimater + arketyper. Vælg hvilken nye/ændrede estimater stemples med. Nyeste øverst."
               className="text-[11px] px-2 py-1 rounded-md border border-[rgba(74,222,128,0.3)] bg-[#1a1a22] text-[#4ade80] outline-none focus:border-[#4ade80] max-w-[150px]"
             >
