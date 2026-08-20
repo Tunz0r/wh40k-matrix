@@ -110,6 +110,12 @@ export function subscribeToOpponents(
     // disappears pre-migration and a partial write can't shadow the old values.
     // Other tournaments get NO fallback → true isolation.
     for (const [teamKey, libTeam] of Object.entries(libTeams)) {
+      // Global catalog, OPT-IN per tournament: a library archetype only appears
+      // if this tournament has pulled it in (a per-tournament entry exists —
+      // an optIn marker or actual estimates). The legacy team (TEAM_SLUG) shows
+      // all of them (its curated library) for backward-compatibility.
+      const optedIn = slug === TEAM_SLUG || baseTeams[teamKey] !== undefined;
+      if (!optedIn) continue;
       const legacy = slug === TEAM_SLUG ? libTeam.estimates || {} : {};
       result[teamKey] = { ...libTeam, estimates: { ...legacy, ...(baseTeams[teamKey]?.estimates || {}) } };
     }
@@ -140,6 +146,49 @@ export function subscribeToOpponents(
     offBase?.();
     offLib?.();
   };
+}
+
+// The shared archetype CATALOG (the _library teams), for the opt-in picker —
+// every archetype, regardless of which tournaments have pulled it in.
+export function subscribeToLibraryTeams(
+  callback: (teams: OpponentMap) => void
+): () => void {
+  let cancelled = false;
+  let cleanup: (() => void) | null = null;
+  authReady().then(() => {
+    if (cancelled) return;
+    const r = ref(getDb(), LIBRARY);
+    onValue(
+      r,
+      (snap) => callback((snap.val() as OpponentMap) || {}),
+      () => callback({})
+    );
+    cleanup = () => off(r);
+  });
+  return () => {
+    cancelled = true;
+    cleanup?.();
+  };
+}
+
+// Pull a catalog archetype INTO this tournament's estimate view (opt-in). Merges
+// an `optIn` marker so an existing estimates object is preserved.
+export async function optInArchetype(
+  archetypeSlug: string,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<void> {
+  await authReady();
+  await update(ref(getDb(), `${baseFor(tournamentSlug)}/${archetypeSlug}`), { optIn: true });
+}
+
+// Remove an archetype from this tournament (opt-out) — drops its per-tournament
+// entry including any estimates the team made against it.
+export async function optOutArchetype(
+  archetypeSlug: string,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<void> {
+  await authReady();
+  await remove(ref(getDb(), `${baseFor(tournamentSlug)}/${archetypeSlug}`));
 }
 
 // The full verbatim WTC lists (with wargear/enhancements/points) live in a

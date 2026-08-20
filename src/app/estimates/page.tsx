@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { deserializeRoster, type RosterArmy } from "@/lib/roster";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
-import { TEAM_NAME } from "@/lib/team";
+import { TEAM_NAME, TEAM_SLUG } from "@/lib/team";
 import { useActiveTournament } from "@/lib/active-tournament";
 import { DISP_STYLES, FACTIONS } from "@/lib/data";
 import ArmyEditor from "@/components/ArmyEditor";
@@ -41,6 +41,9 @@ import {
   createVersion,
   setCurrentVersion,
   stampVersion,
+  subscribeToLibraryTeams,
+  optInArchetype,
+  optOutArchetype,
 } from "@/lib/estimates-db";
 
 const OTHER_TIER = "Andre hold";
@@ -191,18 +194,31 @@ export default function EstimatesPage() {
     }
   }
 
-  const { activeSlug } = useActiveTournament();
+  const { activeSlug, active } = useActiveTournament();
+  const [catalog, setCatalog] = useState<OpponentMap>({});
   useEffect(() => {
     try {
       const unsub1 = subscribeToOpponents(setOpponents, activeSlug);
       const unsub2 = subscribeToTournament(activeSlug, setFbDoc);
       const unsub3 = subscribeToVersions(setVersions, activeSlug);
+      const unsub4 = subscribeToLibraryTeams(setCatalog);
       // Writes the "11th fresh" base version the first time anyone opens the
       // page; existing estimate cells stay untouched and count as that version.
       ensureVersions(activeSlug).catch(() => {});
-      return () => { unsub1(); unsub2(); unsub3(); };
+      return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
     } catch {}
   }, [activeSlug]);
+
+  // The opt-in picker (non-legacy tournaments only): catalog archetypes not yet
+  // pulled into this tournament's estimate view.
+  const isLegacyTeam = activeSlug === TEAM_SLUG;
+  const catalogRows = useMemo(
+    () =>
+      Object.entries(catalog)
+        .map(([slug, team]) => ({ slug, name: team.name, tier: team.tier, in: !!opponents[slug] }))
+        .sort((a, b) => (a.name || a.slug).localeCompare(b.name || b.slug, "da")),
+    [catalog, opponents]
+  );
 
   const currentVersion = versions.current;
   const currentVersionLabel = versions.list?.[currentVersion]?.label ?? currentVersion;
@@ -561,7 +577,7 @@ export default function EstimatesPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
             Estimater
-            <span className="text-[#4ade80] ml-2 text-sm font-normal">— {TEAM_NAME}</span>
+            <span className="text-[#4ade80] ml-2 text-sm font-normal">— {active?.teamName ?? TEAM_NAME}</span>
           </h1>
           <div className="flex gap-1 ml-auto">
             <button
@@ -686,6 +702,36 @@ export default function EstimatesPage() {
       </header>
 
       <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+        {!isLegacyTeam && (
+          <div className="rounded-xl border border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.04)] p-4">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <h2 className="text-[13px] font-semibold text-[#e8e8f0]">Meta-bibliotek</h2>
+              <span className="text-[11px] text-[#8888a0]">Vælg hvilke arketyper I vil estimere imod (delt katalog)</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {catalogRows.length === 0 && <span className="text-[11px] text-[#8888a0]">Biblioteket er tomt.</span>}
+              {catalogRows.map((a) => (
+                <button
+                  key={a.slug}
+                  onClick={() =>
+                    a.in
+                      ? optOutArchetype(a.slug, activeSlug).catch(() => {})
+                      : optInArchetype(a.slug, activeSlug).catch(() => {})
+                  }
+                  title={a.in ? "Fjern fra turneringen" : "Tilføj til turneringen"}
+                  className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${
+                    a.in
+                      ? "border-[#4ade80]/40 bg-[#4ade80]/10 text-[#4ade80]"
+                      : "border-white/[0.14] text-[#c8c8d8] hover:border-[#a855f7]"
+                  }`}
+                >
+                  {a.in ? "✓ " : "+ "}
+                  {a.name || a.slug}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {archOpen && (
           <div className="rounded-xl border border-[rgba(168,85,247,0.35)] p-4 space-y-2">
             <h2 className="text-xs font-semibold text-[#a855f7] uppercase tracking-wider">
