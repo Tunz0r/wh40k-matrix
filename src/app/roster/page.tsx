@@ -11,7 +11,8 @@ import {
   GROUPS,
 } from "@/lib/data";
 import { DispositionBadge } from "@/components/DispositionBadge";
-import { serializeRoster, deserializeRoster, rosterToArmies } from "@/lib/roster";
+import { serializeRoster, deserializeRoster, rosterToArmies, toRosterExport } from "@/lib/roster";
+import { saveTeamSetup } from "@/lib/tournament-db";
 import { useActiveTournament } from "@/lib/active-tournament";
 
 interface DetachmentPick {
@@ -197,6 +198,18 @@ export default function RosterPage() {
     setTimeout(() => setExportCopied(false), 2000);
   }
 
+  const [saved, setSaved] = useState(false);
+  async function saveToTournament() {
+    if (!active) return;
+    try {
+      await saveTeamSetup(active.dataSlug, { roster: toRosterExport(rosterName, armies) });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      alert("Kunne ikke gemme til turneringen — er du kaptajn for den?");
+    }
+  }
+
   function handleImport() {
     const data = deserializeRoster(importText.trim());
     if (!data) { alert("Ugyldigt roster format."); return; }
@@ -374,6 +387,15 @@ export default function RosterPage() {
 
           {/* Export/Import */}
           <div className="flex flex-wrap gap-2 mt-3">
+            {active && (
+              <button
+                onClick={saveToTournament}
+                title={`Gem dette roster direkte til ${active.name}`}
+                className="text-[11px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-2.5 py-1 rounded-md transition-colors"
+              >
+                {saved ? "Gemt ✓" : `Gem til ${active.name}`}
+              </button>
+            )}
             {isComplete && (
               <button
                 onClick={exportRoster}

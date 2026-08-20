@@ -15,11 +15,11 @@ export interface RosterExport {
   armies: RosterArmy[];
 }
 
-export function serializeRoster(
+export function toRosterExport(
   name: string,
   armies: { detachments: { detachment: Detachment; faction: string }[]; chosenDisposition: Disposition | null }[]
-): string {
-  const data: RosterExport = {
+): RosterExport {
+  return {
     v: 1,
     name,
     armies: armies
@@ -30,7 +30,13 @@ export function serializeRoster(
         disposition: a.chosenDisposition,
       })),
   };
-  return btoa(encodeURIComponent(JSON.stringify(data)));
+}
+
+export function serializeRoster(
+  name: string,
+  armies: { detachments: { detachment: Detachment; faction: string }[]; chosenDisposition: Disposition | null }[]
+): string {
+  return btoa(encodeURIComponent(JSON.stringify(toRosterExport(name, armies))));
 }
 
 export function deserializeRoster(encoded: string): RosterExport | null {

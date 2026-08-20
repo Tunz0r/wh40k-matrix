@@ -46,8 +46,13 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
           <p className="text-[12px] text-[#8888a0]">Indlæser…</p>
         ) : roster === null ? (
           <p className="text-[12px] text-[#8888a0] leading-relaxed">
-            Holdet er ikke åbent for tilmelding lige nu (eller linket er forkert). Bed kaptajnen om
-            at åbne holdet og dele linket igen.
+            Holdet er ikke klar til tilmelding endnu. Kaptajnen skal både <b>åbne tilmelding</b> og
+            <b> bygge rosteret</b> (så der er pladser at vælge). Bed kaptajnen gøre det og prøv linket
+            igen.
+          </p>
+        ) : roster.armies.length === 0 ? (
+          <p className="text-[12px] text-[#8888a0] leading-relaxed">
+            Kaptajnen har åbnet tilmelding, men der er ingen pladser på rosteret endnu.
           </p>
         ) : claimedMine ? (
           <div className="space-y-2">
