@@ -99,7 +99,7 @@ function ArmyCard({
             {army.faction}
           </div>
           <div className="text-[10px] text-[#8888a0] truncate">
-            {army.detachments.join(", ")}
+            {(army.detachments || []).join(", ")}
           </div>
         </div>
         <div className="flex flex-col items-end gap-0.5 shrink-0">
@@ -852,7 +852,7 @@ export default function PairingsPage() {
                         {m.a.faction}
                       </div>
                       <div className="text-[10px] text-[#8888a0]">
-                        {m.a.detachments.join(", ")}
+                        {(m.a.detachments || []).join(", ")}
                       </div>
                       <DispBadge d={m.a.disposition} />
                     </div>
@@ -862,7 +862,7 @@ export default function PairingsPage() {
                         {m.b.faction}
                       </div>
                       <div className="text-[10px] text-[#8888a0]">
-                        {m.b.detachments.join(", ")}
+                        {(m.b.detachments || []).join(", ")}
                       </div>
                       <DispBadge d={m.b.disposition} />
                     </div>
