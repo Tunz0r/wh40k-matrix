@@ -90,6 +90,15 @@ export async function getTournament(id: string): Promise<TournamentMeta | null> 
   return snap.exists() ? (snap.val() as TournamentMeta) : null;
 }
 
+// Firebase RTDB rejects any write whose value tree contains `undefined` (e.g. a
+// meta built from another record that omitted an optional field). Drop such
+// keys before writing so optional fields simply don't get stored.
+export function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) if (v !== undefined) out[k] = v;
+  return out as T;
+}
+
 // Create a tournament. The signed-in user becomes its owner (captain) and it is
 // added to their tournament index — all atomically so ownership + visibility
 // exist the instant the registry entry does. Any signed-in user may create one.
@@ -98,7 +107,7 @@ export async function addTournament(
 ): Promise<void> {
   await authReady();
   const uid = currentUser()?.uid;
-  const entry = { ...meta, createdAt: Date.now() };
+  const entry = stripUndefined({ ...meta, createdAt: Date.now() });
   const updates: Record<string, unknown> = {
     [`${REGISTRY}/${meta.id}`]: entry,
   };
@@ -114,5 +123,5 @@ export async function updateTournament(
   patch: Partial<TournamentMeta>
 ): Promise<void> {
   await authReady();
-  await update(ref(getDb(), `${REGISTRY}/${id}`), patch);
+  await update(ref(getDb(), `${REGISTRY}/${id}`), stripUndefined(patch as Record<string, unknown>));
 }

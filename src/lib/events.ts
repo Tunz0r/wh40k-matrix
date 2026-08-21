@@ -22,6 +22,7 @@ import { getDb, authReady, currentUser } from "./firebase";
 import {
   addTournament,
   updateTournament,
+  stripUndefined,
   type TournamentMeta,
   type TournamentStatus,
 } from "./tournaments-registry";
@@ -54,7 +55,7 @@ export async function addEvent(meta: Omit<EventMeta, "createdAt" | "fieldSlug"> 
   await authReady();
   const uid = currentUser()?.uid;
   const fieldSlug = meta.fieldSlug || meta.id;
-  const entry: EventMeta = { ...meta, fieldSlug, createdAt: Date.now() };
+  const entry = stripUndefined({ ...meta, fieldSlug, createdAt: Date.now() }) as EventMeta;
   const updates: Record<string, unknown> = { [`${EVENTS}/${meta.id}`]: entry };
   if (uid) {
     updates[`${OWNERS}/${fieldSlug}/${uid}`] = true; // organizer can write the field
@@ -71,7 +72,7 @@ export async function getEvent(id: string): Promise<EventMeta | null> {
 
 export async function updateEvent(id: string, patch: Partial<EventMeta>): Promise<void> {
   await authReady();
-  await update(ref(getDb(), `${EVENTS}/${id}`), patch);
+  await update(ref(getDb(), `${EVENTS}/${id}`), stripUndefined(patch as Record<string, unknown>));
 }
 
 // Register a team (a new camp) under an existing event. The signed-in user
