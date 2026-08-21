@@ -190,20 +190,20 @@ export default function EstimatesPage() {
       if (!confirm(
         `Gendan ${teamCount} hold (${cellCount} estimat-celler) fra ${data.exportedAt || "backup"}?\n\n` +
         `Hold i backuppen overskrives. Hold der IKKE er i backuppen røres ikke.`)) return;
-      const n = await restoreOpponents(map, activeSlug);
+      const n = await restoreOpponents(map, activeSlug, activeFieldSlug);
       alert(`${n} hold gendannet.`);
     } catch {
       alert("Kunne ikke læse filen — er det en JSON-backup?");
     }
   }
 
-  const { activeSlug, active } = useActiveTournament();
+  const { activeSlug, activeFieldSlug, active } = useActiveTournament();
   const [catalog, setCatalog] = useState<OpponentMap>({});
   const [deprecations, setDeprecations] = useState<DeprecationMap>({});
   useEffect(() => subscribeToDeprecations(setDeprecations), []);
   useEffect(() => {
     try {
-      const unsub1 = subscribeToOpponents(setOpponents, activeSlug);
+      const unsub1 = subscribeToOpponents(setOpponents, activeSlug, true, activeFieldSlug);
       const unsub2 = subscribeToTournament(activeSlug, setFbDoc);
       const unsub3 = subscribeToVersions(setVersions, activeSlug);
       const unsub4 = subscribeToLibraryTeams(setCatalog);
@@ -212,7 +212,7 @@ export default function EstimatesPage() {
       ensureVersions(activeSlug).catch(() => {});
       return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
     } catch {}
-  }, [activeSlug]);
+  }, [activeSlug, activeFieldSlug]);
 
   // The opt-in picker (non-legacy tournaments only): catalog archetypes not yet
   // pulled into this tournament's estimate view.
@@ -399,7 +399,7 @@ export default function EstimatesPage() {
       estimates,
       ...(existing?.notes ? { notes: existing.notes } : {}),
     };
-    saveOpponentTeam(slug, team, activeSlug).catch(() => alert("Kunne ikke gemme — tjek Firebase"));
+    saveOpponentTeam(slug, team, activeSlug, activeFieldSlug).catch(() => alert("Kunne ikke gemme — tjek Firebase"));
     setImportFor(null);
     setImportText("");
     setExpanded(slug);
@@ -461,7 +461,7 @@ export default function EstimatesPage() {
   // Persist a changed list and re-derive the auto estimates in its column
   // against the new content. Manual estimates are kept (captain's judgment).
   function persistListChange(slug: string, idx: number, list: OpponentList) {
-    updateOpponentList(slug, idx, list, activeSlug)
+    updateOpponentList(slug, idx, list, activeSlug, activeFieldSlug)
       .then(() => {
         const updates: Record<string, EstimateCell | null> = {};
         for (let i = 0; i < ourArmies.length; i++) {
@@ -573,7 +573,7 @@ export default function EstimatesPage() {
 
   function removeTeam(slug: string, name: string) {
     if (!confirm(`Slet ${name} og alle estimater?`)) return;
-    deleteOpponentTeam(slug, activeSlug).catch(() => {});
+    deleteOpponentTeam(slug, activeSlug, activeFieldSlug).catch(() => {});
     if (expanded === slug) setExpanded(null);
   }
 
@@ -894,7 +894,7 @@ export default function EstimatesPage() {
                             note={team.notes}
                             editing={noteDraft?.key === `team:${slug}` ? { text: noteDraft.text } : null}
                             onEdit={(t) => setNoteDraft(t === null ? null : { key: `team:${slug}`, text: t })}
-                            onSave={(t) => { saveTeamNote(slug, t.trim(), activeSlug).catch(() => {}); setNoteDraft(null); }}
+                            onSave={(t) => { saveTeamNote(slug, t.trim(), activeSlug, activeFieldSlug).catch(() => {}); setNoteDraft(null); }}
                             placeholder={`Intel om ${teamName} — kaptajnens vaner, pairing-tendenser...`}
                           />
                         </div>
@@ -1023,7 +1023,7 @@ export default function EstimatesPage() {
                                     note={list.notes}
                                     editing={noteDraft?.key === `list:${rowKey}` ? { text: noteDraft.text } : null}
                                     onEdit={(t) => setNoteDraft(t === null ? null : { key: `list:${rowKey}`, text: t })}
-                                    onSave={(t) => { saveListNote(slug, j, t.trim(), activeSlug).catch(() => {}); setNoteDraft(null); }}
+                                    onSave={(t) => { saveListNote(slug, j, t.trim(), activeSlug, activeFieldSlug).catch(() => {}); setNoteDraft(null); }}
                                     placeholder={`Intel om denne ${list.faction}-liste...`}
                                   />
                                 </div>

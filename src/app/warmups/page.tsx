@@ -153,14 +153,14 @@ export default function WarmupsPage() {
   const [fMinDelta, setFMinDelta] = useState(0);
   const [sort, setSort] = useState("absdelta");
 
-  const { activeSlug } = useActiveTournament();
+  const { activeSlug, activeFieldSlug } = useActiveTournament();
   useEffect(() => {
     try {
       const u1 = subscribeToTournament(activeSlug, setDoc);
-      const u2 = subscribeToOpponents(setOpponents, activeSlug);
+      const u2 = subscribeToOpponents(setOpponents, activeSlug, true, activeFieldSlug);
       return () => { u1(); u2(); };
     } catch {}
-  }, [activeSlug]);
+  }, [activeSlug, activeFieldSlug]);
 
   // Collapse/mode state survives navigation within the browser session.
   useEffect(() => {

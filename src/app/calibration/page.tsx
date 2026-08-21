@@ -98,14 +98,14 @@ export default function CalibrationPage() {
   const [sessions, setSessions] = useState<Record<string, SessionData>>({});
   const [loading, setLoading] = useState(true);
 
-  const { activeSlug } = useActiveTournament();
+  const { activeSlug, activeFieldSlug } = useActiveTournament();
   useEffect(() => {
     try {
       const u1 = subscribeToTournament(activeSlug, setDoc);
-      const u2 = subscribeToOpponents(setOpponents, activeSlug);
+      const u2 = subscribeToOpponents(setOpponents, activeSlug, true, activeFieldSlug);
       return () => { u1(); u2(); };
     } catch {}
-  }, [activeSlug]);
+  }, [activeSlug, activeFieldSlug]);
 
   const rounds = useMemo(
     () =>

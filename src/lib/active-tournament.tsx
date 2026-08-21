@@ -30,6 +30,7 @@ interface ActiveTournament {
   active: TournamentMeta | null;
   activeId: string;
   activeSlug: string; // dataSlug of the active tournament
+  activeFieldSlug?: string; // event's shared field node, when the camp is in an event
   setActive: (id: string) => void;
 }
 
@@ -68,6 +69,7 @@ export function ActiveTournamentProvider({ children }: { children: ReactNode }) 
       active,
       activeId: active?.id ?? activeId,
       activeSlug: active?.dataSlug ?? WTC_2026.dataSlug,
+      activeFieldSlug: active?.fieldSlug,
       setActive,
     }),
     [tournaments, active, activeId]

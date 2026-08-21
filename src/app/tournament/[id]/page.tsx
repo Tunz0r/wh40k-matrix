@@ -64,6 +64,7 @@ export default function TournamentDetailPage({
         slug={meta.dataSlug}
         teamName={meta.teamName}
         teamSize={meta.teamSize ?? 8}
+        fieldSlug={meta.fieldSlug}
       />
     </>
   );

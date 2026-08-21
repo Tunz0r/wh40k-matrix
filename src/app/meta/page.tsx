@@ -81,14 +81,14 @@ export default function MetaPage() {
   const [biasMode, setBiasMode] = useState<BiasMode>("raw");
   const [onlyUntested, setOnlyUntested] = useState(false);
 
-  const { activeSlug } = useActiveTournament();
+  const { activeSlug, activeFieldSlug } = useActiveTournament();
   useEffect(() => {
     try {
       const u1 = subscribeToTournament(activeSlug, setDoc);
-      const u2 = subscribeToOpponents(setOpponents, activeSlug, false); // tournament-local field only
+      const u2 = subscribeToOpponents(setOpponents, activeSlug, false, activeFieldSlug); // tournament-local field only
       return () => { u1(); u2(); };
     } catch {}
-  }, [activeSlug]);
+  }, [activeSlug, activeFieldSlug]);
   useEffect(() => {
     setOnlyUntested(sessionStorage.getItem(TEST_KEY) === "1");
     const m = sessionStorage.getItem(BIAS_KEY);

@@ -10,6 +10,7 @@ import {
   type OpponentMap,
   type OpponentList,
 } from "@/lib/estimates-db";
+import { useActiveTournament } from "@/lib/active-tournament";
 
 // Render one verbatim WTC list (from the document) with light styling: datasheet
 // headers stand out, enhancements are highlighted amber, model/wargear detail is
@@ -45,6 +46,7 @@ export default function CountryListsPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = use(params);
+  const { activeSlug, activeFieldSlug } = useActiveTournament();
   const [opponents, setOpponents] = useState<OpponentMap>({});
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
@@ -52,16 +54,16 @@ export default function CountryListsPage({
 
   useEffect(() => {
     try {
-      return subscribeToOpponents((m) => { setOpponents(m); setLoaded(true); });
+      return subscribeToOpponents((m) => { setOpponents(m); setLoaded(true); }, activeSlug, true, activeFieldSlug);
     } catch {}
-  }, []);
+  }, [activeSlug, activeFieldSlug]);
 
-  // Verbatim lists live in a sibling node — fetched on demand for this country.
+  // Verbatim lists live in the field/sibling node — fetched on demand.
   useEffect(() => {
     let live = true;
-    fetchRawLists(slug).then((r) => { if (live) setRaw(r); }).catch(() => {});
+    fetchRawLists(slug, activeSlug, activeFieldSlug).then((r) => { if (live) setRaw(r); }).catch(() => {});
     return () => { live = false; };
-  }, [slug]);
+  }, [slug, activeSlug, activeFieldSlug]);
 
   const team = opponents[slug];
   const armies = useMemo(() => team?.armies || [], [team]);

@@ -81,17 +81,17 @@ export default function PlayerPage() {
   const [activeSession, setActiveSession] = useState<SessionData | null>(null);
   const [pastSessions, setPastSessions] = useState<Record<string, SessionData>>({});
 
-  const { activeSlug, active, setActive } = useActiveTournament();
+  const { activeSlug, activeFieldSlug, active, setActive } = useActiveTournament();
   const { user } = useAuth();
   const [myTournaments, setMyTournaments] = useState<TournamentMeta[]>([]);
   useEffect(() => (user?.uid ? subscribeToMyTournaments(user.uid, setMyTournaments) : undefined), [user?.uid]);
   useEffect(() => {
     try {
       const u1 = subscribeToTournament(activeSlug, setDoc);
-      const u2 = subscribeToOpponents(setOpponents, activeSlug);
+      const u2 = subscribeToOpponents(setOpponents, activeSlug, true, activeFieldSlug);
       return () => { u1(); u2(); };
     } catch {}
-  }, [activeSlug]);
+  }, [activeSlug, activeFieldSlug]);
 
   const { activePlayer, activePlayerId, players, setActivePlayer, effectiveIdx, myArmyIdx, canManage } = useActivePlayer();
   // Self-rename of my own seat (fixes seats that got labelled with an email

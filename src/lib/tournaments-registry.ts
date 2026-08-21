@@ -27,6 +27,11 @@ export interface TournamentMeta {
   endDate?: string | null; // ISO
   status: TournamentStatus;
   createdAt: number;
+  // Multi-team events: a camp (one team's prep) belongs to an event and reads its
+  // shared opponent field. Absent = a standalone/legacy tournament (its field
+  // lives in its own node, e.g. WTC 2026 / team-denmark).
+  eventId?: string;
+  fieldSlug?: string; // estimates/_fields/{fieldSlug} — the event's shared field
 }
 
 // The registry lives under the write-allowed `tournaments` node (DB rules only

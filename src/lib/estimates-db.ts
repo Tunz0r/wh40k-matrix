@@ -54,10 +54,16 @@ const baseFor = (slug: string = TEAM_SLUG) => `estimates/${slug}`;
 // so everything defaults to the per-tournament node (current behavior).
 const LIBRARY = "estimates/_library";
 let LIB_SLUGS = new Set<string>();
+// An event's SHARED opponent field: the country lists every team in the event
+// preps against. Lives here (read by all event members, written by the organizer)
+// while each camp's estimate cells stay in the camp node — same split as _library.
+const FIELDS = "estimates/_fields";
+const fieldNode = (fieldSlug: string) => `${FIELDS}/${fieldSlug}`;
 // Where a team's LISTS/notes live: the shared library for library archetypes
-// (so the reference lists stay global), else the per-tournament node.
-const listNodeForTeam = (teamSlug: string, tournamentSlug: string) =>
-  LIB_SLUGS.has(teamSlug) ? LIBRARY : baseFor(tournamentSlug);
+// (reference lists stay global); the event's shared field when editing a country
+// team under an event (`fieldSlug`); else the per-tournament (camp) node.
+const listNodeForTeam = (teamSlug: string, tournamentSlug: string, fieldSlug?: string) =>
+  LIB_SLUGS.has(teamSlug) ? LIBRARY : fieldSlug ? fieldNode(fieldSlug) : baseFor(tournamentSlug);
 // Where a team's ESTIMATE CELLS live: ALWAYS the per-tournament node — an
 // estimate is "my army (in THIS tournament) vs their list", so it must never be
 // shared. For a library archetype this lands at estimates/{slug}/{archetype}/
@@ -84,50 +90,60 @@ export function slugifyTeam(name: string): string {
 export function subscribeToOpponents(
   callback: (teams: OpponentMap) => void,
   slug: string = TEAM_SLUG,
-  includeLibrary: boolean = true
+  includeLibrary: boolean = true,
+  fieldSlug?: string
 ): () => void {
   let cancelled = false;
   let offBase: (() => void) | null = null;
   let offLib: (() => void) | null = null;
+  let offField: (() => void) | null = null;
   let baseTeams: OpponentMap = {};
   let libTeams: OpponentMap = {};
+  let fieldTeams: OpponentMap = {};
+  // The shared field applies only for a camp that belongs to an event whose field
+  // node differs from its own node. Otherwise (legacy/standalone) country teams
+  // live in the camp node exactly as before.
+  const useField = !!fieldSlug && fieldSlug !== slug;
   let baseReady = false;
   let libReady = !includeLibrary; // when excluded, the library half is "ready" (empty)
+  let fieldReady = !useField; // when unused, the field half is "ready" (empty)
   const emit = () => {
-    if (!baseReady || !libReady) return; // wait for both to avoid a flash of half the field
-    if (!includeLibrary) {
-      // Tournament-local view: only real teams (country teams carry a `name`);
-      // skip the estimates-only archetype entries that share this node.
-      const local: OpponentMap = {};
-      for (const [k, team] of Object.entries(baseTeams)) if (team && team.name) local[k] = team;
-      callback(local);
-      return;
-    }
+    if (!baseReady || !libReady || !fieldReady) return; // wait for all to avoid a flash of half the field
     const result: OpponentMap = {};
-    // Library archetypes: LISTS come from the global _library; ESTIMATES come
-    // from THIS tournament's own node (grafted on), so a fresh tournament starts
-    // with an empty estimate slate. LEGACY FALLBACK: for the original team
-    // (TEAM_SLUG), whose archetype estimates still live inside _library until
-    // migrated out, merge those under the per-tournament ones — so nothing
-    // disappears pre-migration and a partial write can't shadow the old values.
-    // Other tournaments get NO fallback → true isolation.
-    for (const [teamKey, libTeam] of Object.entries(libTeams)) {
-      // The legacy team (WTC 2026) shows its whole curated library, EXCEPT the
-      // WTC-2026 tier entries promoted from its own opponents — those would be
-      // circular there. Other tournaments opt these in like anything else.
-      if (slug === TEAM_SLUG && libTeam.wtc) continue;
-      // Global catalog, OPT-IN per tournament: a library archetype only appears
-      // if this tournament has pulled it in (a per-tournament entry exists —
-      // an optIn marker or actual estimates). The legacy team (TEAM_SLUG) shows
-      // all of the rest of its curated library for backward-compatibility.
-      const optedIn = slug === TEAM_SLUG || baseTeams[teamKey] !== undefined;
-      if (!optedIn) continue;
-      const legacy = slug === TEAM_SLUG ? libTeam.estimates || {} : {};
-      result[teamKey] = { ...libTeam, estimates: { ...legacy, ...(baseTeams[teamKey]?.estimates || {}) } };
+
+    // Country field. For an event camp: LISTS come from the shared field node,
+    // this camp's ESTIMATES graft on top (isolation). Legacy/standalone: country
+    // teams (real name/armies) live in the camp node.
+    if (useField) {
+      for (const [k, fieldTeam] of Object.entries(fieldTeams)) {
+        if (!fieldTeam || !fieldTeam.name) continue;
+        result[k] = { ...fieldTeam, estimates: { ...(baseTeams[k]?.estimates || {}) } };
+      }
+    } else {
+      for (const [k, team] of Object.entries(baseTeams)) {
+        if (team && team.name) result[k] = team;
+      }
     }
-    // Country teams (real name/armies) from the per-tournament node.
-    for (const [k, team] of Object.entries(baseTeams)) {
-      if (team && team.name) result[k] = team;
+
+    if (includeLibrary) {
+      // Library archetypes: LISTS from the global _library; ESTIMATES from THIS
+      // camp's node (grafted). LEGACY FALLBACK: the original team (TEAM_SLUG),
+      // whose archetype estimates still live inside _library until migrated out,
+      // merges those under its per-tournament ones. Other tournaments get no
+      // fallback → true isolation.
+      for (const [teamKey, libTeam] of Object.entries(libTeams)) {
+        if (result[teamKey]) continue; // a country team already occupies this key
+        // The legacy team (WTC 2026) shows its whole curated library, EXCEPT the
+        // WTC-2026 tier entries promoted from its own opponents (circular there).
+        if (slug === TEAM_SLUG && libTeam.wtc) continue;
+        // Global catalog, OPT-IN per tournament: a library archetype only appears
+        // if this tournament pulled it in (a per-tournament entry exists). The
+        // legacy team shows all of the rest of its curated library.
+        const optedIn = slug === TEAM_SLUG || baseTeams[teamKey] !== undefined;
+        if (!optedIn) continue;
+        const legacy = slug === TEAM_SLUG ? libTeam.estimates || {} : {};
+        result[teamKey] = { ...libTeam, estimates: { ...legacy, ...(baseTeams[teamKey]?.estimates || {}) } };
+      }
     }
     callback(result);
   };
@@ -136,6 +152,23 @@ export function subscribeToOpponents(
     const rb = ref(getDb(), baseFor(slug));
     onValue(rb, (snap) => { baseTeams = snap.val() || {}; baseReady = true; emit(); });
     offBase = () => off(rb);
+    if (useField) {
+      const rf = ref(getDb(), fieldNode(fieldSlug!));
+      onValue(
+        rf,
+        (snap) => {
+          const raw = (snap.val() as OpponentMap) || {};
+          // `_raw` holds verbatim lists, not teams — fetched on demand elsewhere.
+          const { _raw, ...teams } = raw as OpponentMap & { _raw?: unknown };
+          void _raw;
+          fieldTeams = teams;
+          fieldReady = true;
+          emit();
+        },
+        () => { fieldTeams = {}; fieldReady = true; emit(); }
+      );
+      offField = () => off(rf);
+    }
     if (includeLibrary) {
       const rl = ref(getDb(), LIBRARY);
       onValue(rl, (snap) => {
@@ -155,6 +188,7 @@ export function subscribeToOpponents(
     cancelled = true;
     offBase?.();
     offLib?.();
+    offField?.();
   };
 }
 
@@ -249,28 +283,34 @@ export async function optOutArchetype(
 // the /lists reader. Returns { [armyIdx]: rawListText }.
 export async function fetchRawLists(
   slug: string,
-  tournamentSlug: string = TEAM_SLUG
+  tournamentSlug: string = TEAM_SLUG,
+  fieldSlug?: string
 ): Promise<Record<string, string>> {
   await authReady();
-  const snap = await get(ref(getDb(), `estimates/${tournamentSlug}-lists-raw/${slug}`));
+  const path = fieldSlug
+    ? `${fieldNode(fieldSlug)}/_raw/${slug}`
+    : `estimates/${tournamentSlug}-lists-raw/${slug}`;
+  const snap = await get(ref(getDb(), path));
   return (snap.val() as Record<string, string> | null) || {};
 }
 
 export async function saveOpponentTeam(
   slug: string,
   team: OpponentTeam,
-  tournamentSlug: string = TEAM_SLUG
+  tournamentSlug: string = TEAM_SLUG,
+  fieldSlug?: string
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${listNodeForTeam(slug, tournamentSlug)}/${slug}`), team);
+  await set(ref(getDb(), `${listNodeForTeam(slug, tournamentSlug, fieldSlug)}/${slug}`), team);
 }
 
 export async function deleteOpponentTeam(
   slug: string,
-  tournamentSlug: string = TEAM_SLUG
+  tournamentSlug: string = TEAM_SLUG,
+  fieldSlug?: string
 ): Promise<void> {
   await authReady();
-  await remove(ref(getDb(), `${listNodeForTeam(slug, tournamentSlug)}/${slug}`));
+  await remove(ref(getDb(), `${listNodeForTeam(slug, tournamentSlug, fieldSlug)}/${slug}`));
 }
 
 // Restore teams from a backup by writing each team individually. Teams present
@@ -278,12 +318,13 @@ export async function deleteOpponentTeam(
 // (never a blanket wipe), so restoring an old backup can't delete newer teams.
 export async function restoreOpponents(
   map: OpponentMap,
-  tournamentSlug: string = TEAM_SLUG
+  tournamentSlug: string = TEAM_SLUG,
+  fieldSlug?: string
 ): Promise<number> {
   await authReady();
   const updates: Record<string, OpponentTeam> = {};
   for (const [slug, team] of Object.entries(map)) {
-    if (team && team.name) updates[`${listNodeForTeam(slug, tournamentSlug)}/${slug}`] = team;
+    if (team && team.name) updates[`${listNodeForTeam(slug, tournamentSlug, fieldSlug)}/${slug}`] = team;
   }
   if (Object.keys(updates).length) await update(ref(getDb()), updates);
   return Object.keys(updates).length;
@@ -293,10 +334,11 @@ export async function restoreOpponents(
 export async function saveTeamNote(
   slug: string,
   note: string,
-  tournamentSlug: string = TEAM_SLUG
+  tournamentSlug: string = TEAM_SLUG,
+  fieldSlug?: string
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${listNodeForTeam(slug, tournamentSlug)}/${slug}/notes`), note || null);
+  await set(ref(getDb(), `${listNodeForTeam(slug, tournamentSlug, fieldSlug)}/${slug}/notes`), note || null);
 }
 
 // Save scouting note for a single list.
@@ -304,10 +346,11 @@ export async function saveListNote(
   slug: string,
   idx: number,
   note: string,
-  tournamentSlug: string = TEAM_SLUG
+  tournamentSlug: string = TEAM_SLUG,
+  fieldSlug?: string
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${listNodeForTeam(slug, tournamentSlug)}/${slug}/armies/${idx}/notes`), note || null);
+  await set(ref(getDb(), `${listNodeForTeam(slug, tournamentSlug, fieldSlug)}/${slug}/armies/${idx}/notes`), note || null);
 }
 
 // Replace a single list on a team without touching the other seven or the estimates.
@@ -315,10 +358,11 @@ export async function updateOpponentList(
   slug: string,
   idx: number,
   list: OpponentList,
-  tournamentSlug: string = TEAM_SLUG
+  tournamentSlug: string = TEAM_SLUG,
+  fieldSlug?: string
 ): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `${listNodeForTeam(slug, tournamentSlug)}/${slug}/armies/${idx}`), list);
+  await set(ref(getDb(), `${listNodeForTeam(slug, tournamentSlug, fieldSlug)}/${slug}/armies/${idx}`), list);
 }
 
 // Multi-path write of estimate cells. Keys are `${teamSlug}/${ourIdx}_${theirIdx}`;

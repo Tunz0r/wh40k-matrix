@@ -137,17 +137,17 @@ export default function SanityPage() {
   const [opponents, setOpponents] = useState<OpponentMap>({});
   const [acks, setAcks] = useState<SanityAckMap>({});
   const [versions, setVersions] = useState<VersionsNode | null>(null);
-  const { activeSlug } = useActiveTournament();
+  const { activeSlug, activeFieldSlug } = useActiveTournament();
 
   useEffect(() => {
     try {
       const u1 = subscribeToTournament(activeSlug, setDoc);
-      const u2 = subscribeToOpponents(setOpponents, activeSlug, false); // tournament-local field only
+      const u2 = subscribeToOpponents(setOpponents, activeSlug, false, activeFieldSlug); // tournament-local field only
       const u3 = subscribeToSanityAcks(setAcks, activeSlug);
       const u4 = subscribeToVersions(setVersions, activeSlug);
       return () => { u1(); u2(); u3(); u4(); };
     } catch {}
-  }, [activeSlug]);
+  }, [activeSlug, activeFieldSlug]);
 
   const clusters = useMemo(() => clusterLists(opponents), [opponents]);
   const armies = useMemo(() => doc?.roster?.armies || [], [doc]);

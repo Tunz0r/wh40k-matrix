@@ -594,10 +594,12 @@ export default function TournamentDashboard({
   teamSize = 8,
   slug = DEFAULT_SLUG,
   teamName = DEFAULT_NAME,
+  fieldSlug,
 }: {
   teamSize?: number;
   slug?: string;
   teamName?: string;
+  fieldSlug?: string;
 }) {
   // Number of Initial Skirmish modules for this team size (Companion pairing
   // plan): 8p = 2, 5p = 1, 3-4p = 0. Main Engagement always runs; the Champion
@@ -674,7 +676,7 @@ export default function TournamentDashboard({
   const [opponents, setOpponents] = useState<OpponentMap>({});
   useEffect(() => {
     try {
-      return subscribeToOpponents(setOpponents, slug);
+      return subscribeToOpponents(setOpponents, slug, true, fieldSlug);
     } catch {}
   }, []);
 

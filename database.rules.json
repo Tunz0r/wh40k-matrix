@@ -29,6 +29,20 @@
           ".write": "auth != null && ($uid === auth.uid || root.child('tournaments/_admins/'+auth.uid).exists())"
         }
       },
+      "_events": {
+        ".read": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()",
+        "$id": {
+          ".read": "auth != null",
+          ".write": "auth != null && (!data.exists() || root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_owners/'+$id+'/'+auth.uid).exists())"
+        }
+      },
+      "_myEvents": {
+        ".write": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()",
+        "$uid": {
+          ".read": "auth != null && ($uid === auth.uid || root.child('tournaments/_admins/'+auth.uid).exists())",
+          ".write": "auth != null && ($uid === auth.uid || root.child('tournaments/_admins/'+auth.uid).exists())"
+        }
+      },
       "_coaches": {
         ".read": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()",
         ".write": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()"
@@ -119,6 +133,12 @@
         ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_teamMembers/'+auth.uid).exists())",
         "_deprecated": {
           ".write": "auth != null && (root.child('tournaments/_bots/'+auth.uid).exists() || root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_teamMembers/'+auth.uid).exists())"
+        }
+      },
+      "_fields": {
+        "$fieldKey": {
+          ".read": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_members/'+$fieldKey+'/'+auth.uid).exists() || root.child('tournaments/_owners/'+$fieldKey+'/'+auth.uid).exists() || root.child('tournaments/_myEvents/'+auth.uid+'/'+$fieldKey).exists())",
+          ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_owners/'+$fieldKey+'/'+auth.uid).exists())"
         }
       },
       "$node": {

@@ -85,14 +85,14 @@ export default function StatsPage() {
   const [opponents, setOpponents] = useState<OpponentMap>({});
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
 
-  const { activeSlug } = useActiveTournament();
+  const { activeSlug, activeFieldSlug } = useActiveTournament();
   useEffect(() => {
     try {
-      const u1 = subscribeToOpponents(setOpponents, activeSlug, false); // tournament-local field only
+      const u1 = subscribeToOpponents(setOpponents, activeSlug, false, activeFieldSlug); // tournament-local field only
       const u2 = subscribeToTournament(activeSlug, setDoc);
       return () => { u1(); u2(); };
     } catch {}
-  }, [activeSlug]);
+  }, [activeSlug, activeFieldSlug]);
 
   const stats = useMemo(() => {
     // Real WTC 2026 field: teams flagged wtc + our own roster.
