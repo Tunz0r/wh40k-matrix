@@ -804,6 +804,16 @@ export default function PlayerPage() {
               )}
             </div>
 
+            {!myProfile && (
+              <p className="text-[11px] text-[#8888a0] px-1 -mt-2">
+                Vælg din arketype ovenfor for at låse op for træningsprioritet, warmup-log og resultater.
+              </p>
+            )}
+
+            {/* The prep tools only appear once you've mapped your archetype — it's
+                what ties estimates and warmup calibration to your list. */}
+            {myProfile && (
+            <>
             {/* Practice priority: what to train against next, ranked live */}
             <div className="rounded-xl border border-white/[0.08] p-4">
               <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1064,6 +1074,8 @@ export default function PlayerPage() {
                 <span className="text-[11px] text-[#8888a0]">{myProgress.filled}/{myProgress.total}</span>
               </div>
             </div>
+            </>
+            )}
           </>
         )}
       </div>

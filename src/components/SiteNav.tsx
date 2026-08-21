@@ -7,19 +7,24 @@ import { TEAM_NAME } from "@/lib/team";
 import { useActiveTournament } from "@/lib/active-tournament";
 import { useActivePlayer } from "@/lib/active-player";
 import { useAuth } from "@/lib/auth";
+import { subscribeToMyTournaments } from "@/lib/membership";
 
 type NavLink = { href: string; label: string; match: (path: string) => boolean };
 
-// Core links live directly on the bar; everything else folds into "Mere" so the
-// row never wraps. The matrix itself lives on "/" — reached via the brand logo.
-const CORE: NavLink[] = [
-  { href: "/tournament", label: "Turnering", match: (p) => p.startsWith("/tournament") || p.startsWith("/coaching") },
+const TURNERING: NavLink = { href: "/tournament", label: "Turnering", match: (p) => p.startsWith("/tournament") || p.startsWith("/coaching") };
+const TEAM_ROOM: NavLink = { href: "/team", label: "Team Room", match: (p) => p.startsWith("/team") };
+const MIN_SIDE: NavLink = { href: "/player", label: "Min side", match: (p) => p.startsWith("/player") };
+
+// A plain player sees only their three things. Captains/admins get the full
+// toolset. The matrix itself lives on "/" — reached via the brand logo.
+const PLAYER_CORE: NavLink[] = [MIN_SIDE, TURNERING, TEAM_ROOM];
+const CAPTAIN_CORE: NavLink[] = [
+  TURNERING,
   { href: "/estimates", label: "Estimater", match: (p) => p.startsWith("/estimates") },
   { href: "/meta", label: "Meta", match: (p) => p.startsWith("/meta") },
-  { href: "/team", label: "Team Room", match: (p) => p.startsWith("/team") },
+  TEAM_ROOM,
 ];
-
-const MORE: NavLink[] = [
+const CAPTAIN_MORE: NavLink[] = [
   { href: "/roster", label: "Roster", match: (p) => p.startsWith("/roster") },
   { href: "/stats", label: "Stats", match: (p) => p.startsWith("/stats") },
   { href: "/sanity", label: "Sanity", match: (p) => p.startsWith("/sanity") },
@@ -31,14 +36,19 @@ export default function SiteNav() {
   const pathname = usePathname() || "/";
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menu, setMenu] = useState<null | "more" | "user">(null);
+  const [tournamentCount, setTournamentCount] = useState(0);
   const { active, activeId, activeSlug } = useActiveTournament();
   const activeName = active?.name ?? "Vælg turnering";
   const teamName = active?.teamName ?? TEAM_NAME;
   const { activePlayer, isAdmin, canManage } = useActivePlayer();
   const { user, signOutUser } = useAuth();
 
+  // How many tournaments this login belongs to — the switcher only appears with 2+.
+  useEffect(() => (user?.uid ? subscribeToMyTournaments(user.uid, (ts) => setTournamentCount(ts.length)) : undefined), [user?.uid]);
+
   // Close any open menu whenever the route changes.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMenu(null);
     setMobileOpen(false);
   }, [pathname]);
@@ -49,17 +59,24 @@ export default function SiteNav() {
     if (l.label === "Turnering") return { ...l, href: `/tournament/${activeId}` };
     return l;
   };
-  const core = CORE.map(resolve);
+  const core = (canManage ? CAPTAIN_CORE : PLAYER_CORE).map(resolve);
+  const more = canManage ? CAPTAIN_MORE : [];
 
   const displayName = user?.displayName?.trim() || activePlayer?.name || "Min konto";
   const initial = displayName.charAt(0).toUpperCase();
-  const moreActive = MORE.some((l) => l.match(pathname));
+  const moreActive = more.some((l) => l.match(pathname));
+  const showSwitcher = tournamentCount > 1;
 
   const linkClass = (isActive: boolean) =>
     `px-2.5 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
       isActive
         ? "bg-[rgba(168,85,247,0.15)] text-[#c084fc]"
         : "text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04]"
+    }`;
+
+  const menuItemClass = (isActive: boolean) =>
+    `block px-3 py-2 text-[12px] font-medium transition-colors ${
+      isActive ? "text-[#c084fc] bg-[rgba(168,85,247,0.1)]" : "text-[#c8c8d8] hover:text-[#e8e8f0] hover:bg-white/[0.05]"
     }`;
 
   return (
@@ -77,15 +94,17 @@ export default function SiteNav() {
             </span>
           </Link>
 
-          {/* Active tournament — click to switch (the /tournament picker) */}
-          <Link
-            href="/tournament"
-            title="Skift turnering"
-            className="mr-1 shrink-0 flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md border border-white/[0.1] text-[#c084fc] hover:border-[#a855f7]/50 hover:bg-[rgba(168,85,247,0.08)] transition-colors max-w-[150px]"
-          >
-            <span className="truncate">{activeName}</span>
-            <span className="text-[#8888a0] text-[10px] shrink-0">⇄</span>
-          </Link>
+          {/* Active tournament — only when you're on more than one. */}
+          {showSwitcher && (
+            <Link
+              href="/tournament"
+              title="Skift turnering"
+              className="mr-1 shrink-0 flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md border border-white/[0.1] text-[#c084fc] hover:border-[#a855f7]/50 hover:bg-[rgba(168,85,247,0.08)] transition-colors max-w-[150px]"
+            >
+              <span className="truncate">{activeName}</span>
+              <span className="text-[#8888a0] text-[10px] shrink-0">⇄</span>
+            </Link>
+          )}
 
           {/* Desktop links */}
           <div className="hidden sm:flex items-center gap-0.5 flex-1">
@@ -95,37 +114,28 @@ export default function SiteNav() {
               </Link>
             ))}
 
-            {/* Mere ▾ overflow */}
-            <div className="relative">
-              <button
-                onClick={() => setMenu(menu === "more" ? null : "more")}
-                className={linkClass(moreActive || menu === "more")}
-                aria-haspopup="menu"
-                aria-expanded={menu === "more"}
-              >
-                Mere <span className="text-[9px] text-[#8888a0]">▾</span>
-              </button>
-              {menu === "more" && (
-                <div className="absolute left-0 mt-1 w-44 rounded-lg border border-white/[0.1] bg-[#16161d] shadow-xl shadow-black/40 py-1 z-50">
-                  {MORE.map((link) => {
-                    const isActive = link.match(pathname);
-                    return (
-                      <Link
-                        key={link.href}
-                        href={link.href}
-                        className={`block px-3 py-2 text-[12px] font-medium transition-colors ${
-                          isActive
-                            ? "text-[#c084fc] bg-[rgba(168,85,247,0.1)]"
-                            : "text-[#c8c8d8] hover:text-[#e8e8f0] hover:bg-white/[0.05]"
-                        }`}
-                      >
+            {/* Mere ▾ overflow (captains only) */}
+            {more.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setMenu(menu === "more" ? null : "more")}
+                  className={linkClass(moreActive || menu === "more")}
+                  aria-haspopup="menu"
+                  aria-expanded={menu === "more"}
+                >
+                  Mere <span className="text-[9px] text-[#8888a0]">▾</span>
+                </button>
+                {menu === "more" && (
+                  <div className="absolute left-0 mt-1 w-44 rounded-lg border border-white/[0.1] bg-[#16161d] shadow-xl shadow-black/40 py-1 z-50">
+                    {more.map((link) => (
+                      <Link key={link.href} href={link.href} className={menuItemClass(link.match(pathname))}>
                         {link.label}
                       </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Identity menu (right) */}
             <div className="relative ml-auto">
@@ -144,25 +154,14 @@ export default function SiteNav() {
               </button>
               {menu === "user" && (
                 <div className="absolute right-0 mt-1 w-48 rounded-lg border border-white/[0.1] bg-[#16161d] shadow-xl shadow-black/40 py-1 z-50">
-                  <Link
-                    href="/player"
-                    className={`block px-3 py-2 text-[12px] font-medium transition-colors ${
-                      pathname.startsWith("/player")
-                        ? "text-[#c084fc] bg-[rgba(168,85,247,0.1)]"
-                        : "text-[#c8c8d8] hover:text-[#e8e8f0] hover:bg-white/[0.05]"
-                    }`}
-                  >
-                    Min side
-                  </Link>
+                  {/* Captains reach Min side here; players already have it in the bar. */}
                   {canManage && (
-                    <Link
-                      href="/manage"
-                      className={`block px-3 py-2 text-[12px] font-medium transition-colors ${
-                        pathname.startsWith("/manage")
-                          ? "text-[#c084fc] bg-[rgba(168,85,247,0.1)]"
-                          : "text-[#c8c8d8] hover:text-[#e8e8f0] hover:bg-white/[0.05]"
-                      }`}
-                    >
+                    <Link href="/player" className={menuItemClass(pathname.startsWith("/player"))}>
+                      Min side
+                    </Link>
+                  )}
+                  {canManage && (
+                    <Link href="/manage" className={menuItemClass(pathname.startsWith("/manage"))}>
                       Administrér hold
                     </Link>
                   )}
@@ -178,7 +177,7 @@ export default function SiteNav() {
                       Admin
                     </Link>
                   )}
-                  <div className="my-1 border-t border-white/[0.07]" />
+                  {(canManage || isAdmin) && <div className="my-1 border-t border-white/[0.07]" />}
                   <button
                     onClick={() => signOutUser()}
                     className="block w-full text-left px-3 py-2 text-[12px] font-medium text-[#8888a0] hover:text-[#f87171] hover:bg-white/[0.05] transition-colors"
@@ -214,31 +213,26 @@ export default function SiteNav() {
             <span className="w-6 h-6 rounded-full bg-[#4ade80]/15 text-[#4ade80] flex items-center justify-center text-[11px] font-bold">{initial}</span>
             <span className="text-[13px] font-medium text-[#e8e8f0] truncate">{displayName}</span>
           </div>
-          {[...core, ...MORE].map((link) => (
+          {[...core, ...more].map((link) => (
             <Link
               key={link.href}
               href={link.href}
               className={`block px-3 py-2.5 rounded-md text-[13px] font-medium transition-colors ${
-                link.match(pathname)
-                  ? "bg-[rgba(168,85,247,0.15)] text-[#c084fc]"
-                  : "text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04]"
+                link.match(pathname) ? "bg-[rgba(168,85,247,0.15)] text-[#c084fc]" : "text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04]"
               }`}
             >
               {link.label}
             </Link>
           ))}
-          <Link
-            href="/player"
-            className={`block px-3 py-2.5 rounded-md text-[13px] font-medium transition-colors ${
-              pathname.startsWith("/player") ? "bg-[rgba(168,85,247,0.15)] text-[#c084fc]" : "text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04]"
-            }`}
-          >
-            Min side
-          </Link>
           {canManage && (
-            <Link href="/manage" className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#c084fc] hover:bg-white/[0.04] transition-colors">
-              Administrér hold
-            </Link>
+            <>
+              <Link href="/player" className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04] transition-colors">
+                Min side
+              </Link>
+              <Link href="/manage" className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#c084fc] hover:bg-white/[0.04] transition-colors">
+                Administrér hold
+              </Link>
+            </>
           )}
           {isAdmin && (
             <Link href="/admin" className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#f0b429] hover:bg-white/[0.04] transition-colors">
