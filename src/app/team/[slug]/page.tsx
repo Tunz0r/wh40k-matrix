@@ -9,24 +9,37 @@ import {
   resetTournamentDoc,
   type TournamentDoc,
 } from "@/lib/tournament-db";
+import { useAuth } from "@/lib/auth";
+import { subscribeToIsOwner, subscribeToIsAdmin } from "@/lib/membership";
 
 export default function TeamRoomPage() {
   const params = useParams();
   const slug = params.slug as string;
+  const { user } = useAuth();
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
+  // Owner/admin of THIS team room (not the active one) — gates destructive actions.
+  const [isOwner, setIsOwner] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => subscribeToIsOwner(slug, user?.uid ?? null, setIsOwner), [slug, user?.uid]);
+  useEffect(() => subscribeToIsAdmin(user?.uid ?? null, setIsAdmin), [user?.uid]);
+  const canManage = isOwner || isAdmin;
+
   useEffect(() => {
     if (!slug) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setNotFound(false);
     try {
+      // A denied read (not a member of this camp) resolves to null -> "no access".
       const unsub = subscribeToTournament(slug, (data) => {
         if (data) {
           setDoc(data);
           setNotFound(false);
         } else {
+          setDoc(null);
           setNotFound(true);
         }
         setLoading(false);
@@ -49,15 +62,12 @@ export default function TeamRoomPage() {
   if (notFound || !doc) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-3">
-        <div className="text-red-400 text-sm">Hold ikke fundet</div>
-        <p className="text-[11px] text-[#8888a0]">
-          Tjek at URL&apos;en er korrekt: /team/{slug}
+        <div className="text-red-400 text-sm">Ingen adgang til dette team room</div>
+        <p className="text-[11px] text-[#8888a0] max-w-xs text-center">
+          Du er ikke medlem af dette hold. Hvert holds team room er kun for holdets egne spillere.
         </p>
-        <Link
-          href="/tournament/wtc-2026"
-          className="text-[#a855f7] text-xs hover:text-[#c084fc]"
-        >
-          ← Gå til turnering
+        <Link href="/tournament" className="text-[#a855f7] text-xs hover:text-[#c084fc]">
+          ← Mine turneringer
         </Link>
       </div>
     );
@@ -87,15 +97,17 @@ export default function TeamRoomPage() {
               LIVE
             </span>
           )}
-          <button
-            onClick={() => {
-              if (!confirm("Nulstil turnering? Alle aktive kampe og rundehistorik slettes.")) return;
-              resetTournamentDoc(slug);
-            }}
-            className="ml-auto text-[10px] text-red-400 hover:text-red-300 transition-colors"
-          >
-            Reset turnering
-          </button>
+          {canManage && (
+            <button
+              onClick={() => {
+                if (!confirm("Nulstil turnering? Alle aktive kampe og rundehistorik slettes.")) return;
+                resetTournamentDoc(slug);
+              }}
+              className="ml-auto text-[10px] text-red-400 hover:text-red-300 transition-colors"
+            >
+              Reset turnering
+            </button>
+          )}
         </div>
       </header>
 
@@ -140,7 +152,7 @@ export default function TeamRoomPage() {
                 : "Turneringen er ikke startet endnu."}
             </div>
             <Link
-              href="/tournament/wtc-2026"
+              href="/tournament"
               className="inline-block mt-3 text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors"
             >
               Kaptajn: Gå til turneringen og start næste runde →

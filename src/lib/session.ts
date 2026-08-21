@@ -69,9 +69,12 @@ export function subscribeToSession(
   authReady().then(() => {
     if (cancelled) return;
     const sessionRef = ref(getDb(), `sessions/${sessionId}`);
-    onValue(sessionRef, (snapshot) => {
-      callback(snapshot.val());
-    });
+    onValue(
+      sessionRef,
+      (snapshot) => callback(snapshot.val()),
+      // Permission denied (not a member of this session's team) -> null, not a hang.
+      () => callback(null)
+    );
     cleanup = () => off(sessionRef);
   });
   return () => {

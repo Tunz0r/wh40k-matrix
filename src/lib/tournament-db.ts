@@ -338,9 +338,13 @@ export function subscribeToTournament(
   authReady().then(() => {
     if (cancelled) return;
     const tournamentRef = ref(getDb(), `tournaments/${slug}`);
-    onValue(tournamentRef, (snapshot) => {
-      callback(snapshot.val());
-    });
+    onValue(
+      tournamentRef,
+      (snapshot) => callback(snapshot.val()),
+      // Permission denied (not a member of this camp) -> resolve to null so the
+      // UI shows "no access" instead of hanging. Hard per-team isolation.
+      () => callback(null)
+    );
     cleanup = () => off(tournamentRef);
   });
   return () => {
