@@ -6,7 +6,7 @@ import { TEAM_NAME } from "@/lib/team";
 import { useActiveTournament } from "@/lib/active-tournament";
 import { useActivePlayer } from "@/lib/active-player";
 import { useAuth } from "@/lib/auth";
-import { subscribeToMyTournaments } from "@/lib/membership";
+import { subscribeToMyTournaments, upsertSelfUser } from "@/lib/membership";
 import type { TournamentMeta } from "@/lib/tournaments-registry";
 import ArmyEditor from "@/components/ArmyEditor";
 import { DISP_STYLES, FACTIONS } from "@/lib/data";
@@ -16,6 +16,7 @@ import {
   deleteWarmupGame,
   savePlayerProfile,
   setSlotArmy,
+  setSlotName,
   type TournamentDoc,
   type TournamentRound,
   type WarmupGame,
@@ -92,7 +93,19 @@ export default function PlayerPage() {
     } catch {}
   }, [activeSlug]);
 
-  const { activePlayer, activePlayerId, players, setActivePlayer, effectiveIdx, canManage } = useActivePlayer();
+  const { activePlayer, activePlayerId, players, setActivePlayer, effectiveIdx, myArmyIdx, canManage } = useActivePlayer();
+  // Self-rename of my own seat (fixes seats that got labelled with an email
+  // before we captured a proper name at join).
+  const [nameEditing, setNameEditing] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const onOwnSeat = myArmyIdx !== null && effectiveIdx === myArmyIdx;
+  async function saveMyName() {
+    const n = nameDraft.trim();
+    if (!n || myArmyIdx === null) return;
+    await setSlotName(activeSlug, myArmyIdx, n).catch(() => {});
+    if (user?.uid) await upsertSelfUser(user.uid, n).catch(() => {});
+    setNameEditing(false);
+  }
 
   const armies = useMemo(() => doc?.roster?.armies || [], [doc]);
   // "My army" = the roster slot I've claimed in the ACTIVE tournament (or the
@@ -541,9 +554,31 @@ export default function PlayerPage() {
             Min side
             <span className="text-[#4ade80] ml-2 text-sm font-normal">— {active?.teamName ?? TEAM_NAME}</span>
           </h1>
-          {activePlayer && (
-            <span className="text-[12px] text-[#8888a0]">
+          {activePlayer && !nameEditing && (
+            <span className="text-[12px] text-[#8888a0] flex items-center gap-1.5">
               {activePlayer.name}{myFaction ? ` · ${myFaction}` : ""}
+              {onOwnSeat && (
+                <button
+                  onClick={() => { setNameDraft(activePlayer.name); setNameEditing(true); }}
+                  title="Ret dit navn"
+                  className="text-[10px] text-[#8888a0] hover:text-[#c084fc] transition-colors"
+                >
+                  ✎
+                </button>
+              )}
+            </span>
+          )}
+          {activePlayer && nameEditing && (
+            <span className="flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") saveMyName(); if (e.key === "Escape") setNameEditing(false); }}
+                className="text-[12px] px-2 py-1 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+              />
+              <button onClick={saveMyName} disabled={!nameDraft.trim()} className="text-[11px] px-2 py-1 rounded-md bg-[#a855f7] hover:bg-[#9333ea] text-white font-semibold disabled:opacity-50">Gem</button>
+              <button onClick={() => setNameEditing(false)} className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0]">Annullér</button>
             </span>
           )}
         </div>

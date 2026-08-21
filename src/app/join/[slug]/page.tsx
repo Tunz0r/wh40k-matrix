@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { subscribeToRoster, claimSlot, setSlotName } from "@/lib/tournament-db";
+import { upsertSelfUser } from "@/lib/membership";
 import type { RosterExport } from "@/lib/roster";
 
 // Invite landing: a signed-in user opens /join/{dataSlug} (shared by the owner
@@ -15,6 +16,11 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
   const [roster, setRoster] = useState<RosterExport | null | undefined>(undefined);
   const [busy, setBusy] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Google logins carry a display name; email-link logins don't — so we ask.
+  // The email is NEVER used as a fallback (it must stay out of the RTDB).
+  // Prefill from the Google name; once the user types, their edit wins.
+  const [nameEdit, setNameEdit] = useState<string | null>(null);
+  const name = nameEdit ?? user?.displayName ?? "";
 
   useEffect(() => subscribeToRoster(slug, (r) => setRoster(r)), [slug]);
 
@@ -23,16 +29,25 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
 
   async function claim(idx: number) {
     if (!user) return;
+    const chosen = name.trim();
+    if (!chosen) {
+      setErr("Skriv dit navn, før du vælger en plads.");
+      return;
+    }
     setBusy(idx);
     setErr(null);
     try {
       await claimSlot(slug, idx, user.uid);
-      // Put my name on the seat now that I own it (empty seats have no label yet).
-      await setSlotName(slug, idx, user.displayName || user.email || "Spiller").catch(() => {});
+      // Label the seat with the chosen name and persist it as this login's
+      // display name so it shows up everywhere (never the email).
+      await setSlotName(slug, idx, chosen).catch(() => {});
+      await upsertSelfUser(user.uid, chosen).catch(() => {});
+      // Straight into the team — no extra "gå ind" click needed.
+      window.location.assign("/");
     } catch {
       setErr("Kunne ikke vælge pladsen. Måske er den lige blevet taget, eller holdet er lukket.");
+      setBusy(null);
     }
-    setBusy(null);
   }
 
   return (
@@ -70,7 +85,16 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
             </button>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-[10px] text-[#8888a0] uppercase tracking-wider font-semibold block">Dit navn</label>
+              <input
+                value={name}
+                onChange={(e) => setNameEdit(e.target.value)}
+                placeholder="f.eks. Michael Bræmer"
+                className="w-full bg-[#1a1a22] border border-white/[0.14] rounded-lg px-3 py-2 text-sm text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+              />
+            </div>
             <p className="text-[12px] text-[#c8c8d8]">Vælg din plads på holdet:</p>
             <div className="space-y-1.5">
               {roster.armies.map((a, idx) => {
@@ -79,10 +103,12 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
                   <button
                     key={idx}
                     onClick={() => !taken && claim(idx)}
-                    disabled={taken || busy !== null}
+                    disabled={taken || busy !== null || !name.trim()}
                     className={`w-full flex items-center gap-2 text-left rounded-lg border px-3 py-2 transition-colors ${
                       taken
                         ? "border-white/[0.06] opacity-50 cursor-not-allowed"
+                        : !name.trim()
+                        ? "border-white/[0.08] opacity-50 cursor-not-allowed"
                         : "border-white/[0.12] hover:border-[#a855f7]"
                     }`}
                   >
