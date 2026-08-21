@@ -34,10 +34,11 @@ export interface EventMeta {
   teamSize?: number; // default team size for camps registering under it
   format?: string; // free text, e.g. "WTC · 7 runder"
   rounds?: number;
-  startDate?: string | null;
-  endDate?: string | null;
+  startDate?: string | null; // ISO date (YYYY-MM-DD)
+  endDate?: string | null; // ISO date; absent/equal to start = single-day event
   status: TournamentStatus;
   createdAt: number;
+  organizerUid?: string; // who created it (owns the field; may edit the event)
 }
 
 const EVENTS = "tournaments/_events";
@@ -55,7 +56,7 @@ export async function addEvent(meta: Omit<EventMeta, "createdAt" | "fieldSlug"> 
   await authReady();
   const uid = currentUser()?.uid;
   const fieldSlug = meta.fieldSlug || meta.id;
-  const entry = stripUndefined({ ...meta, fieldSlug, createdAt: Date.now() }) as EventMeta;
+  const entry = stripUndefined({ ...meta, fieldSlug, organizerUid: uid, createdAt: Date.now() }) as EventMeta;
   const updates: Record<string, unknown> = { [`${EVENTS}/${meta.id}`]: entry };
   if (uid) {
     updates[`${OWNERS}/${fieldSlug}/${uid}`] = true; // organizer can write the field

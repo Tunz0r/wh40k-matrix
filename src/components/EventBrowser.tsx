@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   addEvent,
+  updateEvent,
   registerTeamForEvent,
   subscribeToEvents,
   slugifyId,
@@ -11,15 +12,19 @@ import {
 import type { TournamentMeta } from "@/lib/tournaments-registry";
 
 // A public directory of events. Every signed-in user sees all events, can create
-// one, and can sign their team up with one click — no invite links. `myCamps`
-// lets it show "your team" for events you've already joined; `onEnter` navigates
-// into a camp (dashboard/manage) after signup or when clicking your team.
+// one, and can sign their team up with one click — no invite links. The event's
+// organizer (and admins) can edit its start/end dates inline. `myCamps` shows
+// "your team" for events you've joined; `onEnter` navigates into a camp.
 export default function EventBrowser({
   myCamps,
   onEnter,
+  userUid,
+  isAdmin = false,
 }: {
   myCamps: TournamentMeta[];
   onEnter: (campId: string) => void;
+  userUid?: string;
+  isAdmin?: boolean;
 }) {
   const [events, setEvents] = useState<EventMeta[]>([]);
   useEffect(() => subscribeToEvents(setEvents), []);
@@ -30,37 +35,51 @@ export default function EventBrowser({
     return m;
   }, [myCamps]);
 
-  // Create event
+  const canEdit = (ev: EventMeta) => isAdmin || (!!userUid && ev.organizerUid === userUid);
+
+  // --- Create event ---------------------------------------------------------
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const [date, setDate] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
   const [size, setSize] = useState(8);
   const [rounds, setRounds] = useState(7);
   const [busy, setBusy] = useState(false);
   const id = useMemo(() => slugifyId(name.trim()), [name]);
   const taken = events.some((e) => e.id === id);
+  const endBeforeStart = !!end && !!start && end < start;
   async function create() {
-    if (!name.trim() || !id || taken || !date || busy) return;
+    if (!name.trim() || !id || taken || !start || endBeforeStart || busy) return;
     setBusy(true);
     try {
-      await addEvent({ id, name: name.trim(), teamSize: size, rounds, startDate: date, format: `${size} spillere · ${rounds} runder`, status: "upcoming" });
+      await addEvent({
+        id,
+        name: name.trim(),
+        teamSize: size,
+        rounds,
+        startDate: start,
+        endDate: end || undefined,
+        format: `${size} spillere · ${rounds} runder`,
+        status: "upcoming",
+      });
       setName("");
-      setDate("");
+      setStart("");
+      setEnd("");
       setCreating(false);
     } finally {
       setBusy(false);
     }
   }
 
-  // Split by date: an event is finished once its date has passed; you can't sign
-  // up for those. Undated events (created before dates were required) count as
-  // upcoming. Upcoming sort soonest-first (dated before undated); finished sort
-  // most-recent-first.
+  // --- Split + sort ---------------------------------------------------------
   const todayStr = new Date().toISOString().slice(0, 10);
-  // Finished = explicitly completed (e.g. WTC 2026), or its date has passed.
-  const isFinished = (e: EventMeta) => e.status === "completed" || (!!e.startDate && e.startDate < todayStr);
-  const fmtDate = (d?: string | null) =>
+  const effEnd = (e: EventMeta) => e.endDate || e.startDate || "";
+  // Finished = explicitly completed (e.g. WTC 2026), or the LAST day has passed.
+  const isFinished = (e: EventMeta) => e.status === "completed" || (!!effEnd(e) && effEnd(e) < todayStr);
+  const fmt = (d?: string | null) =>
     d ? new Date(d + "T00:00:00").toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }) : "";
+  const fmtRange = (e: EventMeta) =>
+    e.startDate && e.endDate && e.endDate !== e.startDate ? `${fmt(e.startDate)} – ${fmt(e.endDate)}` : fmt(e.startDate);
   const upcoming = events
     .filter((e) => !isFinished(e))
     .sort((a, b) => {
@@ -69,9 +88,45 @@ export default function EventBrowser({
       if (b.startDate) return 1;
       return (b.createdAt || 0) - (a.createdAt || 0);
     });
-  const finished = events.filter(isFinished).sort((a, b) => (b.startDate || "").localeCompare(a.startDate || ""));
+  const finished = events.filter(isFinished).sort((a, b) => effEnd(b).localeCompare(effEnd(a)));
 
-  // Sign up (register a team)
+  // --- Edit dates -----------------------------------------------------------
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  function startEdit(ev: EventMeta) {
+    setEditingId(ev.id);
+    setEditStart(ev.startDate || "");
+    setEditEnd(ev.endDate || "");
+  }
+  async function saveEdit(ev: EventMeta) {
+    if (!editStart || (editEnd && editEnd < editStart) || editBusy) return;
+    setEditBusy(true);
+    try {
+      await updateEvent(ev.id, { startDate: editStart, endDate: editEnd || null });
+      setEditingId(null);
+    } finally {
+      setEditBusy(false);
+    }
+  }
+  function dateEditor(ev: EventMeta) {
+    return (
+      <div className="flex items-center gap-2 flex-wrap pt-1 text-[10px]">
+        <label className="flex items-center gap-1 text-[#8888a0]">Start
+          <input type="date" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="text-[11px] px-2 py-1 rounded-md bg-[#1a1a22] border border-white/[0.14] text-[#e8e8f0] outline-none focus:border-[#a855f7] [color-scheme:dark]" />
+        </label>
+        <label className="flex items-center gap-1 text-[#8888a0]">Slut
+          <input type="date" value={editEnd} min={editStart} onChange={(e) => setEditEnd(e.target.value)} className="text-[11px] px-2 py-1 rounded-md bg-[#1a1a22] border border-white/[0.14] text-[#e8e8f0] outline-none focus:border-[#a855f7] [color-scheme:dark]" />
+        </label>
+        <button onClick={() => saveEdit(ev)} disabled={!editStart || (!!editEnd && editEnd < editStart) || editBusy} className="text-[11px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-2.5 py-1 rounded-md transition-colors disabled:opacity-40">Gem</button>
+        <button onClick={() => setEditingId(null)} className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0]">Annullér</button>
+        {editEnd && editEnd < editStart && <span className="text-[#f87171]">Slut er før start</span>}
+      </div>
+    );
+  }
+
+  // --- Sign up --------------------------------------------------------------
   const [signupFor, setSignupFor] = useState<string | null>(null);
   const [teamName, setTeamName] = useState("");
   const [signupBusy, setSignupBusy] = useState(false);
@@ -105,12 +160,18 @@ export default function EventBrowser({
           <p className="text-[11px] text-[#c8c8d8]">Et event er selve turneringen. Alle kan se det og tilmelde deres hold — hvert hold prep&apos;er isoleret mod det samme felt.</p>
           <div className="flex items-center gap-2">
             <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") create(); }} placeholder="Eventets navn, f.eks. WTC 2027" className="flex-1 h-9 px-3 text-[13px] rounded-lg bg-[#1a1a22] border border-white/[0.12] text-[#e8e8f0] outline-none focus:border-[#a855f7]" />
-            <button onClick={create} disabled={!id || taken || !date || busy} className="text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-4 py-2 rounded-lg transition-colors disabled:opacity-40">Opret</button>
+            <button onClick={create} disabled={!id || taken || !start || endBeforeStart || busy} className="text-[12px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-4 py-2 rounded-lg transition-colors disabled:opacity-40">Opret</button>
           </div>
           <div className="flex items-center gap-4 text-[11px] flex-wrap">
-            <label className="flex items-center gap-1.5 text-[#8888a0]">Dato
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="text-[12px] px-2 py-1 rounded-md bg-[#1a1a22] border border-white/[0.12] text-[#e8e8f0] outline-none focus:border-[#a855f7] [color-scheme:dark]" />
+            <label className="flex items-center gap-1.5 text-[#8888a0]">Start
+              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="text-[12px] px-2 py-1 rounded-md bg-[#1a1a22] border border-white/[0.12] text-[#e8e8f0] outline-none focus:border-[#a855f7] [color-scheme:dark]" />
             </label>
+            <label className="flex items-center gap-1.5 text-[#8888a0]">Slut
+              <input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} className="text-[12px] px-2 py-1 rounded-md bg-[#1a1a22] border border-white/[0.12] text-[#e8e8f0] outline-none focus:border-[#a855f7] [color-scheme:dark]" />
+            </label>
+            <span className="text-[10px] text-[#8888a0]">(slut valgfri — samme dag for 1-dags event)</span>
+          </div>
+          <div className="flex items-center gap-4 text-[11px] flex-wrap">
             <label className="flex items-center gap-1.5 text-[#8888a0]">Holdstørrelse
               <select value={size} onChange={(e) => setSize(Number(e.target.value))} className="text-[12px] px-2 py-1 rounded-md bg-[#1a1a22] border border-white/[0.12] text-[#e8e8f0] outline-none focus:border-[#a855f7]">
                 <option value={8}>8</option>
@@ -121,7 +182,8 @@ export default function EventBrowser({
               <input type="number" min={1} max={12} value={rounds} onChange={(e) => setRounds(Number(e.target.value))} className="w-14 text-[12px] px-2 py-1 rounded-md bg-[#1a1a22] border border-white/[0.12] text-[#e8e8f0] outline-none focus:border-[#a855f7]" />
             </label>
           </div>
-          {!date && <p className="text-[10px] text-[#8888a0]">Vælg en dato for eventet.</p>}
+          {!start && <p className="text-[10px] text-[#8888a0]">Vælg en startdato for eventet.</p>}
+          {endBeforeStart && <p className="text-[10px] text-[#f87171]">Slutdato er før startdato.</p>}
           {taken && <p className="text-[10px] text-[#f87171]">&quot;{id}&quot; findes allerede</p>}
         </div>
       )}
@@ -137,9 +199,18 @@ export default function EventBrowser({
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[9px] uppercase tracking-wider text-[#c084fc] font-bold bg-[rgba(168,85,247,0.12)] px-1.5 py-0.5 rounded">Event</span>
               <h3 className="text-sm font-semibold text-[#e8e8f0]">{ev.name}</h3>
-              {ev.startDate && <span className="text-[10px] text-[#4ade80] font-medium">{fmtDate(ev.startDate)}</span>}
+              {ev.startDate ? (
+                <span className="text-[10px] text-[#4ade80] font-medium">{fmtRange(ev)}</span>
+              ) : (
+                <span className="text-[10px] text-[#facc15]">ingen dato</span>
+              )}
               <span className="text-[10px] text-[#8888a0]">{ev.teamSize ?? 8} spillere{ev.rounds ? ` · ${ev.rounds} runder` : ""}</span>
+              {canEdit(ev) && editingId !== ev.id && (
+                <button onClick={() => startEdit(ev)} className="text-[10px] text-[#8888a0] hover:text-[#c084fc] transition-colors">Rediger datoer</button>
+              )}
             </div>
+
+            {editingId === ev.id && dateEditor(ev)}
 
             {mine ? (
               <button onClick={() => onEnter(mine.id)} className="w-full flex items-center gap-2 text-left rounded-lg border border-[#4ade80]/30 bg-[#4ade80]/[0.06] px-3 py-2 hover:border-[#4ade80]/60 transition-colors">
@@ -172,14 +243,20 @@ export default function EventBrowser({
           {finished.map((ev) => {
             const mine = myCampByEvent[ev.id];
             return (
-              <div key={ev.id} className="flex items-center gap-2 flex-wrap rounded-lg border border-white/[0.06] px-3 py-2">
-                <h4 className="text-[13px] font-medium text-[#c8c8d8]">{ev.name}</h4>
-                <span className="text-[10px] text-[#8888a0]">{fmtDate(ev.startDate)}</span>
-                {mine ? (
-                  <button onClick={() => onEnter(mine.id)} className="ml-auto text-[11px] text-[#c084fc] hover:text-[#a855f7] transition-colors">{mine.teamName} →</button>
-                ) : (
-                  <span className="ml-auto text-[10px] text-[#8888a0]">Afsluttet</span>
-                )}
+              <div key={ev.id} className="rounded-lg border border-white/[0.06] px-3 py-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-[13px] font-medium text-[#c8c8d8]">{ev.name}</h4>
+                  {ev.startDate && <span className="text-[10px] text-[#8888a0]">{fmtRange(ev)}</span>}
+                  {canEdit(ev) && editingId !== ev.id && (
+                    <button onClick={() => startEdit(ev)} className="text-[10px] text-[#8888a0] hover:text-[#c084fc] transition-colors">Rediger datoer</button>
+                  )}
+                  {mine ? (
+                    <button onClick={() => onEnter(mine.id)} className="ml-auto text-[11px] text-[#c084fc] hover:text-[#a855f7] transition-colors">{mine.teamName} →</button>
+                  ) : (
+                    <span className="ml-auto text-[10px] text-[#8888a0]">Afsluttet</span>
+                  )}
+                </div>
+                {editingId === ev.id && dateEditor(ev)}
               </div>
             );
           })}

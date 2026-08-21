@@ -129,7 +129,7 @@ export default function TournamentIndexPage() {
         {msg && <p className="text-[12px] text-[#4ade80]">{msg}</p>}
 
         {/* Public events directory — see, create, and sign up */}
-        <EventBrowser myCamps={list} onEnter={enter} />
+        <EventBrowser myCamps={list} onEnter={enter} userUid={user?.uid} isAdmin={isAdmin} />
 
         {/* Standalone tournaments (not part of an event) */}
         <div className="space-y-3">

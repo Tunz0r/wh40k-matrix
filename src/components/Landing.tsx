@@ -61,7 +61,7 @@ export default function Landing() {
         </div>
 
         {/* The public events directory: see, create, sign up. */}
-        <EventBrowser myCamps={[]} onEnter={enter} />
+        <EventBrowser myCamps={[]} onEnter={enter} userUid={user?.uid} />
 
         {/* Secondary options */}
         <div className="pt-2 border-t border-white/[0.08]">
