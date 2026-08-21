@@ -124,11 +124,12 @@ export default function TournamentIndexPage() {
     setConverting(camp.id);
     setMsg(null);
     try {
-      await convertCampToEvent({ campSlug: camp.dataSlug, eventName: camp.name });
+      await convertCampToEvent({ camp, eventName: camp.name });
       await recomputeMembership().catch(() => {});
       setMsg(`"${camp.name}" er nu et event — del linket, så flere hold kan være med.`);
-    } catch {
-      setMsg("Kunne ikke konvertere. Er DB-reglerne for _fields publiceret?");
+    } catch (e) {
+      console.error("convertCampToEvent failed:", e);
+      setMsg("Kunne ikke konvertere: " + (e instanceof Error ? e.message : String(e)));
     }
     setConverting(null);
   }

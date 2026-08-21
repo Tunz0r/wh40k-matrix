@@ -21,7 +21,6 @@ import { ref, get, set, update, onValue, off } from "firebase/database";
 import { getDb, authReady, currentUser } from "./firebase";
 import {
   addTournament,
-  getTournament,
   updateTournament,
   type TournamentMeta,
   type TournamentStatus,
@@ -109,17 +108,21 @@ export async function registerTeamForEvent(opts: {
 // field node (estimates stripped — those stay private to the camp). Requires the
 // `_fields` DB rule to be published first.
 export async function convertCampToEvent(opts: {
-  campSlug: string; // existing camp dataSlug (== its registry id)
+  camp: TournamentMeta; // the existing camp (from the registry list)
   eventName: string;
   eventId?: string;
 }): Promise<void> {
   await authReady();
   const db = getDb();
-  const eventId = opts.eventId || slugifyId(opts.eventName);
+  const camp = opts.camp;
+  const campSlug = camp.dataSlug;
+  // The event id / field slug MUST differ from the camp's own dataSlug — the
+  // shared-field merge is gated on `fieldSlug !== campSlug`, and they'd otherwise
+  // collide on the same estimate/owner/member keys. "Dukkelogen teams" -> camp
+  // "dukkelogen-teams" -> event "dukkelogen-teams-event".
+  let eventId = opts.eventId || slugifyId(opts.eventName);
+  if (eventId === campSlug || eventId === camp.id) eventId = `${eventId}-event`;
   const fieldSlug = eventId;
-
-  const camp = await getTournament(opts.campSlug);
-  if (!camp) throw new Error("camp not found");
 
   // Create the event (this user is organizer / field owner).
   await addEvent({
@@ -133,7 +136,7 @@ export async function convertCampToEvent(opts: {
   });
 
   // Copy the camp's country lists to the shared field, WITHOUT estimates.
-  const est = (await get(ref(db, `estimates/${opts.campSlug}`))).val() as Record<string, unknown> | null;
+  const est = (await get(ref(db, `estimates/${campSlug}`))).val() as Record<string, unknown> | null;
   if (est) {
     const fieldUpdates: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(est)) {
@@ -149,11 +152,11 @@ export async function convertCampToEvent(opts: {
   }
 
   // Copy any verbatim raw lists into the field node's `_raw` child.
-  const raw = (await get(ref(db, `estimates/${opts.campSlug}-lists-raw`))).val();
+  const raw = (await get(ref(db, `estimates/${campSlug}-lists-raw`))).val();
   if (raw) await set(ref(db, `estimates/_fields/${fieldSlug}/_raw`), raw);
 
-  // Point the camp at the event + field.
-  await updateTournament(opts.campSlug, { eventId, fieldSlug } as Partial<TournamentMeta>);
+  // Point the camp at the event + field (registry keyed by the camp's id).
+  await updateTournament(camp.id, { eventId, fieldSlug } as Partial<TournamentMeta>);
 }
 
 // The events a user organizes or has a camp in — reads the self-index then each
