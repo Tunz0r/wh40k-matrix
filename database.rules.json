@@ -30,9 +30,8 @@
         }
       },
       "_events": {
-        ".read": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()",
+        ".read": "auth != null",
         "$id": {
-          ".read": "auth != null",
           ".write": "auth != null && (!data.exists() || root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_owners/'+$id+'/'+auth.uid).exists())"
         }
       },
