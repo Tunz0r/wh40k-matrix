@@ -18,7 +18,6 @@ import { createSession, fetchSession, type MatchupData, type SessionData } from 
 import ArmyEditor from "@/components/ArmyEditor";
 import {
   saveTeamSetup,
-  saveTournamentSettings,
   setActiveSession,
   updateRoundStatus,
   resetTournamentDoc,
@@ -832,10 +831,6 @@ export default function TournamentDashboard({
     });
   }, [tournament.roster, opponents]);
 
-  const eventDate = fbDoc?.eventDate || null;
-  const daysToEvent = eventDate
-    ? Math.ceil((new Date(eventDate).getTime() - Date.now()) / 86400000)
-    : null;
   const playersAssigned = readiness.filter((r) => r.player).length;
   const estimatesDone = readiness.length
     ? Math.round(readiness.reduce((s, r) => s + r.pct, 0) / readiness.length)
@@ -1268,35 +1263,6 @@ export default function TournamentDashboard({
 
   // Tonight's practice pairing: load a real opponent's lists and pair against
   // them, then start the team room via "Start coaching session" as normal.
-  // Slug of the practice opponent — Iceland for the session on 2026-07-28.
-  const PRACTICE_SLUG = "iceland";
-  function testCoaching() {
-    if (!tournament.roster) { alert("Intet roster fundet — opdater roster først."); return; }
-    const opp = opponents[PRACTICE_SLUG];
-    if (!opp?.armies?.length) {
-      alert("Ingen lister fundet for øve-modstanderen — indlæs dem under Estimater → Pr. land først.");
-      return;
-    }
-    // Keep the REAL name so the Estimat-matrix resolves to Iceland's actual
-    // stored estimates (lookupEstimate prefers the matching team). practiceMode
-    // makes the round it later creates use an "(øvelse)" label instead, so
-    // Iceland's real estimates never get locked.
-    const roster: RosterExport = {
-      v: 1,
-      name: opp.name,
-      armies: opp.armies.map((a) => ({
-        faction: a.faction,
-        detachments: a.detachments || [],
-        disposition: a.disposition ?? null,
-      })),
-    };
-    setOpponentRoster(roster);
-    setPracticeMode(true);
-    setMatchups([]);
-    setPairingPhase("skirmish1-defender");
-    resetModuleState();
-    setView("round-pairing");
-  }
 
   if (!initialized) {
     return (
@@ -1400,19 +1366,6 @@ export default function TournamentDashboard({
                 <Link href="/warmups" className="text-[10px] text-[#a855f7] hover:text-[#c084fc] transition-colors">
                   Warmup-kampe →
                 </Link>
-                <div className="ml-auto flex items-center gap-2">
-                  {daysToEvent !== null && (
-                    <span className={`text-[10px] font-semibold ${daysToEvent <= 7 ? "text-[#facc15]" : "text-[#8888a0]"}`}>
-                      {daysToEvent > 0 ? `${daysToEvent} dage til WTC` : daysToEvent === 0 ? "WTC i dag!" : "WTC overstået"}
-                    </span>
-                  )}
-                  <input
-                    type="date"
-                    value={eventDate ? eventDate.slice(0, 10) : ""}
-                    onChange={(e) => saveTournamentSettings(slug, { eventDate: e.target.value || null }).catch(() => {})}
-                    className="bg-[#1a1a22] border border-white/[0.14] rounded px-1.5 py-0.5 text-[10px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
-                  />
-                </div>
               </div>
               {tournament.roster ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -1815,16 +1768,6 @@ export default function TournamentDashboard({
               </div>
             </div>
 
-            {/* Test tools */}
-            <div className="text-center flex justify-center gap-2">
-              <button
-                onClick={testCoaching}
-                title="Øve-parring mod Islands rigtige lister. Par igennem og tryk 'Start coaching session' for at åbne team room (live for coaches). Runden hedder 'Iceland (øvelse)', så Islands rigtige estimater IKKE låses — nulstil runden bagefter."
-                className="text-[11px] text-[#8888a0] hover:text-[#a855f7] border border-dashed border-white/[0.08] hover:border-[rgba(168,85,247,0.3)] px-3 py-1.5 rounded-md transition-colors"
-              >
-                Øve-parring mod Island → team room
-              </button>
-            </div>
           </div>
         )}
 
