@@ -57,7 +57,8 @@ export default function EventBrowser({
   // upcoming. Upcoming sort soonest-first (dated before undated); finished sort
   // most-recent-first.
   const todayStr = new Date().toISOString().slice(0, 10);
-  const isFinished = (e: EventMeta) => !!e.startDate && e.startDate < todayStr;
+  // Finished = explicitly completed (e.g. WTC 2026), or its date has passed.
+  const isFinished = (e: EventMeta) => e.status === "completed" || (!!e.startDate && e.startDate < todayStr);
   const fmtDate = (d?: string | null) =>
     d ? new Date(d + "T00:00:00").toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }) : "";
   const upcoming = events
