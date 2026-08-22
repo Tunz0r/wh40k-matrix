@@ -70,6 +70,14 @@ export default function EstimateInput({
           ⚡
         </span>
       )}
+      {cell?.tableDependent && (
+        <span
+          className="absolute -bottom-1 -left-1 text-[9px] leading-none pointer-events-none"
+          title="Meget afhængig af bordvalg/terræn — sæt bord-justeringen omhyggeligt ved layout-valget"
+        >
+          🗺️
+        </span>
+      )}
       {dispBP !== 0 && !showAdj && (
         <span
           className="absolute -bottom-1 -right-1 text-[8px] font-bold leading-none px-0.5 rounded bg-[#0f0f13] pointer-events-none"

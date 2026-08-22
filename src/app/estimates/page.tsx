@@ -29,6 +29,7 @@ import {
   writeEstimateCells,
   setNeedsTestCells,
   setVolatileCells,
+  setTableDependentCells,
   listSimilarity,
   clusterLists,
   appendListToMetaTeam,
@@ -805,6 +806,7 @@ export default function EstimatesPage() {
             onSet={setEstimate}
             onNeedsTest={(keys, flag) => setNeedsTestCells(keys, flag, activeSlug).catch(() => {})}
             onVolatile={(keys, flag) => setVolatileCells(keys, flag, activeSlug).catch(() => {})}
+            onTableDependent={(keys, flag) => setTableDependentCells(keys, flag, activeSlug).catch(() => {})}
             lockArmyIdx={canManage ? undefined : effectiveIdx}
           />
         )}

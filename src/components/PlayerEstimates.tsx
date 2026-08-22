@@ -42,6 +42,7 @@ interface Annotated {
   filledCount: number;
   needsTest: boolean;
   volatile: boolean;
+  tableDependent: boolean;
 }
 
 // The frozen display order plus the block split it was built with, so the
@@ -61,6 +62,7 @@ export default function PlayerEstimates({
   onSet,
   onNeedsTest,
   onVolatile,
+  onTableDependent,
   lockArmyIdx,
 }: {
   opponents: OpponentMap;
@@ -78,6 +80,7 @@ export default function PlayerEstimates({
   ) => void;
   onNeedsTest: (keys: string[], flag: boolean) => void;
   onVolatile: (keys: string[], flag: boolean) => void;
+  onTableDependent: (keys: string[], flag: boolean) => void;
   // When set (a plain player), lock to this army and hide the picker/overview —
   // players only estimate their own matchups.
   lockArmyIdx?: number | null;
@@ -149,7 +152,8 @@ export default function PlayerEstimates({
       // "Needs testing" / "volatile" are per-archetype flags: any member cell carrying it.
       const needsTest = cluster.members.some((m) => cellFor(m, myIdx)?.needsTest);
       const volatile = cluster.members.some((m) => cellFor(m, myIdx)?.volatile);
-      return { cluster, displayCell, anchor, weight, filledCount, needsTest, volatile };
+      const tableDependent = cluster.members.some((m) => cellFor(m, myIdx)?.tableDependent);
+      return { cluster, displayCell, anchor, weight, filledCount, needsTest, volatile, tableDependent };
     });
   }, [clusters, myIdx, opponents, playedRounds]);
 
@@ -305,7 +309,7 @@ export default function PlayerEstimates({
             }}
           >
             {displayList.map((item, idx) => {
-              const { cluster, displayCell, anchor, filledCount, weight, needsTest, volatile } = item;
+              const { cluster, displayCell, anchor, filledCount, weight, needsTest, volatile, tableDependent } = item;
               const key = clusterKey(cluster);
               // Headers come from the FROZEN ordering, not the live cell state,
               // so filling in an estimate doesn't move a heading mid-typing.
@@ -438,6 +442,23 @@ export default function PlayerEstimates({
                       }`}
                     >
                       ⚡
+                    </button>
+                    <button
+                      onClick={() => {
+                        const keys = cluster.members
+                          .filter((m) => cellFor(m, myIdx) && !playedRounds.has(m.teamSlug))
+                          .map((m) => `${m.teamSlug}/${myIdx}_${m.listIdx}`);
+                        if (keys.length) onTableDependent(keys, !tableDependent);
+                      }}
+                      disabled={filledCount === 0}
+                      title={tableDependent ? "Markeret som bord-afhængig — klik for at fjerne" : "Markér som meget afhængig af bordvalg/terræn"}
+                      className={`text-[12px] leading-none shrink-0 rounded px-1 py-0.5 transition-colors disabled:opacity-25 disabled:cursor-not-allowed grayscale ${
+                        tableDependent
+                          ? "bg-[rgba(96,165,250,0.16)] grayscale-0"
+                          : "opacity-60 hover:opacity-100 hover:grayscale-0"
+                      }`}
+                    >
+                      🗺️
                     </button>
                     <EstimateInput
                       cell={displayCell}

@@ -18,6 +18,9 @@ export interface EstimateCell {
   // polarized (e.g. ~2-18 or ~18-2, rarely a true 10-10). Flagged so "10" doesn't
   // read as a safe coin-flip. Widens the coaching win/draw/loss projection.
   volatile?: boolean;
+  // Outcome depends heavily on which table/terrain (layout) the game lands on —
+  // a cue to set tableAdj carefully at the layout pick.
+  tableDependent?: boolean;
   ver?: string;
 }
 
@@ -445,6 +448,22 @@ export async function setVolatileCells(
   for (const key of keys) {
     const [teamSlug, cellKey] = key.split("/");
     updates[`${estNodeForTeam(teamSlug, tournamentSlug)}/${teamSlug}/estimates/${cellKey}/volatile`] = flag ? true : null;
+  }
+  await update(ref(getDb()), updates);
+}
+
+// Toggle the "table-dependent" flag on existing estimate cells (outcome swings
+// on the table/terrain). Keys are `${teamSlug}/${ourIdx}_${theirIdx}`.
+export async function setTableDependentCells(
+  keys: string[],
+  flag: boolean,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<void> {
+  await authReady();
+  const updates: Record<string, true | null> = {};
+  for (const key of keys) {
+    const [teamSlug, cellKey] = key.split("/");
+    updates[`${estNodeForTeam(teamSlug, tournamentSlug)}/${teamSlug}/estimates/${cellKey}/tableDependent`] = flag ? true : null;
   }
   await update(ref(getDb()), updates);
 }
