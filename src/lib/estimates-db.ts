@@ -995,6 +995,33 @@ export function lookupEstimate(
   return best ? (best as { v: number }).v : null;
 }
 
+// The volatile / table-dependent flags for the best-matching estimate cell — same
+// matching as lookupEstimate. Used at pairing to stamp the live matchup so
+// coaching can start a volatile game at 0 and flag it for follow-up.
+export function lookupEstimateFlags(
+  opponents: OpponentMap,
+  opponentName: string | null | undefined,
+  ourIdx: number,
+  theirList: OpponentList
+): { volatile: boolean; tableDependent: boolean } {
+  const preferredSlug = opponentName ? slugifyTeam(opponentName) : null;
+  let best: { sim: number; cell: EstimateCell; preferred: boolean } | null = null;
+  for (const [slug, team] of Object.entries(opponents)) {
+    const preferred = slug === preferredSlug;
+    (team.armies || []).forEach((list, j) => {
+      const cell = team.estimates?.[`${ourIdx}_${j}`];
+      if (!cell) return;
+      const sim = listSimilarity(theirList, list);
+      if (sim < SIMILARITY_THRESHOLD) return;
+      if (!best || (preferred && !best.preferred) || (preferred === best.preferred && sim > best.sim)) {
+        best = { sim, cell, preferred };
+      }
+    });
+  }
+  const cell = best ? (best as { cell: EstimateCell }).cell : null;
+  return { volatile: !!cell?.volatile, tableDependent: !!cell?.tableDependent };
+}
+
 // --- WTC estimate → color band ---
 // 0-4 black (very bad), 5-8 red (bad), 9-11 yellow (even),
 // 12-15 green (good), 16-20 blue (very good).

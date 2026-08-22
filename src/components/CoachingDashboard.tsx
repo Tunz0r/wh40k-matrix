@@ -40,6 +40,9 @@ function effectiveProjBP(m: MatchupData): number {
     return vpDiff >= 0 ? bp.winner : bp.loser;
   }
   if (typeof m.projBP === "number") return clamp(m.projBP);
+  // A volatile game starts at 0 (too swingy to project) until it's played.
+  const started = (m.aVP ?? 0) > 0 || (m.bVP ?? 0) > 0;
+  if (m.volatile && !started) return 0;
   return m.estimate > 0 ? clamp(m.estimate + (m.tableAdj ?? 0)) : 10;
 }
 
@@ -594,6 +597,27 @@ function MatchupCard({
         onClick={onToggle}
         className="w-full text-left px-3 py-2.5"
       >
+        {/* Volatile / table-dependent flags carried from the estimate */}
+        {(matchup.volatile || matchup.tableDependent) && (
+          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+            {matchup.volatile && (
+              <span
+                className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${started ? "bg-[rgba(250,204,21,0.12)] text-[#facc15]" : "bg-[rgba(250,204,21,0.22)] text-[#facc15] animate-pulse"}`}
+                title="Svingende matchup — projiceret som 0 indtil den er spillet. Følg op og sæt en rigtig prognose når du ser kampen."
+              >
+                ⚡ Svingende{started ? "" : " — følg op (0 indtil spillet)"}
+              </span>
+            )}
+            {matchup.tableDependent && (
+              <span
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[rgba(96,165,250,0.14)] text-[#60a5fa]"
+                title="Meget afhængig af bordet/terrænet — sæt bord-justeringen omhyggeligt."
+              >
+                🗺️ Bord-afhængig
+              </span>
+            )}
+          </div>
+        )}
         {/* Mobile: stacked layout */}
         <div className="flex items-center gap-2 sm:hidden">
           <span className="text-[11px] text-[#8888a0] w-5 shrink-0 font-semibold">

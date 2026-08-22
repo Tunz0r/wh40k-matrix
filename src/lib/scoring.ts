@@ -53,6 +53,7 @@ export function projectGame(m: {
   round?: number;
   estimate: number;
   tableAdj?: number;
+  volatile?: boolean;
 }): { a: number; b: number } {
   const aVP = m.aVP ?? 0;
   const bVP = m.bVP ?? 0;
@@ -60,6 +61,10 @@ export function projectGame(m: {
   const bp = vpToBP(diff);
   const actualA = diff >= 0 ? bp.winner : bp.loser;
   if (m.final) return { a: actualA, b: 20 - actualA };
+  // A volatile (swingy) game is too polarized to project from the estimate — it's
+  // a real 2-18/18-2 coin flip. Start it at 0 (conservative) until it's actually
+  // played; the coach is flagged to follow it up.
+  if (m.volatile && aVP === 0 && bVP === 0) return { a: 0, b: 20 };
   const est =
     m.estimate > 0 ? Math.min(20, Math.max(0, m.estimate + (m.tableAdj ?? 0))) : 10;
   if (aVP === 0 && bVP === 0) return { a: est, b: 20 - est };
@@ -115,6 +120,7 @@ export function teamWinProbability(
     round?: number;
     estimate: number;
     tableAdj?: number;
+    volatile?: boolean;
   }[],
   samples = 3000
 ): WinProbability {

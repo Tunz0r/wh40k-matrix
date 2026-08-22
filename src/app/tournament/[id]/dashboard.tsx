@@ -36,6 +36,7 @@ import {
   slugifyTeam,
   clusterLists,
   clusterEstimateValue,
+  lookupEstimateFlags,
   listSimilarity,
   SIMILARITY_THRESHOLD,
 } from "@/lib/estimates-db";
@@ -72,6 +73,8 @@ interface Matchup {
   layoutPage: number | null;
   estimate: number;
   tableAdj: number; // table/layout adjustment, set during pairing when the layout is chosen
+  volatile?: boolean; // from the estimate cell — coaching starts it at 0 + flags follow-up
+  tableDependent?: boolean; // from the estimate cell — surfaced hard during pairing
 }
 
 interface CompletedRound {
@@ -483,6 +486,11 @@ function EstimateMatrix({
                   // and no earlier tournament game to back the number up.
                   const played = hasV ? playedInTournament?.(ourArmies[i].faction, theirArmies[j]) ?? false : false;
                   const unverified = hasV && !hasWarmup && !played && (needsTest?.(i, theirArmies[j]) ?? false);
+                  // Estimate-cell flags — surfaced HARD here so table/terrain-sensitive
+                  // and swingy matchups are obvious while pairing.
+                  const flags = hasV
+                    ? lookupEstimateFlags(opponents, oppName, i, theirArmies[j])
+                    : { volatile: false, tableDependent: false };
                   const title =
                     !hasV
                       ? "Intet estimat"
@@ -507,7 +515,7 @@ function EstimateMatrix({
                       <div
                         className={`relative w-16 h-11 rounded-md border flex items-center justify-center text-[17px] font-bold ${
                           cellDim ? "opacity-25" : ""
-                        } ${onDefenderLine ? "ring-2 ring-amber-400/70" : unverified ? "ring-1 ring-[#fb923c]" : ""}`}
+                        } ${onDefenderLine ? "ring-2 ring-amber-400/70" : flags.tableDependent ? "ring-2 ring-[#60a5fa]" : unverified ? "ring-1 ring-[#fb923c]" : ""}`}
                         style={
                           s
                             ? { background: s.bg, color: s.fg, borderColor: s.border }
@@ -539,6 +547,22 @@ function EstimateMatrix({
                             title={`Disposition-fordel ${dispBP > 0 ? "+" : ""}${dispBP} BP lagt oveni`}
                           >
                             {dispBP > 0 ? `+${dispBP}` : dispBP}
+                          </span>
+                        )}
+                        {flags.tableDependent && (
+                          <span
+                            className="absolute -top-1.5 -left-1.5 text-[12px] leading-none drop-shadow"
+                            title="BORD-AFHÆNGIG — udfaldet svinger meget på bordet/terrænet. Vælg bord omhyggeligt."
+                          >
+                            🗺️
+                          </span>
+                        )}
+                        {flags.volatile && (
+                          <span
+                            className="absolute -bottom-1.5 -left-1.5 text-[11px] leading-none"
+                            title="Svingende matchup (fx 2-18 / 18-2)"
+                          >
+                            ⚡
                           </span>
                         )}
                       </div>
@@ -1089,6 +1113,9 @@ export default function TournamentDashboard({
       // base when neither applies. Coaching tracks this number.
       return f.base !== null || f.n > 0 ? f.adjusted : 0;
     };
+    // Carry the estimate cell's volatile / table-dependent flags onto the matchup.
+    const flagsFor = (ourIdx: number, theirIdx: number) =>
+      lookupEstimateFlags(opponents, opponentRoster.name, ourIdx, armiesB[theirIdx]);
 
     const m1: Matchup = {
       a: armiesA[defenderA!],
@@ -1097,6 +1124,7 @@ export default function TournamentDashboard({
       aIsDefender: true,
       layoutPage: getLayoutPage(armiesA[defenderA!].disposition, armiesB[choiceA!].disposition, layoutChoiceA),
       estimate: prefill(defenderA!, choiceA!),
+      ...flagsFor(defenderA!, choiceA!),
       tableAdj: tableAdjA,
     };
     const m2: Matchup = {
@@ -1106,6 +1134,7 @@ export default function TournamentDashboard({
       aIsDefender: false,
       layoutPage: getLayoutPage(armiesA[choiceB!].disposition, armiesB[defenderB!].disposition, layoutChoiceB),
       estimate: prefill(choiceB!, defenderB!),
+      ...flagsFor(choiceB!, defenderB!),
       tableAdj: tableAdjB,
     };
 
@@ -1121,6 +1150,7 @@ export default function TournamentDashboard({
         aIsDefender: false,
         layoutPage: getLayoutPage(armiesA[refusedA].disposition, armiesB[refusedB].disposition, roundLayout),
         estimate: prefill(refusedA, refusedB),
+        ...flagsFor(refusedA, refusedB),
         tableAdj: 0,
       };
       newMatchups.push(m3);
@@ -1147,6 +1177,7 @@ export default function TournamentDashboard({
           aIsDefender: false,
           layoutPage: getLayoutPage(armiesA[champAIdx].disposition, armiesB[champBIdx].disposition, roundLayout),
           estimate: prefill(champAIdx, champBIdx),
+          ...flagsFor(champAIdx, champBIdx),
           tableAdj: 0,
         });
         setMatchups(newMatchups);
@@ -1188,6 +1219,8 @@ export default function TournamentDashboard({
         layoutPage: m.layoutPage,
         estimate: m.estimate,
         tableAdj: m.tableAdj ?? 0,
+        volatile: m.volatile ?? false,
+        tableDependent: m.tableDependent ?? false,
         aVP: 0,
         bVP: 0,
         round: 1,
@@ -2217,6 +2250,8 @@ export default function TournamentDashboard({
                       <span className="text-[#e8e8f0]">{m.b.faction}</span>
                       <DispBadge d={m.b.disposition} />
                       <span className="text-[10px] text-[#8888a0]">({m.module})</span>
+                      {m.tableDependent && <span title="Bord-afhængig — vælg bord omhyggeligt">🗺️</span>}
+                      {m.volatile && <span title="Svingende matchup">⚡</span>}
                     </div>
                   ))}
                 </div>
@@ -2237,11 +2272,21 @@ export default function TournamentDashboard({
                   key={i}
                   className="rounded-lg border border-white/[0.08] p-3"
                 >
-                  <div className="flex items-center gap-1.5 mb-1">
+                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                     <span className="text-[10px] font-semibold text-[#8888a0] bg-[#22222e] px-1.5 py-0.5 rounded">
                       {m.module}
                     </span>
                     <span className="text-[11px] text-[#8888a0]">Bord {i + 1}</span>
+                    {m.tableDependent && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[rgba(96,165,250,0.18)] text-[#60a5fa] ring-1 ring-[#60a5fa]/50">
+                        🗺️ BORD-AFHÆNGIG — vælg bord omhyggeligt
+                      </span>
+                    )}
+                    {m.volatile && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[rgba(250,204,21,0.16)] text-[#facc15]">
+                        ⚡ Svingende
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 text-right">
