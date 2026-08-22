@@ -26,10 +26,10 @@ const CAPTAIN_CORE: NavLink[] = [
 ];
 const CAPTAIN_MORE: NavLink[] = [
   { href: "/roster", label: "Roster", match: (p) => p.startsWith("/roster") },
-  { href: "/stats", label: "Stats", match: (p) => p.startsWith("/stats") },
-  { href: "/sanity", label: "Sanity", match: (p) => p.startsWith("/sanity") },
-  { href: "/warmups", label: "Warmups", match: (p) => p.startsWith("/warmups") },
-  { href: "/calibration", label: "Kalibrering", match: (p) => p.startsWith("/calibration") },
+  { href: "/stats", label: "Feltets stats", match: (p) => p.startsWith("/stats") },
+  { href: "/sanity", label: "Konsistens-tjek", match: (p) => p.startsWith("/sanity") },
+  { href: "/warmups", label: "Træningskampe", match: (p) => p.startsWith("/warmups") },
+  { href: "/calibration", label: "Præcision", match: (p) => p.startsWith("/calibration") },
 ];
 
 export default function SiteNav() {

@@ -1395,8 +1395,10 @@ export default function TournamentDashboard({
                 <p className="text-[11px] text-[#8888a0]">Intet roster endnu.</p>
               )}
               <p className="text-[10px] text-[#8888a0] mt-2">
-                Tildel spillere via ✎ på hærene · estimater udfyldes under{" "}
-                <Link href="/estimates" className="text-[#a855f7] hover:text-[#c084fc]">Estimater → Min hær</Link>
+                Kom i gang: invitér spillere via{" "}
+                <Link href="/manage" className="text-[#a855f7] hover:text-[#c084fc]">Administrér</Link>
+                {" "}(eller tildel med ✎) · hver spiller vælger sin hær og udfylder{" "}
+                <Link href="/estimates" className="text-[#a855f7] hover:text-[#c084fc]">Min hær</Link>
               </p>
             </div>
 
@@ -1640,7 +1642,7 @@ export default function TournamentDashboard({
                   href="/calibration"
                   className="text-[10px] text-[#a855f7] hover:text-[#c084fc] ml-auto transition-colors"
                 >
-                  Kalibrering →
+                  Præcision →
                 </Link>
               </div>
 

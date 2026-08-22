@@ -379,7 +379,7 @@ export default function SanityPage() {
       <header className="px-4 sm:px-6 py-4 border-b border-white/[0.08] sticky top-12 bg-[#0f0f13] z-20">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
-            Sanity-tjek
+            Konsistens-tjek
             <span className="text-[#4ade80] ml-2 text-sm font-normal">— {TEAM_NAME}</span>
           </h1>
           <span className="text-[11px] text-[#8888a0]">
