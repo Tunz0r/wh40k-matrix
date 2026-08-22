@@ -59,6 +59,7 @@ export default function PlayerEstimates({
   dispAdj,
   onSet,
   onNeedsTest,
+  lockArmyIdx,
 }: {
   opponents: OpponentMap;
   ourArmies: RosterArmy[];
@@ -74,14 +75,22 @@ export default function PlayerEstimates({
     clusterTargets?: { teamSlug: string; listIdx: number }[]
   ) => void;
   onNeedsTest: (keys: string[], flag: boolean) => void;
+  // When set (a plain player), lock to this army and hide the picker/overview —
+  // players only estimate their own matchups.
+  lockArmyIdx?: number | null;
 }) {
   const [myIdx, setMyIdx] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
+    if (lockArmyIdx != null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMyIdx(lockArmyIdx);
+      return;
+    }
     const saved = localStorage.getItem(MY_ARMY_KEY);
     if (saved !== null && Number(saved) < ourArmies.length) setMyIdx(Number(saved));
-  }, [ourArmies.length]);
+  }, [ourArmies.length, lockArmyIdx]);
 
   function pickArmy(i: number) {
     setMyIdx(i);
@@ -208,7 +217,8 @@ export default function PlayerEstimates({
 
   return (
     <div className="space-y-4">
-      {/* Army selector doubling as captain overview */}
+      {/* Army selector doubling as captain overview — hidden for a locked player. */}
+      {lockArmyIdx == null && (
       <div className="rounded-xl border border-white/[0.08] p-4">
         <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-2">
           Vælg din hær
@@ -252,6 +262,7 @@ export default function PlayerEstimates({
           })}
         </div>
       </div>
+      )}
 
       {myIdx === null ? (
         <p className="text-[11px] text-[#8888a0] text-center py-6">
