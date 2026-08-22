@@ -257,6 +257,14 @@ export async function claimSlot(slug: string, armyIdx: number, uid: string): Pro
     [`tournaments/_myTournaments/${uid}/${slug}`]: true,
     [`tournaments/_claimants/${slug}/${uid}`]: true,
   });
+  // Now that we're a committed claimant, self-grant profile-edit rights for this
+  // seat (rules: a claimant may set their OWN _profileOwners entry). This is what
+  // recompute would otherwise have to do, so players can map their archetype /
+  // log warmups immediately — no super-admin recompute needed. Separate write so
+  // the rule can see the _claimants entry the first update just committed.
+  await update(ref(getDb()), {
+    [`tournaments/_profileOwners/${slug}/a${armyIdx}`]: uid,
+  }).catch(() => {});
 }
 
 // Set the display name on a slot. A claimer may set their own name on the slot
