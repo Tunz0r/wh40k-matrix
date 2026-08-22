@@ -26,6 +26,8 @@ import {
   type TournamentMeta,
   type TournamentStatus,
 } from "./tournaments-registry";
+import { saveTeamSetup, setJoinOpen } from "./tournament-db";
+import type { RosterArmy } from "./roster";
 
 export interface EventMeta {
   id: string; // stable id + URL, e.g. "wtc-2027"
@@ -44,7 +46,6 @@ export interface EventMeta {
 const EVENTS = "tournaments/_events";
 const MY_EVENTS = "tournaments/_myEvents";
 const OWNERS = "tournaments/_owners";
-const REGISTRY = "tournaments/_registry";
 
 export const slugifyId = (s: string) =>
   s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -89,20 +90,42 @@ export async function registerTeamForEvent(opts: {
   const ev = await getEvent(opts.eventId);
   if (!ev) throw new Error("event not found");
   const uid = currentUser()?.uid;
+  const teamSize = opts.teamSize ?? ev.teamSize ?? 8;
   await addTournament({
     id: opts.campId,
     name: `${ev.name} — ${opts.teamName}`,
     dataSlug: opts.campId,
     teamName: opts.teamName,
-    teamSize: opts.teamSize ?? ev.teamSize ?? 8,
+    teamSize,
     format: ev.format,
     rounds: ev.rounds,
     status: ev.status,
     eventId: opts.eventId,
     fieldSlug: ev.fieldSlug,
   });
+  // Owner is now committed, so set the camp up ready-to-invite in one go: create
+  // the empty seats (team size) and open the join window. The captain just
+  // shares — no separate /manage seat-count + activate step.
+  const emptySeat = (): RosterArmy => ({ faction: "", detachments: [], disposition: null });
+  await saveTeamSetup(opts.campId, {
+    teamName: opts.teamName,
+    roster: { v: 1, name: opts.teamName, armies: Array.from({ length: teamSize }, emptySeat) },
+  }).catch(() => {});
+  await setJoinOpen(opts.campId, true).catch(() => {});
   // Let the captain see the event they just joined (register another team, etc.).
   if (uid) await update(ref(getDb()), { [`${MY_EVENTS}/${uid}/${opts.eventId}`]: true });
+}
+
+// Date-derived event status — nobody has to set/advance it manually. Uses the
+// end date (or start) so a multi-day event stays "active" through its last day.
+export function eventStatus(ev: { startDate?: string | null; endDate?: string | null; status?: TournamentStatus }): TournamentStatus {
+  const today = new Date().toISOString().slice(0, 10);
+  const start = ev.startDate || null;
+  const end = ev.endDate || ev.startDate || null;
+  if (ev.status === "completed") return "completed";
+  if (end && end < today) return "completed";
+  if (start && start <= today && (!end || end >= today)) return "active";
+  return "upcoming";
 }
 
 // Admin: convert an existing single-team camp into an event in place. The camp

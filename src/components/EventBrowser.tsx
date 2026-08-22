@@ -6,6 +6,7 @@ import {
   updateEvent,
   registerTeamForEvent,
   subscribeToEvents,
+  eventStatus,
   slugifyId,
   type EventMeta,
 } from "@/lib/events";
@@ -72,10 +73,9 @@ export default function EventBrowser({
   }
 
   // --- Split + sort ---------------------------------------------------------
-  const todayStr = new Date().toISOString().slice(0, 10);
   const effEnd = (e: EventMeta) => e.endDate || e.startDate || "";
-  // Finished = explicitly completed (e.g. WTC 2026), or the LAST day has passed.
-  const isFinished = (e: EventMeta) => e.status === "completed" || (!!effEnd(e) && effEnd(e) < todayStr);
+  // Status is derived from the dates (see eventStatus) — nobody sets it by hand.
+  const isFinished = (e: EventMeta) => eventStatus(e) === "completed";
   const fmt = (d?: string | null) =>
     d ? new Date(d + "T00:00:00").toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }) : "";
   const fmtRange = (e: EventMeta) =>
@@ -199,6 +199,9 @@ export default function EventBrowser({
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[9px] uppercase tracking-wider text-[#c084fc] font-bold bg-[rgba(168,85,247,0.12)] px-1.5 py-0.5 rounded">Event</span>
               <h3 className="text-sm font-semibold text-[#e8e8f0]">{ev.name}</h3>
+              {eventStatus(ev) === "active" && (
+                <span className="text-[9px] text-[#4ade80] font-bold bg-[rgba(34,197,94,0.12)] px-1.5 py-0.5 rounded-full animate-pulse">I gang</span>
+              )}
               {ev.startDate ? (
                 <span className="text-[10px] text-[#4ade80] font-medium">{fmtRange(ev)}</span>
               ) : (
