@@ -62,6 +62,14 @@ export default function EstimateInput({
       {cell?.auto && !showAdj && (
         <span className="absolute top-0.5 right-1 text-[8px] text-[#8888a0] pointer-events-none">a</span>
       )}
+      {cell?.volatile && (
+        <span
+          className="absolute -top-1 -left-1 text-[9px] leading-none pointer-events-none"
+          title="Svingende matchup — værdien er gennemsnittet, men resultatet er typisk polariseret (fx 2-18 / 18-2)"
+        >
+          ⚡
+        </span>
+      )}
       {dispBP !== 0 && !showAdj && (
         <span
           className="absolute -bottom-1 -right-1 text-[8px] font-bold leading-none px-0.5 rounded bg-[#0f0f13] pointer-events-none"

@@ -14,6 +14,10 @@ export interface EstimateCell {
   v: number; // 0-20 WTC scale
   auto?: boolean;
   needsTest?: boolean;
+  // A "swingy"/bimodal matchup: the value is the average, but the real result is
+  // polarized (e.g. ~2-18 or ~18-2, rarely a true 10-10). Flagged so "10" doesn't
+  // read as a safe coin-flip. Widens the coaching win/draw/loss projection.
+  volatile?: boolean;
   ver?: string;
 }
 
@@ -425,6 +429,22 @@ export async function setNeedsTestCells(
   for (const key of keys) {
     const [teamSlug, cellKey] = key.split("/");
     updates[`${estNodeForTeam(teamSlug, tournamentSlug)}/${teamSlug}/estimates/${cellKey}/needsTest`] = flag ? true : null;
+  }
+  await update(ref(getDb()), updates);
+}
+
+// Toggle the "volatile" (swingy/bimodal) flag on existing estimate cells without
+// touching value/auto/version. Keys are `${teamSlug}/${ourIdx}_${theirIdx}`.
+export async function setVolatileCells(
+  keys: string[],
+  flag: boolean,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<void> {
+  await authReady();
+  const updates: Record<string, true | null> = {};
+  for (const key of keys) {
+    const [teamSlug, cellKey] = key.split("/");
+    updates[`${estNodeForTeam(teamSlug, tournamentSlug)}/${teamSlug}/estimates/${cellKey}/volatile`] = flag ? true : null;
   }
   await update(ref(getDb()), updates);
 }

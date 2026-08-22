@@ -41,6 +41,7 @@ interface Annotated {
   weight: number;
   filledCount: number;
   needsTest: boolean;
+  volatile: boolean;
 }
 
 // The frozen display order plus the block split it was built with, so the
@@ -59,6 +60,7 @@ export default function PlayerEstimates({
   dispAdj,
   onSet,
   onNeedsTest,
+  onVolatile,
   lockArmyIdx,
 }: {
   opponents: OpponentMap;
@@ -75,6 +77,7 @@ export default function PlayerEstimates({
     clusterTargets?: { teamSlug: string; listIdx: number }[]
   ) => void;
   onNeedsTest: (keys: string[], flag: boolean) => void;
+  onVolatile: (keys: string[], flag: boolean) => void;
   // When set (a plain player), lock to this army and hide the picker/overview —
   // players only estimate their own matchups.
   lockArmyIdx?: number | null;
@@ -143,9 +146,10 @@ export default function PlayerEstimates({
       // archetype (meta reference copies count 0). Blends prevalence with
       // opponent strength.
       const weight = cluster.members.reduce((s, m) => s + tierWeight(m.tier), 0);
-      // "Needs testing" is a per-archetype flag: any member cell carrying it.
+      // "Needs testing" / "volatile" are per-archetype flags: any member cell carrying it.
       const needsTest = cluster.members.some((m) => cellFor(m, myIdx)?.needsTest);
-      return { cluster, displayCell, anchor, weight, filledCount, needsTest };
+      const volatile = cluster.members.some((m) => cellFor(m, myIdx)?.volatile);
+      return { cluster, displayCell, anchor, weight, filledCount, needsTest, volatile };
     });
   }, [clusters, myIdx, opponents, playedRounds]);
 
@@ -301,7 +305,7 @@ export default function PlayerEstimates({
             }}
           >
             {displayList.map((item, idx) => {
-              const { cluster, displayCell, anchor, filledCount, weight, needsTest } = item;
+              const { cluster, displayCell, anchor, filledCount, weight, needsTest, volatile } = item;
               const key = clusterKey(cluster);
               // Headers come from the FROZEN ordering, not the live cell state,
               // so filling in an estimate doesn't move a heading mid-typing.
@@ -417,6 +421,23 @@ export default function PlayerEstimates({
                       }`}
                     >
                       🧪
+                    </button>
+                    <button
+                      onClick={() => {
+                        const keys = cluster.members
+                          .filter((m) => cellFor(m, myIdx) && !playedRounds.has(m.teamSlug))
+                          .map((m) => `${m.teamSlug}/${myIdx}_${m.listIdx}`);
+                        if (keys.length) onVolatile(keys, !volatile);
+                      }}
+                      disabled={filledCount === 0}
+                      title={volatile ? "Markeret som svingende (fx 2-18/18-2) — klik for at fjerne" : "Markér som svingende matchup: værdien er gennemsnittet, men resultatet er polariseret"}
+                      className={`text-[13px] leading-none shrink-0 rounded px-1 py-0.5 transition-colors disabled:opacity-25 disabled:cursor-not-allowed ${
+                        volatile
+                          ? "text-[#facc15] bg-[rgba(250,204,21,0.14)]"
+                          : "text-[#8888a0] hover:text-[#facc15]"
+                      }`}
+                    >
+                      ⚡
                     </button>
                     <EstimateInput
                       cell={displayCell}
