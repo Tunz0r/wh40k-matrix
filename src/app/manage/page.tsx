@@ -53,6 +53,7 @@ export default function ManagePage() {
 
   const open = !!doc?._join?.open;
   const armies = doc?.roster?.armies || [];
+  const claimedCount = armies.filter((a) => a.claimedByUid).length;
   const inviteLink = `${origin}/join/${activeSlug}`;
 
   // People you can put on a seat: everyone already on THIS team (current
@@ -181,12 +182,19 @@ export default function ManagePage() {
         )}
       </section>
 
-      {/* Slots + claims */}
+      {/* The team */}
       <section className="space-y-2">
-        <h2 className="text-[11px] uppercase tracking-wider text-[#8888a0] font-semibold">Pladser ({armies.length})</h2>
-        {/* Seat count — create empty seats before armies are known. */}
+        <h2 className="text-[11px] uppercase tracking-wider text-[#8888a0] font-semibold">
+          Holdet ({claimedCount}/{armies.length})
+        </h2>
+        <p className="text-[11px] text-[#8888a0] leading-relaxed">
+          Spillerne tilmelder sig selv via linket ovenfor og vælger deres egen hær — du behøver ikke sætte nogen i pladser.
+          Sæt bare holdstørrelsen herunder.
+        </p>
+
+        {/* Team size */}
         <div className="flex items-center gap-2 flex-wrap text-[11px]">
-          <span className="text-[#8888a0]">Antal pladser på holdet:</span>
+          <span className="text-[#8888a0]">Holdstørrelse:</span>
           <input
             type="number"
             min={1}
@@ -199,79 +207,93 @@ export default function ManagePage() {
           <button
             onClick={() => {
               const n = Number(seatInput || armies.length || defaultSeats);
-              if (n >= 1 && n <= 12) run("seats", () => applySeatCount(n).then(() => recomputeMembership()), `${n} pladser sat.`);
+              if (n >= 1 && n <= 12) run("seats", () => applySeatCount(n).then(() => recomputeMembership()), `Holdstørrelse sat til ${n}.`);
             }}
             disabled={busy === "seats"}
             className="px-2.5 py-1 rounded-md bg-[#a855f7] hover:bg-[#9333ea] text-white font-semibold transition-colors disabled:opacity-50"
           >
-            {busy === "seats" ? "…" : "Sæt pladser"}
+            {busy === "seats" ? "…" : "Sæt"}
           </button>
-          <span className="text-[#8888a0]">Hærene vælges senere.</span>
         </div>
+
         {armies.length === 0 && (
-          <p className="text-[12px] text-[#8888a0]">Sæt antal pladser, så holdet kan tilmelde sig.</p>
+          <p className="text-[12px] text-[#8888a0]">Sæt holdstørrelsen, så holdet kan tilmelde sig.</p>
         )}
-        {armies.map((a, idx) => (
-          <div key={idx} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-[#131318] px-3 py-2">
-            {editIdx === idx ? (
-              <div className="flex items-center gap-2 flex-1">
-                <input
-                  autoFocus
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") saveName(idx); if (e.key === "Escape") setEditIdx(null); }}
-                  className="flex-1 text-[12px] px-2 py-1 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
-                />
-                <button
-                  onClick={() => saveName(idx)}
-                  disabled={busy === `name${idx}` || !editName.trim()}
-                  className="text-[11px] px-2 py-1 rounded-md bg-[#a855f7] hover:bg-[#9333ea] text-white font-semibold transition-colors disabled:opacity-50"
-                >
-                  Gem
-                </button>
-                <button onClick={() => setEditIdx(null)} className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0]">Annullér</button>
-              </div>
-            ) : (
-              <span className="text-[13px] text-[#e8e8f0] flex-1 flex items-center gap-2">
-                <span>{a.player?.trim() || `Plads ${idx + 1}`}</span>
-                {a.faction ? <span className="text-[10px] text-[#8888a0]">· {a.faction}</span> : <span className="text-[10px] text-[#8888a0]">· hær ikke valgt</span>}
-                <button
-                  onClick={() => { setEditIdx(idx); setEditName(a.player?.trim() || ""); }}
-                  title="Omdøb pladsen"
-                  className="text-[10px] text-[#8888a0] hover:text-[#c084fc] transition-colors"
-                >
-                  ✎
-                </button>
-              </span>
-            )}
-            {editIdx !== idx && (
-              <div className="flex items-center gap-2 shrink-0">
-                {a.claimedByUid && <span className="text-[10px] text-[#4ade80]">valgt</span>}
-                <select
-                  value={a.claimedByUid && teamPeople.some((p) => p.uid === a.claimedByUid) ? a.claimedByUid : ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (!v) return;
-                    if (v === "__free") {
-                      run(`rel${idx}`, () => releaseSlot(activeSlug, idx).then(() => recomputeMembership()), "Plads frigivet.");
-                      return;
-                    }
-                    const p = teamPeople.find((x) => x.uid === v);
-                    if (p) assignPerson(idx, p.uid, p.name);
-                  }}
-                  disabled={busy === `asg${idx}` || busy === `rel${idx}`}
-                  className="text-[11px] px-2 py-1 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#e8e8f0] outline-none focus:border-[#a855f7] max-w-[160px]"
-                >
-                  <option value="">{a.claimedByUid ? "Skift spiller…" : "Vælg spiller…"}</option>
-                  {teamPeople.map((p) => (
-                    <option key={p.uid} value={p.uid}>{p.name}</option>
-                  ))}
-                  {a.claimedByUid && <option value="__free">— Frigiv pladsen</option>}
-                </select>
-              </div>
-            )}
-          </div>
-        ))}
+
+        {armies.map((a, idx) => {
+          const claimed = !!a.claimedByUid;
+          return (
+            <div key={idx} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-[#131318] px-3 py-2">
+              {claimed && editIdx === idx ? (
+                <div className="flex items-center gap-2 flex-1">
+                  <input
+                    autoFocus
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveName(idx); if (e.key === "Escape") setEditIdx(null); }}
+                    className="flex-1 text-[12px] px-2 py-1 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+                  />
+                  <button
+                    onClick={() => saveName(idx)}
+                    disabled={busy === `name${idx}` || !editName.trim()}
+                    className="text-[11px] px-2 py-1 rounded-md bg-[#a855f7] hover:bg-[#9333ea] text-white font-semibold transition-colors disabled:opacity-50"
+                  >
+                    Gem
+                  </button>
+                  <button onClick={() => setEditIdx(null)} className="text-[11px] text-[#8888a0] hover:text-[#e8e8f0]">Annullér</button>
+                </div>
+              ) : claimed ? (
+                <>
+                  <span className="text-[13px] text-[#e8e8f0] flex-1 flex items-center gap-2 min-w-0">
+                    <span className="truncate">{a.player?.trim() || "Spiller"}</span>
+                    <span className="text-[10px] text-[#8888a0] shrink-0">{a.faction ? `· ${a.faction}` : "· hær ikke valgt"}</span>
+                    <button
+                      onClick={() => { setEditIdx(idx); setEditName(a.player?.trim() || ""); }}
+                      title="Ret navnet"
+                      className="text-[10px] text-[#8888a0] hover:text-[#c084fc] transition-colors shrink-0"
+                    >
+                      ✎
+                    </button>
+                  </span>
+                  <button
+                    onClick={() => run(`rel${idx}`, () => releaseSlot(activeSlug, idx).then(() => recomputeMembership()), "Spiller fjernet.")}
+                    disabled={busy === `rel${idx}`}
+                    title="Fjern spilleren fra holdet"
+                    className="text-[11px] text-[#8888a0] hover:text-[#f87171] transition-colors shrink-0"
+                  >
+                    Fjern
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-[12px] text-[#8888a0] flex-1">Ledig plads</span>
+                  {(() => {
+                    const taken = new Set(armies.map((x) => x.claimedByUid).filter(Boolean) as string[]);
+                    const avail = teamPeople.filter((p) => !taken.has(p.uid));
+                    return avail.length > 0 ? (
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const p = avail.find((x) => x.uid === e.target.value);
+                          if (p) assignPerson(idx, p.uid, p.name);
+                        }}
+                        disabled={busy === `asg${idx}`}
+                        className="text-[11px] px-2 py-1 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#8888a0] outline-none focus:border-[#a855f7] max-w-[180px] shrink-0"
+                      >
+                        <option value="">+ Tilføj spiller manuelt…</option>
+                        {avail.map((p) => (
+                          <option key={p.uid} value={p.uid}>{p.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-[10px] text-[#8888a0] shrink-0">venter på tilmelding</span>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          );
+        })}
       </section>
     </div>
   );
