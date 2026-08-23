@@ -287,6 +287,14 @@ export default function PlayerPage() {
   const [profPasting, setProfPasting] = useState(false);
   const [profChanging, setProfChanging] = useState(false);
   const [profBusy, setProfBusy] = useState(false);
+  const [profShowAll, setProfShowAll] = useState(false);
+  // Mapping YOUR army: default to just your faction's archetypes (a short list) —
+  // no point scrolling hundreds that aren't your codex. "Vis alle" reveals the rest.
+  const profOptions = useMemo(() => {
+    if (profShowAll || !myFaction) return clusterOptions;
+    const mine = clusterOptions.filter((o) => o.c.rep.list.faction === myFaction);
+    return mine.length ? mine : clusterOptions;
+  }, [clusterOptions, myFaction, profShowAll]);
 
   // Opponents already played (locked rounds) — their estimate cells are the
   // historical record and are never rewritten by archetype moves.
@@ -453,6 +461,7 @@ export default function PlayerPage() {
   }
 
   const [wuCluster, setWuCluster] = useState<string>("");
+  const [wuOwn, setWuOwn] = useState<string>(""); // which army YOU played as ("" = your current army)
   const [wuActual, setWuActual] = useState<string>("");
   const [wuDate, setWuDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [wuNotes, setWuNotes] = useState("");
@@ -467,18 +476,28 @@ export default function PlayerPage() {
       alert("Resultat skal være 0-20 BP.");
       return;
     }
-    const game: WarmupGame = {
-      date: wuDate,
-      faction: wuSelected.rep.list.faction,
-      detachments: wuSelected.rep.list.detachments || [],
-      disposition: wuSelected.rep.list.disposition ?? null,
-      own: myProfile
+    // What YOU played as: an explicitly chosen archetype (you may have tested a
+    // different list), else your current mapped army.
+    const ownCluster = wuOwn === "" ? null : clusters[Number(wuOwn)] ?? null;
+    const own = ownCluster
+      ? {
+          faction: ownCluster.rep.list.faction,
+          detachments: ownCluster.rep.list.detachments || [],
+          disposition: ownCluster.rep.list.disposition ?? null,
+        }
+      : myProfile
         ? {
             faction: myProfile.faction,
             detachments: myProfile.detachments || [],
             disposition: myProfile.disposition ?? null,
           }
-        : null,
+        : null;
+    const game: WarmupGame = {
+      date: wuDate,
+      faction: wuSelected.rep.list.faction,
+      detachments: wuSelected.rep.list.detachments || [],
+      disposition: wuSelected.rep.list.disposition ?? null,
+      own,
       estimate: wuEstimate,
       actual,
       ...(wuNotes.trim() ? { notes: wuNotes.trim() } : {}),
@@ -494,6 +513,7 @@ export default function PlayerPage() {
       setWuCluster("");
       setWuActual("");
       setWuNotes("");
+      setWuOwn("");
     } catch {
       alert("Kunne ikke gemme warmup-kampen — tjek Firebase.");
     }
@@ -711,10 +731,19 @@ export default function PlayerPage() {
                       className="flex-1 min-w-[200px] bg-[#1a1a22] border border-white/[0.14] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
                     >
                       <option value="">Vælg arketype…</option>
-                      {clusterOptions.map(({ i, label, title }) => (
+                      {profOptions.map(({ i, label, title }) => (
                         <option key={i} value={i} title={title}>{label}</option>
                       ))}
                     </select>
+                    {myFaction && !profShowAll && (
+                      <button
+                        onClick={() => setProfShowAll(true)}
+                        title="Som standard vises kun din factions arketyper"
+                        className="text-[10px] text-[#8888a0] hover:text-[#c084fc] transition-colors shrink-0"
+                      >
+                        Vis alle
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         const c = profCluster === "" ? null : clusters[Number(profCluster)];
@@ -881,13 +910,28 @@ export default function PlayerPage() {
               <p className="text-[10px] text-[#8888a0] mb-3">
                 Log dine træningskampe mod arketyper — så ser du før WTC om dine resultater matcher dine estimater.
               </p>
+              {/* Which army YOU played as — defaults to your current, but you can
+                  pick any archetype if you tested a different list. */}
+              <div className="flex items-center gap-2 flex-wrap mb-2 text-[11px]">
+                <span className="text-[#8888a0]">Spillede som</span>
+                <select
+                  value={wuOwn}
+                  onChange={(e) => setWuOwn(e.target.value)}
+                  className="flex-1 min-w-[180px] bg-[#1a1a22] border border-white/[0.14] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
+                >
+                  <option value="">Min hær{myFaction ? ` (${myFaction})` : ""}</option>
+                  {clusterOptions.map(({ i, label, title }) => (
+                    <option key={i} value={i} title={title}>{label}</option>
+                  ))}
+                </select>
+              </div>
               <div className="flex items-center gap-2 flex-wrap mb-2">
                 <select
                   value={wuCluster}
                   onChange={(e) => setWuCluster(e.target.value)}
                   className="flex-1 min-w-[200px] bg-[#1a1a22] border border-white/[0.14] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
                 >
-                  <option value="">Vælg arketype…</option>
+                  <option value="">Vælg modstander-arketype…</option>
                   {clusterOptions.map(({ i, label, title }) => (
                     <option key={i} value={i} title={title}>{label}</option>
                   ))}
