@@ -298,6 +298,17 @@ export async function claimSlot(slug: string, armyIdx: number, uid: string): Pro
   await update(ref(getDb()), {
     [`tournaments/_profileOwners/${slug}/a${armyIdx}`]: uid,
   }).catch(() => {});
+  // If this camp belongs to an event, self-grant READ of the event's shared
+  // field (the _fields rule honors _myEvents/{uid}/{eventId}, and fieldSlug ===
+  // eventId). Without this a joined player would see NO opponents until a
+  // super-admin recompute — the core prep flow would be dead on arrival. The
+  // just-written _claimants entry makes the registry meta readable.
+  try {
+    const meta = (await get(ref(getDb(), `tournaments/_registry/${slug}`))).val() as { eventId?: string } | null;
+    if (meta?.eventId) {
+      await update(ref(getDb()), { [`tournaments/_myEvents/${uid}/${meta.eventId}`]: true });
+    }
+  } catch {}
 }
 
 // Set the display name on a slot. A claimer may set their own name on the slot
