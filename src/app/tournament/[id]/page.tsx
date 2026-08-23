@@ -22,8 +22,11 @@ export default function TournamentDetailPage({
 
   useEffect(() => {
     let cancelled = false;
-    ensureRegistry()
-      .then(() => getTournament(id))
+    // Best-effort WTC seed — must NOT block loading this tournament. It reads
+    // WTC 2026's registry entry, which a user who isn't on Team Denmark can't
+    // read; if that's chained, every other team's own dashboard would 404.
+    ensureRegistry().catch(() => {});
+    getTournament(id)
       .then((m) => {
         if (cancelled) return;
         setMeta(m);

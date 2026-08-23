@@ -22,6 +22,8 @@ import {
   WTC_2026,
   type TournamentMeta,
 } from "./tournaments-registry";
+import { subscribeToMyTournaments, subscribeToIsAdmin } from "./membership";
+import { useAuth } from "./auth";
 
 const KEY = "wtc-active-tournament";
 
@@ -37,18 +39,30 @@ interface ActiveTournament {
 const Ctx = createContext<ActiveTournament | null>(null);
 
 export function ActiveTournamentProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [tournaments, setTournaments] = useState<TournamentMeta[]>([]);
   const [activeId, setActiveId] = useState<string>(WTC_2026.id);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const saved = typeof localStorage !== "undefined" ? localStorage.getItem(KEY) : null;
-    // Render the default first (avoids an SSR/client hydration mismatch), then
-    // hydrate the saved choice on mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (saved) setActiveId(saved);
     ensureRegistry().catch(() => {});
-    return subscribeToRegistry(setTournaments);
   }, []);
+
+  useEffect(() => subscribeToIsAdmin(user?.uid ?? null, setIsAdmin), [user?.uid]);
+
+  // The switchable list: admins see the whole registry; everyone else sees the
+  // tournaments they belong to. Sourcing this from the admin-only registry was a
+  // bug — non-admins got an empty list, so `active` never resolved and the whole
+  // app mis-scoped to the WTC 2026 / Team Denmark default.
+  useEffect(() => {
+    if (isAdmin) return subscribeToRegistry(setTournaments);
+    if (user?.uid) return subscribeToMyTournaments(user.uid, setTournaments);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTournaments([]);
+  }, [isAdmin, user?.uid]);
 
   const setActive = (id: string) => {
     setActiveId(id);
@@ -59,6 +73,7 @@ export function ActiveTournamentProvider({ children }: { children: ReactNode }) 
     () =>
       tournaments.find((t) => t.id === activeId) ??
       tournaments.find((t) => t.id === WTC_2026.id) ??
+      tournaments[0] ?? // a non-Denmark user defaults to their own first tournament
       null,
     [tournaments, activeId]
   );

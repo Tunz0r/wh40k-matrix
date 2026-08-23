@@ -59,8 +59,15 @@ export const WTC_2026: TournamentMeta = {
 // and only writes the one pointer — never touches the underlying data.
 export async function ensureRegistry(): Promise<void> {
   await authReady();
-  const r = ref(getDb(), `${REGISTRY}/${WTC_2026.id}`);
-  if (!(await get(r)).exists()) await set(r, WTC_2026);
+  // Best-effort: only an admin (or a Team Denmark member) can read/seed WTC
+  // 2026's entry. Everyone else gets a denied read here — swallow it, the entry
+  // is long since seeded and this must never block other flows.
+  try {
+    const r = ref(getDb(), `${REGISTRY}/${WTC_2026.id}`);
+    if (!(await get(r)).exists()) await set(r, WTC_2026);
+  } catch {
+    /* not permitted to read/seed WTC's entry — fine */
+  }
 }
 
 export function subscribeToRegistry(
