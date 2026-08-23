@@ -1,6 +1,6 @@
 import { ref, set, get, onValue, off, update, push, remove } from "firebase/database";
 import { getDb, authReady } from "./firebase";
-import type { RosterExport } from "./roster";
+import type { RosterExport, RosterArmy } from "./roster";
 
 export type RoundStatus = "pairing" | "live" | "completed";
 
@@ -89,12 +89,45 @@ export async function createTournament(
 }
 
 // Patch team setup fields without touching round state.
+//
+// CRITICAL: when a roster is written, every seat's `claimedByUid` and player name
+// are PRESERVED from the live roster by index — the roster builder / paste-import
+// / per-seat army editor all produce armies with no claim, and a blind overwrite
+// would silently un-claim the whole team (the "adding an army removed Simon" bug).
+// A claimed seat is never dropped, even if the incoming roster is shorter.
 export async function saveTeamSetup(
   slug: string,
   data: Partial<Pick<TournamentDoc, "teamName" | "roster" | "seedingTiers">>
 ): Promise<void> {
   await authReady();
-  await update(ref(getDb(), `tournaments/${slug}`), data);
+  const db = getDb();
+  if (data.roster) {
+    const current = ((await get(ref(db, `tournaments/${slug}/roster/armies`))).val() as RosterArmy[] | null) || [];
+    const incoming = data.roster.armies || [];
+    const len = Math.max(current.length, incoming.length);
+    const merged: RosterArmy[] = [];
+    for (let i = 0; i < len; i++) {
+      const cur = current[i];
+      const next = incoming[i];
+      if (!next) {
+        // Roster shrank — keep a claimed seat rather than destroy its owner's claim.
+        if (cur && cur.claimedByUid) merged.push(cur);
+        continue;
+      }
+      // Keep the existing player name unless the incoming one explicitly sets a real value.
+      const playerName = next.player && next.player.trim() ? next.player : cur?.player;
+      merged.push({
+        faction: next.faction,
+        detachments: next.detachments || [],
+        disposition: next.disposition ?? null,
+        // The claim always comes from the live roster; the builder never sets it.
+        ...(cur?.claimedByUid ? { claimedByUid: cur.claimedByUid } : {}),
+        ...(playerName ? { player: playerName } : {}),
+      });
+    }
+    data = { ...data, roster: { ...data.roster, armies: merged } };
+  }
+  await update(ref(db, `tournaments/${slug}`), data);
 }
 
 export async function setActiveSession(

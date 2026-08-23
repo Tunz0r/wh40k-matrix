@@ -55,6 +55,31 @@ export default function ManagePage() {
   const armies = doc?.roster?.armies || [];
   const inviteLink = `${origin}/join/${activeSlug}`;
 
+  // People you can put on a seat: everyone already on THIS team (current
+  // claimants) + known people from your other tournaments. Deduped by uid, with
+  // the known/correct name winning over a possibly-mislabelled roster name.
+  const teamPeople = (() => {
+    const m = new Map<string, string>();
+    for (const a of armies) if (a.claimedByUid) m.set(a.claimedByUid, a.player?.trim() || a.claimedByUid.slice(0, 6));
+    for (const k of known) m.set(k.uid, k.name); // known name wins
+    return [...m].map(([uid, name]) => ({ uid, name }));
+  })();
+
+  // Assign a person to a seat via the dropdown. If they already hold another seat,
+  // free that one first so nobody ends up on two seats (the duplicate bug).
+  async function assignPerson(idx: number, uid: string, name: string) {
+    const other = armies.findIndex((a, j) => j !== idx && a.claimedByUid === uid);
+    await run(
+      `asg${idx}`,
+      async () => {
+        if (other >= 0) await releaseSlot(activeSlug, other);
+        await assignSlot(activeSlug, idx, uid, name);
+        await recomputeMembership();
+      },
+      `${name} sat på plads ${idx + 1}.`
+    );
+  }
+
   function copyLink() {
     navigator.clipboard?.writeText(inviteLink);
   }
@@ -219,42 +244,32 @@ export default function ManagePage() {
                 </button>
               </span>
             )}
-            {editIdx !== idx && (a.claimedByUid ? (
-              <>
-                <span className="text-[10px] text-[#4ade80]">valgt</span>
-                <button
-                  onClick={() => run(`rel${idx}`, () => releaseSlot(activeSlug, idx).then(() => recomputeMembership()), "Plads frigivet.")}
-                  disabled={busy === `rel${idx}`}
-                  className="text-[11px] text-[#8888a0] hover:text-[#f87171] transition-colors"
+            {editIdx !== idx && (
+              <div className="flex items-center gap-2 shrink-0">
+                {a.claimedByUid && <span className="text-[10px] text-[#4ade80]">valgt</span>}
+                <select
+                  value={a.claimedByUid && teamPeople.some((p) => p.uid === a.claimedByUid) ? a.claimedByUid : ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (!v) return;
+                    if (v === "__free") {
+                      run(`rel${idx}`, () => releaseSlot(activeSlug, idx).then(() => recomputeMembership()), "Plads frigivet.");
+                      return;
+                    }
+                    const p = teamPeople.find((x) => x.uid === v);
+                    if (p) assignPerson(idx, p.uid, p.name);
+                  }}
+                  disabled={busy === `asg${idx}` || busy === `rel${idx}`}
+                  className="text-[11px] px-2 py-1 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#e8e8f0] outline-none focus:border-[#a855f7] max-w-[160px]"
                 >
-                  Frigiv
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="text-[10px] text-[#8888a0]">ledig</span>
-                {(() => {
-                  const taken = new Set(armies.map((x) => x.claimedByUid).filter(Boolean) as string[]);
-                  const avail = known.filter((k) => !taken.has(k.uid));
-                  return avail.length > 0 ? (
-                    <select
-                      value=""
-                      onChange={(e) => {
-                        const p = avail.find((k) => k.uid === e.target.value);
-                        if (p) run(`asg${idx}`, () => assignSlot(activeSlug, idx, p.uid, p.name).then(() => recomputeMembership()), `${p.name} tilføjet.`);
-                      }}
-                      disabled={busy === `asg${idx}`}
-                      className="text-[11px] px-2 py-1 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#e8e8f0] outline-none focus:border-[#a855f7]"
-                    >
-                      <option value="">+ Tilføj kendt spiller…</option>
-                      {avail.map((k) => (
-                        <option key={k.uid} value={k.uid}>{k.name}</option>
-                      ))}
-                    </select>
-                  ) : null;
-                })()}
-              </>
-            ))}
+                  <option value="">{a.claimedByUid ? "Skift spiller…" : "Vælg spiller…"}</option>
+                  {teamPeople.map((p) => (
+                    <option key={p.uid} value={p.uid}>{p.name}</option>
+                  ))}
+                  {a.claimedByUid && <option value="__free">— Frigiv pladsen</option>}
+                </select>
+              </div>
+            )}
           </div>
         ))}
       </section>
