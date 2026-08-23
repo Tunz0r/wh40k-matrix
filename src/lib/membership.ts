@@ -32,7 +32,6 @@ const COACHES = "tournaments/_coaches";
 // tournament-doc + estimate nodes use, so rules can check ownership directly.
 const OWNERS = "tournaments/_owners";
 const MY_TOURNAMENTS = "tournaments/_myTournaments";
-const MY_EVENTS = "tournaments/_myEvents";
 const USERS = "tournaments/_users";
 const REGISTRY = "tournaments/_registry";
 const PLAYERS = "tournaments/_players";
@@ -288,7 +287,10 @@ export async function recomputeMembership(): Promise<void> {
   const members: Record<string, Record<string, true>> = {};
   const teamMembers: Record<string, true> = {};
   const myTournaments: Record<string, Record<string, true>> = {};
-  const myEvents: Record<string, Record<string, true>> = {};
+  // Event membership is granted ADDITIVELY (targeted leaf writes) — the whole
+  // _myEvents node isn't readable (only per-uid), and a wholesale replace would
+  // clobber self-written entries (organizers/claimants). Path -> true.
+  const myEventsClaims: Record<string, true> = {};
   const profileOwners: Record<string, Record<string, string>> = {};
   // One-time migration (super-admin only): backfill roster slots that still use
   // the legacy global playerId with claimedByUid, so per-tournament identity
@@ -311,8 +313,7 @@ export async function recomputeMembership(): Promise<void> {
       members[meta.fieldSlug][uid] = true;
     }
     if (meta.eventId) {
-      myEvents[uid] = myEvents[uid] || {};
-      myEvents[uid][meta.eventId] = true;
+      myEventsClaims[`tournaments/_myEvents/${uid}/${meta.eventId}`] = true;
     }
   };
 
@@ -344,22 +345,16 @@ export async function recomputeMembership(): Promise<void> {
     })
   );
 
-  // Merge (not replace) the derived event index so an organizer's own _myEvents
-  // entry (written at event creation, before any camp) survives a recompute.
-  const existingMyEvents = ((await get(ref(db, MY_EVENTS))).val() as Record<string, Record<string, true>>) || {};
-  for (const [uid, evs] of Object.entries(existingMyEvents)) {
-    myEvents[uid] = { ...evs, ...(myEvents[uid] || {}) };
-  }
-
   await update(ref(db, "tournaments"), {
     _members: members,
     _teamMembers: teamMembers,
     _myTournaments: myTournaments,
-    _myEvents: myEvents,
     _profileOwners: profileOwners,
   });
 
-  // Apply the legacy->claimedByUid roster migration (super-admin only).
+  // Additive writes: _myEvents leaves (never clobbers self-writes) + the legacy
+  // playerId->claimedByUid roster migration (super-admin only).
+  if (Object.keys(myEventsClaims).length) await update(ref(db), myEventsClaims);
   if (Object.keys(rosterClaims).length) await update(ref(db), rosterClaims);
 }
 
