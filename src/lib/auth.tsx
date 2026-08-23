@@ -21,6 +21,7 @@ import {
 import {
   GoogleAuthProvider,
   signInWithPopup,
+  signInAnonymously,
   onAuthStateChanged,
   signOut,
   sendSignInLinkToEmail,
@@ -33,11 +34,19 @@ import { upsertSelfUser } from "./membership";
 
 const EMAIL_KEY = "wtc-email-for-signin";
 
+// Test-login: a credential-free throwaway identity (Firebase anonymous) so
+// multi-user flows (join / claim / field access) can be exercised without real
+// teammates. OFF unless NEXT_PUBLIC_ENABLE_TEST_LOGIN==="1" — production leaves it
+// unset, so anonymous is still rejected there. Requires the Anonymous provider
+// enabled in the Firebase console.
+export const TEST_LOGIN_ENABLED = process.env.NEXT_PUBLIC_ENABLE_TEST_LOGIN === "1";
+
 interface AuthCtx {
   user: User | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   sendEmailLink: (email: string) => Promise<void>;
+  signInAsTestUser: () => Promise<void>;
   signOutUser: () => Promise<void>;
 }
 
@@ -78,7 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsub = onAuthStateChanged(auth, (u) => {
       // Reject leftover anonymous sessions from the old app version — they must
       // not reach the claim screen. Sign them out and show the real login.
-      if (u && u.isAnonymous) {
+      // EXCEPT when test-login is enabled (a deliberate test build), where an
+      // anonymous user IS the throwaway test identity.
+      if (u && u.isAnonymous && !TEST_LOGIN_ENABLED) {
         signOut(auth).catch(() => {});
         setUser(null);
         setLoading(false);
@@ -108,6 +119,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         localStorage.setItem(EMAIL_KEY, email);
       },
+      signInAsTestUser: async () => {
+        if (!TEST_LOGIN_ENABLED) return;
+        await signInAnonymously(getAuthInstance());
+      },
       signOutUser: async () => {
         await signOut(getAuthInstance());
       },
@@ -125,6 +140,7 @@ export function useAuth(): AuthCtx {
       loading: true,
       signInWithGoogle: async () => {},
       sendEmailLink: async () => {},
+      signInAsTestUser: async () => {},
       signOutUser: async () => {},
     }
   );

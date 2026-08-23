@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "@/lib/auth";
+import { useAuth, TEST_LOGIN_ENABLED } from "@/lib/auth";
 
 // The sign-in screen: Google (primary) + passwordless email link (fallback).
 // No passwords. Rendered by AuthGate whenever no user is signed in.
 export default function LoginScreen() {
-  const { signInWithGoogle, sendEmailLink } = useAuth();
+  const { signInWithGoogle, sendEmailLink, signInAsTestUser } = useAuth();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -96,6 +96,19 @@ export default function LoginScreen() {
         )}
 
         {error && <p className="text-[11px] text-[#f87171]">{error}</p>}
+
+        {TEST_LOGIN_ENABLED && (
+          <div className="pt-3 border-t border-dashed border-[rgba(240,180,41,0.3)]">
+            <button
+              onClick={async () => { setBusy(true); setError(null); try { await signInAsTestUser(); } catch { setError("Test-login fejlede — er Anonymous-provideren slået til i Firebase?"); setBusy(false); } }}
+              disabled={busy}
+              className="w-full text-[12px] font-semibold text-[#f0b429] border border-[rgba(240,180,41,0.4)] hover:bg-[rgba(240,180,41,0.08)] px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+            >
+              🧪 Test-bruger (kun til test)
+            </button>
+            <p className="text-[10px] text-[#8888a0] mt-1 text-center">Anonym engangs-bruger til at teste flows.</p>
+          </div>
+        )}
       </div>
     </div>
   );
