@@ -131,8 +131,8 @@ export default function AdminPage() {
           <br />
           <span className="text-[#4ade80]">Spiller</span> = kobl til et navn i puljen (får adgang
           til de turneringer navnet står på roster i).{" "}
-          <span className="text-[#60a5fa]">Coach</span> = sæt flueben ved de turneringer personen
-          coacher (behøver ikke være spiller).{" "}
+          <span className="text-[#60a5fa]">Coach</span> = tilføj de turneringer personen coacher
+          (behøver ikke være spiller).{" "}
           <span className="text-[#f0b429]">Admin</span> = fuld kontrol.
           <br />
           En person kan fx være <span className="text-[#4ade80]">spiller</span> i WTC 2026 og{" "}
@@ -203,25 +203,41 @@ export default function AdminPage() {
                   )}
                 </div>
 
-                {/* Coach assignments */}
-                <div className="flex items-center gap-2 flex-wrap">
+                {/* Coach assignments — chips for current + a searchable add, so it
+                    scales to many tournaments (no per-tournament checkbox row). */}
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-[#8888a0] uppercase tracking-wider text-[10px] font-semibold">Coach for</span>
-                  {tournaments.length === 0 && <span className="text-[#8888a0]">ingen turneringer</span>}
-                  {tournaments.map((t) => {
-                    const on = !!coaches[u.uid]?.[t.id];
-                    return (
-                      <label key={t.id} className="flex items-center gap-1 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={on}
-                          onChange={(e) => run(u.uid, () => assignCoach(u.uid, t.id, e.target.checked))}
-                          disabled={busy === u.uid}
-                          className="accent-[#60a5fa]"
-                        />
-                        <span className="text-[#c8c8d8]">{t.name}</span>
-                      </label>
-                    );
-                  })}
+                  {coachOf.map((tid) => (
+                    <span key={tid} className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-[rgba(96,165,250,0.14)] text-[#60a5fa]">
+                      {tournaments.find((t) => t.id === tid)?.name ?? tid}
+                      <button
+                        onClick={() => run(u.uid, () => assignCoach(u.uid, tid, false))}
+                        disabled={busy === u.uid}
+                        title="Fjern coach-rolle"
+                        className="hover:text-[#f87171] transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                  {(() => {
+                    const avail = tournaments.filter((t) => !coaches[u.uid]?.[t.id]);
+                    return avail.length > 0 ? (
+                      <select
+                        value=""
+                        onChange={(e) => e.target.value && run(u.uid, () => assignCoach(u.uid, e.target.value, true), "Coach tilføjet.")}
+                        disabled={busy === u.uid}
+                        className="text-[10px] px-1.5 py-0.5 rounded-md border border-white/[0.14] bg-[#1a1a22] text-[#8888a0] outline-none focus:border-[#60a5fa] max-w-[160px]"
+                      >
+                        <option value="">+ tilføj…</option>
+                        {avail.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                    ) : coachOf.length === 0 ? (
+                      <span className="text-[10px] text-[#8888a0]">ingen</span>
+                    ) : null;
+                  })()}
                 </div>
 
                 {/* Admin toggle */}
