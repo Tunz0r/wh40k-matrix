@@ -6,6 +6,8 @@ import {
   updateEvent,
   registerTeamForEvent,
   subscribeToEvents,
+  deleteEvent,
+  campsForEvent,
   eventStatus,
   slugifyId,
   type EventMeta,
@@ -21,11 +23,13 @@ export default function EventBrowser({
   onEnter,
   userUid,
   isAdmin = false,
+  allCamps = [],
 }: {
   myCamps: TournamentMeta[];
   onEnter: (campId: string) => void;
   userUid?: string;
   isAdmin?: boolean;
+  allCamps?: TournamentMeta[]; // full registry (admin) — needed to cascade-delete an event's teams
 }) {
   const [events, setEvents] = useState<EventMeta[]>([]);
   useEffect(() => subscribeToEvents(setEvents), []);
@@ -110,6 +114,16 @@ export default function EventBrowser({
       setEditBusy(false);
     }
   }
+  async function removeEvent(ev: EventMeta) {
+    const camps = campsForEvent(allCamps, ev.id);
+    if (!confirm(`Slet eventet "${ev.name}"${camps.length ? ` OG ${camps.length} tilmeldte hold` : ""} permanent? Kan ikke fortrydes.`)) return;
+    try {
+      await deleteEvent(ev.id, ev.fieldSlug, camps);
+    } catch {
+      /* best-effort; the subscription refreshes the list */
+    }
+  }
+
   function dateEditor(ev: EventMeta) {
     return (
       <div className="flex items-center gap-2 flex-wrap pt-1 text-[10px]">
@@ -211,6 +225,9 @@ export default function EventBrowser({
               {canEdit(ev) && editingId !== ev.id && (
                 <button onClick={() => startEdit(ev)} className="text-[10px] text-[#8888a0] hover:text-[#c084fc] transition-colors">Rediger datoer</button>
               )}
+              {isAdmin && (
+                <button onClick={() => removeEvent(ev)} className="text-[10px] text-[#8888a0] hover:text-[#f87171] transition-colors">Slet event</button>
+              )}
             </div>
 
             {editingId === ev.id && dateEditor(ev)}
@@ -252,6 +269,9 @@ export default function EventBrowser({
                   {ev.startDate && <span className="text-[10px] text-[#8888a0]">{fmtRange(ev)}</span>}
                   {canEdit(ev) && editingId !== ev.id && (
                     <button onClick={() => startEdit(ev)} className="text-[10px] text-[#8888a0] hover:text-[#c084fc] transition-colors">Rediger datoer</button>
+                  )}
+                  {isAdmin && (
+                    <button onClick={() => removeEvent(ev)} className="text-[10px] text-[#8888a0] hover:text-[#f87171] transition-colors">Slet event</button>
                   )}
                   {mine ? (
                     <button onClick={() => onEnter(mine.id)} className="ml-auto text-[11px] text-[#c084fc] hover:text-[#a855f7] transition-colors">{mine.teamName} →</button>

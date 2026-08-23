@@ -22,6 +22,7 @@ import { getDb, authReady, currentUser } from "./firebase";
 import {
   addTournament,
   updateTournament,
+  deleteTournament,
   stripUndefined,
   type TournamentMeta,
   type TournamentStatus,
@@ -247,4 +248,23 @@ export function subscribeToEvents(callback: (events: EventMeta[]) => void): () =
 // a pre-filtered list. Returns camps whose eventId matches.
 export function campsForEvent(all: TournamentMeta[], eventId: string): TournamentMeta[] {
   return all.filter((t) => t.eventId === eventId);
+}
+
+// Delete an event: cascade-delete every camp registered under it, then remove the
+// event, its shared field, and its ownership/membership index. Admin-write. Pass
+// the camps to cascade (the caller has the registry list). Leftover _myEvents
+// crumbs are harmless (deref to a null event, filtered out).
+export async function deleteEvent(
+  eventId: string,
+  fieldSlug: string,
+  camps: TournamentMeta[]
+): Promise<void> {
+  await authReady();
+  for (const c of camps) await deleteTournament(c);
+  await update(ref(getDb()), {
+    [`${EVENTS}/${eventId}`]: null,
+    [`estimates/_fields/${fieldSlug}`]: null,
+    [`${OWNERS}/${fieldSlug}`]: null,
+    [`tournaments/_members/${fieldSlug}`]: null,
+  });
 }

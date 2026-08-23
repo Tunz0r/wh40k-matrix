@@ -132,3 +132,28 @@ export async function updateTournament(
   await authReady();
   await update(ref(getDb(), `${REGISTRY}/${id}`), stripUndefined(patch as Record<string, unknown>));
 }
+
+// The estimate-node suffixes a camp fans out into (kept in sync with membership.ts
+// and estimates-db.ts sibling nodes).
+const EST_SUFFIXES = ["", "-versioner", "-arketype-bank", "-lists-raw", "-sanity-ok"];
+
+// Delete a camp (one team's prep) and all its data + derived-index entries.
+// Admin-write (the index nodes are admin-only). Leftover self-index crumbs
+// (_myTournaments/_claimants) are harmless — they deref to a now-null registry
+// entry and get filtered out. Does NOT touch the event's shared field.
+export async function deleteTournament(meta: TournamentMeta): Promise<void> {
+  await authReady();
+  const s = meta.dataSlug;
+  const updates: Record<string, null> = {
+    [`${REGISTRY}/${meta.id}`]: null,
+    [`tournaments/${s}`]: null,
+    [`tournaments/_owners/${s}`]: null,
+    [`tournaments/_members/${s}`]: null,
+    [`tournaments/_profileOwners/${s}`]: null,
+  };
+  for (const suf of EST_SUFFIXES) {
+    updates[`estimates/${s}${suf}`] = null;
+    if (suf) updates[`tournaments/_members/${s}${suf}`] = null;
+  }
+  await update(ref(getDb()), updates);
+}
