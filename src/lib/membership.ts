@@ -227,6 +227,14 @@ export async function revokeAccess(uid: string): Promise<void> {
   await recomputeMembership();
 }
 
+// Remove a user entirely: strip all access, then delete their _users row (so
+// they no longer appear in the admin list). For clearing test/throwaway logins.
+export async function deleteUser(uid: string): Promise<void> {
+  await authReady();
+  await revokeAccess(uid);
+  await set(ref(getDb(), `${USERS}/${uid}`), null);
+}
+
 // --- Recompute the derived index -------------------------------------------
 
 // Rebuild _members/_teamMembers/_myTournaments/_profileOwners from truth

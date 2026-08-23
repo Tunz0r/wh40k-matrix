@@ -13,11 +13,13 @@ import {
   assignCoach,
   setAdmin,
   revokeAccess,
+  deleteUser,
   recomputeMembership,
   type AppUser,
   type CoachMap,
 } from "@/lib/membership";
-import { subscribeToRegistry, type TournamentMeta } from "@/lib/tournaments-registry";
+import { subscribeToRegistry, deleteTournament, type TournamentMeta } from "@/lib/tournaments-registry";
+import { subscribeToEvents, deleteEvent, convertCampToEvent, campsForEvent, type EventMeta } from "@/lib/events";
 
 // Admin-only hub: grant/revoke access. Every login shows up here (recorded on
 // sign-in); the admin gives each a role — bind to a player, assign as a coach of
@@ -35,6 +37,7 @@ export default function AdminPage() {
   const [admins, setAdmins] = useState<Set<string>>(new Set());
   const [coaches, setCoaches] = useState<CoachMap>({});
   const [tournaments, setTournaments] = useState<TournamentMeta[]>([]);
+  const [events, setEvents] = useState<EventMeta[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [newPlayer, setNewPlayer] = useState("");
@@ -43,6 +46,7 @@ export default function AdminPage() {
   useEffect(() => subscribeToAdmins(setAdmins), []);
   useEffect(() => subscribeToCoaches(setCoaches), []);
   useEffect(() => subscribeToRegistry(setTournaments), []);
+  useEffect(() => subscribeToEvents(setEvents), []);
 
   const playerByUid = useMemo(() => {
     const m = new Map<string, Player>();
@@ -87,6 +91,19 @@ export default function AdminPage() {
   }
 
   const nameFor = (u: AppUser) => u.displayName?.trim() || u.note?.trim() || "(uden navn)";
+
+  function delCamp(c: TournamentMeta) {
+    if (!confirm(`Slet holdet "${c.teamName}" permanent? Roster, estimater, runder og coaching slettes. Kan ikke fortrydes.`)) return;
+    run(`c-${c.id}`, () => deleteTournament(c), `"${c.teamName}" slettet.`);
+  }
+  function delEvent(ev: EventMeta) {
+    const camps = campsForEvent(tournaments, ev.id);
+    if (!confirm(`Slet eventet "${ev.name}"${camps.length ? ` OG ${camps.length} tilmeldte hold` : ""} permanent? Kan ikke fortrydes.`)) return;
+    run(`e-${ev.id}`, () => deleteEvent(ev.id, ev.fieldSlug, camps), `"${ev.name}" slettet.`);
+  }
+  function convertCamp(c: TournamentMeta) {
+    run(`v-${c.id}`, async () => { await convertCampToEvent({ camp: c, eventName: c.name }); await recomputeMembership().catch(() => {}); }, `"${c.name}" er nu et event.`);
+  }
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
@@ -219,21 +236,84 @@ export default function AdminPage() {
                   <span className="text-[#c8c8d8]">Admin</span>
                 </label>
 
-                {!isMe && (isUserAdmin || boundPlayer || coachOf.length > 0) && (
-                  <button
-                    onClick={() => {
-                      if (confirm(`Fjern al adgang for ${nameFor(u)}?`)) run(u.uid, () => revokeAccess(u.uid), "Adgang fjernet.");
-                    }}
-                    disabled={busy === u.uid}
-                    className="ml-auto text-[#8888a0] hover:text-[#f87171] transition-colors"
-                  >
-                    Fjern al adgang
-                  </button>
-                )}
+                <div className="ml-auto flex items-center gap-3">
+                  {!isMe && (isUserAdmin || boundPlayer || coachOf.length > 0) && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Fjern al adgang for ${nameFor(u)}?`)) run(u.uid, () => revokeAccess(u.uid), "Adgang fjernet.");
+                      }}
+                      disabled={busy === u.uid}
+                      className="text-[#8888a0] hover:text-[#f87171] transition-colors"
+                    >
+                      Fjern al adgang
+                    </button>
+                  )}
+                  {!isMe && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Slet brugeren ${nameFor(u)} helt fra listen?`)) run(u.uid, () => deleteUser(u.uid), "Bruger slettet.");
+                      }}
+                      disabled={busy === u.uid}
+                      className="text-[#8888a0] hover:text-[#f87171] transition-colors"
+                    >
+                      Slet bruger
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           );
         })}
+      </section>
+
+      {/* Tournaments & events — all destructive CRUD lives here, not scattered. */}
+      <section className="space-y-3">
+        <h2 className="text-[11px] uppercase tracking-wider text-[#8888a0] font-semibold">Events ({events.length})</h2>
+        {events.length === 0 && <p className="text-[12px] text-[#8888a0]">Ingen events.</p>}
+        {events.map((ev) => {
+          const camps = campsForEvent(tournaments, ev.id);
+          return (
+            <div key={ev.id} className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#131318] px-3 py-2">
+              <span className="text-[13px] text-[#e8e8f0] flex-1 min-w-0 truncate">
+                {ev.name} <span className="text-[10px] text-[#8888a0]">· {camps.length} hold</span>
+              </span>
+              <button
+                onClick={() => delEvent(ev)}
+                disabled={busy === `e-${ev.id}`}
+                className="text-[11px] text-[#8888a0] hover:text-[#f87171] transition-colors shrink-0"
+              >
+                {busy === `e-${ev.id}` ? "Sletter…" : "Slet event (+ hold)"}
+              </button>
+            </div>
+          );
+        })}
+
+        <h2 className="text-[11px] uppercase tracking-wider text-[#8888a0] font-semibold pt-2">Alle hold ({tournaments.length})</h2>
+        {tournaments.length === 0 && <p className="text-[12px] text-[#8888a0]">Ingen hold.</p>}
+        {tournaments.map((t) => (
+          <div key={t.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-[#131318] px-3 py-2">
+            <span className="text-[13px] text-[#e8e8f0] flex-1 min-w-0 truncate">
+              {t.teamName}
+              <span className="text-[10px] text-[#8888a0]"> · {t.eventId ? (events.find((e) => e.id === t.eventId)?.name ?? "event") : "enkelt-hold"}</span>
+            </span>
+            {!t.eventId && (
+              <button
+                onClick={() => convertCamp(t)}
+                disabled={busy === `v-${t.id}`}
+                className="text-[11px] text-[#c084fc] hover:text-[#a855f7] transition-colors shrink-0"
+              >
+                {busy === `v-${t.id}` ? "…" : "Gør til event"}
+              </button>
+            )}
+            <button
+              onClick={() => delCamp(t)}
+              disabled={busy === `c-${t.id}`}
+              className="text-[11px] text-[#8888a0] hover:text-[#f87171] transition-colors shrink-0"
+            >
+              {busy === `c-${t.id}` ? "Sletter…" : "Slet"}
+            </button>
+          </div>
+        ))}
       </section>
 
       {/* Player pool */}

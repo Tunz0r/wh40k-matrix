@@ -260,11 +260,15 @@ export async function deleteEvent(
   camps: TournamentMeta[]
 ): Promise<void> {
   await authReady();
+  const db = getDb();
   for (const c of camps) await deleteTournament(c);
-  await update(ref(getDb()), {
+  const updates: Record<string, null> = {
     [`${EVENTS}/${eventId}`]: null,
     [`estimates/_fields/${fieldSlug}`]: null,
-    [`${OWNERS}/${fieldSlug}`]: null,
     [`tournaments/_members/${fieldSlug}`]: null,
-  });
+  };
+  // `_owners/{fieldSlug}` — null the leaves (no node-level write rule).
+  const owners = ((await get(ref(db, `${OWNERS}/${fieldSlug}`))).val() as Record<string, unknown> | null) || {};
+  for (const uid of Object.keys(owners)) updates[`${OWNERS}/${fieldSlug}/${uid}`] = null;
+  await update(ref(db), updates);
 }

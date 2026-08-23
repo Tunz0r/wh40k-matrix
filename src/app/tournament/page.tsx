@@ -6,13 +6,12 @@ import {
   ensureRegistry,
   subscribeToRegistry,
   addTournament,
-  deleteTournament,
   type TournamentMeta,
   type TournamentStatus,
 } from "@/lib/tournaments-registry";
-import { convertCampToEvent, slugifyId } from "@/lib/events";
+import { slugifyId } from "@/lib/events";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
-import { recomputeMembership, subscribeToMyTournaments } from "@/lib/membership";
+import { subscribeToMyTournaments } from "@/lib/membership";
 import { computeStandings } from "@/lib/standings";
 import { useActiveTournament } from "@/lib/active-tournament";
 import { useActivePlayer } from "@/lib/active-player";
@@ -31,7 +30,6 @@ export default function TournamentIndexPage() {
   const { setActive } = useActiveTournament();
   const { isAdmin } = useActivePlayer();
   const { user } = useAuth();
-  const [msg, setMsg] = useState<string | null>(null);
 
   // Admins read the whole registry; a member sees only their own camps.
   useEffect(() => {
@@ -81,36 +79,6 @@ export default function TournamentIndexPage() {
     }
   }
 
-  // Admin: convert a standalone camp into an event.
-  const [converting, setConverting] = useState<string | null>(null);
-  async function convert(camp: TournamentMeta) {
-    setConverting(camp.id);
-    setMsg(null);
-    try {
-      await convertCampToEvent({ camp, eventName: camp.name });
-      await recomputeMembership().catch(() => {});
-      setMsg(`"${camp.name}" er nu et event — andre hold kan tilmelde sig herunder.`);
-    } catch (e) {
-      console.error("convertCampToEvent failed:", e);
-      setMsg("Kunne ikke konvertere: " + (e instanceof Error ? e.message : String(e)));
-    }
-    setConverting(null);
-  }
-
-  const [deleting, setDeleting] = useState<string | null>(null);
-  async function del(camp: TournamentMeta) {
-    if (!confirm(`Slet holdet "${camp.teamName}" permanent? Roster, estimater, runder og coaching slettes. Kan ikke fortrydes.`)) return;
-    setDeleting(camp.id);
-    setMsg(null);
-    try {
-      await deleteTournament(camp);
-      setMsg(`"${camp.teamName}" slettet.`);
-    } catch (e) {
-      setMsg("Kunne ikke slette: " + (e instanceof Error ? e.message : String(e)));
-    }
-    setDeleting(null);
-  }
-
   function record(t: TournamentMeta) {
     const doc = docs[t.id];
     const st = doc?.rounds?.length ? computeStandings(doc.rounds, { teamSize: t.teamSize, totalRounds: t.rounds }) : null;
@@ -141,10 +109,9 @@ export default function TournamentIndexPage() {
       </header>
 
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
-        {msg && <p className="text-[12px] text-[#4ade80]">{msg}</p>}
 
         {/* Public events directory — see, create, and sign up */}
-        <EventBrowser myCamps={list} onEnter={enter} userUid={user?.uid} isAdmin={isAdmin} allCamps={list} />
+        <EventBrowser myCamps={list} onEnter={enter} userUid={user?.uid} isAdmin={isAdmin} />
 
         {/* Standalone tournaments (not part of an event) */}
         <div className="space-y-3">
@@ -189,36 +156,12 @@ export default function TournamentIndexPage() {
                   {record(t)}
                 </Link>
                 {isAdmin && (
-                  <div className="mt-2 flex items-center gap-3">
-                    <button onClick={() => convert(t)} disabled={converting === t.id} className="text-[10px] text-[#c084fc] hover:text-[#a855f7] transition-colors disabled:opacity-50">
-                      {converting === t.id ? "Konverterer…" : "Gør til event (så andre hold kan tilmelde sig)"}
-                    </button>
-                    <button onClick={() => del(t)} disabled={deleting === t.id} className="text-[10px] text-[#8888a0] hover:text-[#f87171] transition-colors disabled:opacity-50">
-                      {deleting === t.id ? "Sletter…" : "Slet hold"}
-                    </button>
-                  </div>
+                  <p className="mt-2 text-[10px] text-[#8888a0]">Slet / gør til event under <Link href="/admin" className="text-[#c084fc] hover:text-[#a855f7]">Admin</Link>.</p>
                 )}
               </div>
             ))
           )}
         </div>
-
-        {/* Admin: every camp registered under an event — delete stray/test teams. */}
-        {isAdmin && list.some((t) => t.eventId) && (
-          <div className="space-y-2">
-            <h2 className="text-[12px] uppercase tracking-wider text-[#8888a0] font-semibold">Event-hold (admin)</h2>
-            {list.filter((t) => t.eventId).map((t) => (
-              <div key={t.id} className="flex items-center gap-2 rounded-lg border border-white/[0.06] px-3 py-2">
-                <Link href={`/tournament/${t.id}`} onClick={() => setActive(t.id)} className="text-[12px] text-[#e8e8f0] hover:text-[#c084fc] flex-1 min-w-0 truncate">
-                  {t.teamName} <span className="text-[10px] text-[#8888a0]">· {t.name}</span>
-                </Link>
-                <button onClick={() => del(t)} disabled={deleting === t.id} className="text-[11px] text-[#8888a0] hover:text-[#f87171] transition-colors disabled:opacity-50 shrink-0">
-                  {deleting === t.id ? "Sletter…" : "Slet"}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </>
   );

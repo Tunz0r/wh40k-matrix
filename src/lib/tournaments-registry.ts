@@ -143,11 +143,11 @@ const EST_SUFFIXES = ["", "-versioner", "-arketype-bank", "-lists-raw", "-sanity
 // entry and get filtered out. Does NOT touch the event's shared field.
 export async function deleteTournament(meta: TournamentMeta): Promise<void> {
   await authReady();
+  const db = getDb();
   const s = meta.dataSlug;
   const updates: Record<string, null> = {
     [`${REGISTRY}/${meta.id}`]: null,
     [`tournaments/${s}`]: null,
-    [`tournaments/_owners/${s}`]: null,
     [`tournaments/_members/${s}`]: null,
     [`tournaments/_profileOwners/${s}`]: null,
   };
@@ -155,5 +155,9 @@ export async function deleteTournament(meta: TournamentMeta): Promise<void> {
     updates[`estimates/${s}${suf}`] = null;
     if (suf) updates[`tournaments/_members/${s}${suf}`] = null;
   }
-  await update(ref(getDb()), updates);
+  // `_owners/{slug}` has no node-level write rule — only per-uid leaves are
+  // writable — so null each owner leaf rather than the whole node (which denies).
+  const owners = ((await get(ref(db, `tournaments/_owners/${s}`))).val() as Record<string, unknown> | null) || {};
+  for (const uid of Object.keys(owners)) updates[`tournaments/_owners/${s}/${uid}`] = null;
+  await update(ref(db), updates);
 }
