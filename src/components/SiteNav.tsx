@@ -160,6 +160,9 @@ export default function SiteNav() {
                       Min side
                     </Link>
                   )}
+                  <Link href="/me" className={menuItemClass(pathname === "/me")}>
+                    Min træfsikkerhed
+                  </Link>
                   {canManage && (
                     <Link href="/manage" className={menuItemClass(pathname.startsWith("/manage"))}>
                       Administrér hold
@@ -225,14 +228,17 @@ export default function SiteNav() {
             </Link>
           ))}
           {canManage && (
-            <>
-              <Link href="/player" className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04] transition-colors">
-                Min side
-              </Link>
-              <Link href="/manage" className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#c084fc] hover:bg-white/[0.04] transition-colors">
-                Administrér hold
-              </Link>
-            </>
+            <Link href="/player" className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04] transition-colors">
+              Min side
+            </Link>
+          )}
+          <Link href="/me" className={`block px-3 py-2.5 rounded-md text-[13px] font-medium transition-colors ${pathname === "/me" ? "bg-[rgba(168,85,247,0.15)] text-[#c084fc]" : "text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04]"}`}>
+            Min træfsikkerhed
+          </Link>
+          {canManage && (
+            <Link href="/manage" className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#c084fc] hover:bg-white/[0.04] transition-colors">
+              Administrér hold
+            </Link>
           )}
           {isAdmin && (
             <Link href="/admin" className="block px-3 py-2.5 rounded-md text-[13px] font-medium text-[#f0b429] hover:bg-white/[0.04] transition-colors">

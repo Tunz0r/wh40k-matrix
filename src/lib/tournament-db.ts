@@ -370,6 +370,18 @@ export function subscribeToRoster(
   };
 }
 
+// One-time read of a tournament doc (for cross-tournament aggregation like the
+// personal calibration profile). Returns null if denied/absent.
+export async function fetchTournamentDoc(slug: string): Promise<TournamentDoc | null> {
+  await authReady();
+  try {
+    const snap = await get(ref(getDb(), `tournaments/${slug}`));
+    return (snap.val() as TournamentDoc | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function subscribeToTournament(
   slug: string,
   callback: (data: TournamentDoc | null) => void
