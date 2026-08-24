@@ -14,7 +14,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { subscribeToIsAdmin, subscribeToHasAccess, subscribeToIsOwner } from "./membership";
+import { subscribeToIsAdmin, subscribeToHasAccess, subscribeToIsOwner, recomputeMembership } from "./membership";
 import { subscribeToRoster } from "./tournament-db";
 import { useActiveTournament } from "./active-tournament";
 import { useAuth } from "./auth";
@@ -55,6 +55,19 @@ export function ActivePlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => subscribeToIsAdmin(user?.uid ?? null, setIsAdmin), [user?.uid]);
   useEffect(() => subscribeToHasAccess(user?.uid ?? null, setHasGrant), [user?.uid]);
   useEffect(() => subscribeToIsOwner(activeSlug, user?.uid ?? null, setIsOwner), [activeSlug, user?.uid]);
+
+  // Keep the derived membership index fresh automatically — the super-admin no
+  // longer has to click "Genberegn". Runs best-effort in the background when a
+  // super-admin opens the app, throttled so rapid reloads don't hammer it.
+  useEffect(() => {
+    if (!isAdmin) return;
+    try {
+      const last = Number(localStorage.getItem("wtc-last-recompute") || 0);
+      if (Date.now() - last < 120000) return;
+      localStorage.setItem("wtc-last-recompute", String(Date.now()));
+    } catch { /* localStorage unavailable — recompute anyway */ }
+    recomputeMembership().catch(() => {});
+  }, [isAdmin]);
 
   // The active tournament's roster slots.
   useEffect(() => {
