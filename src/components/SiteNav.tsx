@@ -14,13 +14,16 @@ type NavLink = { href: string; label: string; match: (path: string) => boolean }
 const TURNERING: NavLink = { href: "/tournament", label: "Turnering", match: (p) => p.startsWith("/tournament") || p.startsWith("/coaching") };
 const TEAM_ROOM: NavLink = { href: "/team", label: "Team Room", match: (p) => p.startsWith("/team") };
 const MIN_SIDE: NavLink = { href: "/player", label: "Min side", match: (p) => p.startsWith("/player") };
+// Players get Estimater too — /estimates auto-scopes to their own army ("Min hær")
+// for non-captains, so this is safe (the full matrix stays captain-only there).
+const ESTIMATER: NavLink = { href: "/estimates", label: "Estimater", match: (p) => p.startsWith("/estimates") };
 
-// A plain player sees only their three things. Captains/admins get the full
-// toolset. The matrix itself lives on "/" — reached via the brand logo.
-const PLAYER_CORE: NavLink[] = [MIN_SIDE, TURNERING, TEAM_ROOM];
+// Players get their prep essentials; captains/admins get the full toolset. The
+// matrix itself lives on "/" — reached via the brand logo.
+const PLAYER_CORE: NavLink[] = [MIN_SIDE, ESTIMATER, TURNERING, TEAM_ROOM];
 const CAPTAIN_CORE: NavLink[] = [
   TURNERING,
-  { href: "/estimates", label: "Estimater", match: (p) => p.startsWith("/estimates") },
+  ESTIMATER,
   { href: "/meta", label: "Meta", match: (p) => p.startsWith("/meta") },
   TEAM_ROOM,
 ];
