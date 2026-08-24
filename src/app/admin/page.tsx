@@ -107,17 +107,7 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-[#e8e8f0]">Admin — adgang & roller</h1>
-        <button
-          onClick={() => run("recompute", recomputeMembership, "Medlemsindeks genberegnet.")}
-          disabled={busy === "recompute"}
-          title="Kører automatisk når du åbner appen — kun her hvis du vil tvinge en opdatering nu."
-          className="text-[12px] px-3 py-1.5 rounded-md border border-white/[0.14] text-[#8888a0] hover:border-[#a855f7] transition-colors disabled:opacity-50"
-        >
-          {busy === "recompute" ? "..." : "Genberegn nu (auto)"}
-        </button>
-      </div>
+      <h1 className="text-lg font-semibold text-[#e8e8f0]">Admin — adgang & roller</h1>
 
       {msg && <p className="text-[12px] text-[#4ade80]">{msg}</p>}
 
