@@ -10,7 +10,7 @@ import { DISP_STYLES, FACTIONS } from "@/lib/data";
 import ArmyEditor from "@/components/ArmyEditor";
 import EstimateInput from "@/components/EstimateInput";
 import PlayerEstimates from "@/components/PlayerEstimates";
-import { parseArmyList, parseTeamLists, formatUnits, formatUnitsLines } from "@/lib/list-parser";
+import { parseArmyList, parseTeamLists, parseEventLists, formatUnits, formatUnitsLines, type ParsedTeam } from "@/lib/list-parser";
 import { dispositionEdgeBP } from "@/lib/disposition-meta";
 import {
   type OpponentMap,
@@ -204,6 +204,13 @@ export default function EstimatesPage() {
   // grid, "Min hær", and the library/version tools. Isolation is per-team (you
   // only ever see your own team's estimates + the shared field), not per-player.
   const effMode = mode;
+  // Event bulk-list import: paste the whole event's lists once → split into
+  // teams → write them all to the SHARED field (all participating teams read it
+  // live). Only meaningful for an event camp (activeFieldSlug set).
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkParsed, setBulkParsed] = useState<ParsedTeam[] | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [catalog, setCatalog] = useState<OpponentMap>({});
   const [deprecations, setDeprecations] = useState<DeprecationMap>({});
   useEffect(() => subscribeToDeprecations(setDeprecations), []);
@@ -341,6 +348,35 @@ export default function EstimatesPage() {
   function dispositionForDet(faction: string | null, det: string | null) {
     if (!faction || !det || !FACTIONS[faction]) return null;
     return FACTIONS[faction].find((d) => d.n === det)?.d ?? null;
+  }
+
+  // --- Event bulk-list import ------------------------------------------------
+  function analyzeBulk() {
+    setBulkParsed(parseEventLists(bulkText));
+  }
+  async function writeBulk() {
+    if (!bulkParsed?.length || !activeFieldSlug) return;
+    setBulkBusy(true);
+    try {
+      for (const t of bulkParsed) {
+        const slug = slugifyTeam(t.name);
+        if (playedRounds.has(slug)) continue; // don't overwrite a played opponent
+        const armies: OpponentList[] = t.lists.map((p) => ({
+          faction: p.faction || "",
+          detachments: p.detachments,
+          disposition: p.disposition ?? dispositionForDet(p.faction, p.detachments[0] ?? null),
+          units: p.units,
+        }));
+        // Lists only — estimates stay PER-TEAM (grafted on read), never shared.
+        await saveOpponentTeam(slug, { name: t.name, tier: "", armies }, activeSlug, activeFieldSlug);
+      }
+      setBulkOpen(false);
+      setBulkText("");
+      setBulkParsed(null);
+    } catch {
+      alert("Kunne ikke skrive alle lists — tjek Firebase / at du er med i eventet.");
+    }
+    setBulkBusy(false);
   }
 
   function confirmImport() {
@@ -714,6 +750,60 @@ export default function EstimatesPage() {
       </header>
 
       <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+        {/* Event bulk-list import — writes to the shared field, so ALL teams in
+            the event get the lists at once. Only for an event camp. */}
+        {activeFieldSlug && (
+          <div className="rounded-xl border border-[rgba(96,165,250,0.3)] bg-[rgba(96,165,250,0.04)] p-4 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-[13px] font-semibold text-[#e8e8f0]">Importér alle lists til eventet</h2>
+              <span className="text-[11px] text-[#8888a0]">Ét dokument → alle deltagende hold får listerne (delt felt)</span>
+              <button
+                onClick={() => { setBulkOpen((v) => !v); setBulkParsed(null); }}
+                className="ml-auto text-[11px] font-semibold text-[#60a5fa] hover:text-[#93c5fd] transition-colors"
+              >
+                {bulkOpen ? "Luk" : "Åbn"}
+              </button>
+            </div>
+            {bulkOpen && (
+              <>
+                <p className="text-[10px] text-[#8888a0] leading-relaxed">
+                  Indsæt hele eventets lister. Adskil hvert hold med en linje med <code className="text-[#c8c8d4]">===</code> (eller <code className="text-[#c8c8d4]">---</code>);
+                  første linje efter adskilleren er holdets/landets navn, resten er holdets liste-export. Estimater forbliver private pr. hold.
+                </p>
+                <textarea
+                  value={bulkText}
+                  onChange={(e) => { setBulkText(e.target.value); setBulkParsed(null); }}
+                  placeholder={"===\nSverige\n<Sveriges 8 liste-exports>\n===\nBelgien\n<Belgiens 8 liste-exports>\n..."}
+                  className="w-full h-40 bg-[#1a1a22] border border-white/[0.14] rounded-lg p-2.5 text-[10px] text-[#e8e8f0] placeholder:text-[#8888a0] outline-none resize-y font-mono focus:border-[#60a5fa]"
+                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button onClick={analyzeBulk} disabled={!bulkText.trim()} className="text-[11px] font-medium text-white bg-[#60a5fa] hover:bg-[#3b82f6] disabled:opacity-40 px-3 py-1.5 rounded-md transition-colors">Analysér</button>
+                  {bulkParsed && (
+                    <button onClick={writeBulk} disabled={bulkBusy || bulkParsed.length === 0} className="text-[11px] font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] disabled:opacity-40 px-3 py-1.5 rounded-md transition-colors">
+                      {bulkBusy ? "Skriver…" : `Skriv ${bulkParsed.length} hold til eventet`}
+                    </button>
+                  )}
+                </div>
+                {bulkParsed && (
+                  bulkParsed.length === 0 ? (
+                    <p className="text-[11px] text-[#f87171]">Fandt ingen hold — tjek at holdene er adskilt med === og at listerne er med.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {bulkParsed.map((t) => {
+                        const bad = t.lists.filter((l) => !l.faction || !l.detachments.length).length;
+                        return (
+                          <span key={t.name} className="text-[10px] px-2 py-0.5 rounded border border-white/[0.12] text-[#c8c8d8]">
+                            {t.name} · {t.lists.length} lists{bad > 0 && <span className="text-[#facc15]"> · {bad}⚠</span>}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+              </>
+            )}
+          </div>
+        )}
         {!isLegacyTeam && (
           <div className="rounded-xl border border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.04)] p-4">
             <div className="flex items-center gap-2 mb-2 flex-wrap">

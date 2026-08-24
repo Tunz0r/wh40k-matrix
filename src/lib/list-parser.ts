@@ -266,3 +266,32 @@ export function parseTeamLists(text: string): ParsedList[] {
   }
   return results;
 }
+
+// Split a WHOLE-EVENT document into teams, each with its parsed lists. Teams are
+// separated by a delimiter line (=== / --- / *** of length >=3); the first
+// non-empty line of each block is the team/country name, the rest is that team's
+// list export (parsed with parseTeamLists). Blocks with no name or no lists are
+// dropped. Used by the event bulk-list importer.
+export interface ParsedTeam {
+  name: string;
+  lists: ParsedList[];
+}
+export function parseEventLists(text: string): ParsedTeam[] {
+  const isSep = (l: string) => /^\s*[=*_·—–-]{3,}\s*$/.test(l);
+  const blocks: { name: string; body: string[] }[] = [];
+  let cur: { name: string; body: string[] } | null = null;
+  for (const line of text.split(/\r?\n/)) {
+    if (isSep(line)) {
+      if (cur) blocks.push(cur);
+      cur = { name: "", body: [] };
+      continue;
+    }
+    if (!cur) cur = { name: "", body: [] };
+    if (!cur.name && line.trim()) { cur.name = line.trim(); continue; }
+    cur.body.push(line);
+  }
+  if (cur) blocks.push(cur);
+  return blocks
+    .map((b) => ({ name: b.name, lists: parseTeamLists(b.body.join("\n")) }))
+    .filter((t) => t.name && t.lists.length > 0);
+}

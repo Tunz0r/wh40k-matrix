@@ -142,7 +142,7 @@
       "_fields": {
         "$fieldKey": {
           ".read": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_members/'+$fieldKey+'/'+auth.uid).exists() || root.child('tournaments/_owners/'+$fieldKey+'/'+auth.uid).exists() || root.child('tournaments/_myEvents/'+auth.uid+'/'+$fieldKey).exists())",
-          ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_owners/'+$fieldKey+'/'+auth.uid).exists())"
+          ".write": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_owners/'+$fieldKey+'/'+auth.uid).exists() || root.child('tournaments/_myEvents/'+auth.uid+'/'+$fieldKey).exists())"
         }
       },
       "$node": {
