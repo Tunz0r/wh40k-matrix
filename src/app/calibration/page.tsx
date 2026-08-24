@@ -226,12 +226,6 @@ export default function CalibrationPage() {
             <span className="text-[#8888a0] ml-2 text-sm font-normal">estimat vs. resultat</span>
             <span className="text-[#4ade80] ml-2 text-sm font-normal">— {TEAM_NAME}</span>
           </h1>
-          <button
-            onClick={loadSessions}
-            className="ml-auto text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors"
-          >
-            Opdater
-          </button>
         </div>
         <p className="text-xs text-[#8888a0] mt-1">
           Estimat vs. faktisk resultat (0-20 BP) — warmup-kampe under forberedelsen og rigtige runder ved WTC. Positiv delta = spillet bedre end estimeret.
