@@ -6,7 +6,6 @@ import { deserializeRoster, type RosterArmy } from "@/lib/roster";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
 import { TEAM_NAME, TEAM_SLUG } from "@/lib/team";
 import { useActiveTournament } from "@/lib/active-tournament";
-import { useActivePlayer } from "@/lib/active-player";
 import { DISP_STYLES, FACTIONS } from "@/lib/data";
 import ArmyEditor from "@/components/ArmyEditor";
 import EstimateInput from "@/components/EstimateInput";
@@ -201,10 +200,10 @@ export default function EstimatesPage() {
   }
 
   const { activeSlug, activeFieldSlug, active } = useActiveTournament();
-  // Plain players estimate ONLY their own army (Min hær); the full country matrix
-  // and library/version/backup tools are captain/admin only.
-  const { canManage, effectiveIdx } = useActivePlayer();
-  const effMode: "country" | "player" = canManage ? mode : "player";
+  // Every team member sees the full matrix they helped build — the "Pr. land"
+  // grid, "Min hær", and the library/version tools. Isolation is per-team (you
+  // only ever see your own team's estimates + the shared field), not per-player.
+  const effMode = mode;
   const [catalog, setCatalog] = useState<OpponentMap>({});
   const [deprecations, setDeprecations] = useState<DeprecationMap>({});
   useEffect(() => subscribeToDeprecations(setDeprecations), []);
@@ -592,7 +591,6 @@ export default function EstimatesPage() {
             Estimater
             <span className="text-[#4ade80] ml-2 text-sm font-normal">— {active?.teamName ?? TEAM_NAME}</span>
           </h1>
-          {canManage && (<>
           <div className="flex gap-1 ml-auto">
             <button
               onClick={() => switchMode("country")}
@@ -677,7 +675,6 @@ export default function EstimatesPage() {
               }}
             />
           </div>
-          </>)}
         </div>
         <div className="flex items-center gap-2 mt-2 flex-wrap text-[10px]">
           {[
@@ -717,7 +714,7 @@ export default function EstimatesPage() {
       </header>
 
       <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
-        {canManage && !isLegacyTeam && (
+        {!isLegacyTeam && (
           <div className="rounded-xl border border-[rgba(168,85,247,0.25)] bg-[rgba(168,85,247,0.04)] p-4">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <h2 className="text-[13px] font-semibold text-[#e8e8f0]">Meta-bibliotek</h2>
@@ -757,7 +754,7 @@ export default function EstimatesPage() {
             </div>
           </div>
         )}
-        {canManage && archOpen && (
+        {archOpen && (
           <div className="rounded-xl border border-[rgba(168,85,247,0.35)] p-4 space-y-2">
             <h2 className="text-xs font-semibold text-[#a855f7] uppercase tracking-wider">
               Tilføj arketype til biblioteket
@@ -807,7 +804,6 @@ export default function EstimatesPage() {
             onNeedsTest={(keys, flag) => setNeedsTestCells(keys, flag, activeSlug).catch(() => {})}
             onVolatile={(keys, flag) => setVolatileCells(keys, flag, activeSlug).catch(() => {})}
             onTableDependent={(keys, flag) => setTableDependentCells(keys, flag, activeSlug).catch(() => {})}
-            lockArmyIdx={canManage ? undefined : effectiveIdx}
           />
         )}
 
