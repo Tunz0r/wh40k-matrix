@@ -14,6 +14,10 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # FIREBASE_BOT_* live in the "Production" environment, not as repo secrets —
+    # the job must declare the environment or they aren't injected (which
+    # silently skipped the library deprecation write).
+    environment: Production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
