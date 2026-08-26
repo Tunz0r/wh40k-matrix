@@ -39,8 +39,8 @@
       "disposition": "PRIORITY ASSETS"
     },
     "LIONS OF THE EMPEROR": {
-      "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "dp": 2,
+      "disposition": "DISRUPTION"
     },
     "MIGHT OF THE MORITOI": {
       "dp": 1,
@@ -68,7 +68,7 @@
     },
     "THARANATOI HAMMERBLOW": {
       "dp": 1,
-      "disposition": "DISRUPTION"
+      "disposition": "PRIORITY ASSETS"
     }
   },
   "adeptus-mechanicus": {
@@ -120,7 +120,7 @@
     },
     "ASPECT HOST": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "DISRUPTION"
     },
     "CORSAIR COTERIE": {
       "dp": 2,
@@ -209,7 +209,7 @@
       "disposition": "RECONNAISSANCE"
     },
     "RECON ELEMENT": {
-      "dp": 2,
+      "dp": 3,
       "disposition": "RECONNAISSANCE"
     },
     "SIEGE REGIMENT": {
@@ -330,7 +330,7 @@
     },
     "DAEMONIC INCURSION": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "DISRUPTION"
     },
     "LEGION OF EXCESS": {
       "dp": 2,
@@ -426,7 +426,7 @@
     },
     "HURON’S MARAUDERS": {
       "dp": 3,
-      "disposition": "PURGE THE FOE"
+      "disposition": "DISRUPTION"
     },
     "MURDERTALON RAIDERS": {
       "dp": 1,
