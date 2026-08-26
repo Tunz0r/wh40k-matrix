@@ -39,8 +39,15 @@ const decode = (s) =>
     .trim();
 
 function extractDetachments(html) {
+  // NOTE: when GW changes a detachment's DP in a new MFM they inject a
+  //   <!-- --> ▲ / ▼ arrow (and sometimes an extra class like text-nowrap)
+  //   inside the DP span: `3DP<!-- --> ▲</span>`. The name span class also
+  //   varies (break-all / keep-all). So we tolerate any class suffix and any
+  //   trailing markup after the digit up to </span> — otherwise the exact
+  //   detachments that changed (the ones we care about) get silently dropped
+  //   and mis-reported as removed.
   const re =
-    /<span class="text-xl break-all">([^<]+)<\/span><span class="text-sm self-end pl-2">(\d)DP<\/span>([\s\S]{0,500}?)<div class="[^"]*font-bold"[^>]*background-color:#[0-9A-Fa-f]{6}[^>]*>([^<]+)<\/div>/g;
+    /<span class="text-xl[^"]*">([^<]+)<\/span>\s*<span class="text-sm self-end pl-2[^"]*">\s*(\d)DP(?:<!--[^>]*-->)?[^<]*<\/span>([\s\S]{0,500}?)<div class="[^"]*font-bold"[^>]*background-color:#[0-9A-Fa-f]{6}[^>]*>([^<]+)<\/div>/g;
   const out = {};
   let m;
   while ((m = re.exec(html))) {

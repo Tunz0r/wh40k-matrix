@@ -38,6 +38,10 @@
       "dp": 2,
       "disposition": "PRIORITY ASSETS"
     },
+    "LIONS OF THE EMPEROR": {
+      "dp": 3,
+      "disposition": "TAKE AND HOLD"
+    },
     "MIGHT OF THE MORITOI": {
       "dp": 1,
       "disposition": "TAKE AND HOLD"
@@ -201,6 +205,10 @@
       "disposition": "PURGE THE FOE"
     },
     "MECHANISED ASSAULT": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "RECON ELEMENT": {
       "dp": 2,
       "disposition": "RECONNAISSANCE"
     },
