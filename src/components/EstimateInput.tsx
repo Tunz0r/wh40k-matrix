@@ -70,6 +70,14 @@ export default function EstimateInput({
           ⚡
         </span>
       )}
+      {cell?.startDependent && (
+        <span
+          className="absolute -top-1 left-2 text-[9px] leading-none pointer-events-none"
+          title="Afhænger af hvem der får første tur — vægt hvem der starter ved parring/deployment"
+        >
+          🎲
+        </span>
+      )}
       {cell?.tableDependent && (
         <span
           className="absolute -bottom-1 -left-1 text-[9px] leading-none pointer-events-none"

@@ -75,6 +75,7 @@ interface Matchup {
   tableAdj: number; // table/layout adjustment, set during pairing when the layout is chosen
   volatile?: boolean; // from the estimate cell — coaching starts it at 0 + flags follow-up
   tableDependent?: boolean; // from the estimate cell — surfaced hard during pairing
+  startDependent?: boolean; // from the estimate cell — surfaced during pairing
 }
 
 interface CompletedRound {
@@ -490,7 +491,7 @@ function EstimateMatrix({
                   // and swingy matchups are obvious while pairing.
                   const flags = hasV
                     ? lookupEstimateFlags(opponents, oppName, i, theirArmies[j])
-                    : { volatile: false, tableDependent: false };
+                    : { volatile: false, tableDependent: false, startDependent: false };
                   const title =
                     !hasV
                       ? "Intet estimat"
@@ -563,6 +564,14 @@ function EstimateMatrix({
                             title="Svingende matchup (fx 2-18 / 18-2)"
                           >
                             ⚡
+                          </span>
+                        )}
+                        {flags.startDependent && (
+                          <span
+                            className="absolute -top-1.5 -right-1.5 text-[11px] leading-none drop-shadow"
+                            title="START-AFHÆNGIG — udfaldet svinger på hvem der får første tur. Vægt hvem der starter."
+                          >
+                            🎲
                           </span>
                         )}
                       </div>
@@ -1221,6 +1230,7 @@ export default function TournamentDashboard({
         tableAdj: m.tableAdj ?? 0,
         volatile: m.volatile ?? false,
         tableDependent: m.tableDependent ?? false,
+        startDependent: m.startDependent ?? false,
         aVP: 0,
         bVP: 0,
         round: 1,
@@ -2252,6 +2262,7 @@ export default function TournamentDashboard({
                       <span className="text-[10px] text-[#8888a0]">({m.module})</span>
                       {m.tableDependent && <span title="Bord-afhængig — vælg bord omhyggeligt">🗺️</span>}
                       {m.volatile && <span title="Svingende matchup">⚡</span>}
+                      {m.startDependent && <span title="Start-afhængig — afhænger af hvem der får første tur">🎲</span>}
                     </div>
                   ))}
                 </div>
@@ -2285,6 +2296,11 @@ export default function TournamentDashboard({
                     {m.volatile && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[rgba(250,204,21,0.16)] text-[#facc15]">
                         ⚡ Svingende
+                      </span>
+                    )}
+                    {m.startDependent && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[rgba(52,211,153,0.18)] text-[#34d399] ring-1 ring-[#34d399]/50">
+                        🎲 START-AFHÆNGIG — vægt hvem der starter
                       </span>
                     )}
                   </div>

@@ -16,6 +16,7 @@ export interface MatchupData {
   // Flags carried from the estimate cell at pairing (see estimates-db).
   volatile?: boolean; // swingy/bimodal — coaching starts it at 0 BP and flags it for follow-up
   tableDependent?: boolean; // outcome swings on the table — surfaced hard during pairing
+  startDependent?: boolean; // outcome swings on who gets the first turn — surfaced during pairing
   aVP: number; // Team A total = sum(aPrim) + sum(aSec) once per-turn scoring is used
   bVP: number; // Team B total = sum(bPrim) + sum(bSec)
   // Per-battle-round score split into primary and secondary (index 0 = round 1),

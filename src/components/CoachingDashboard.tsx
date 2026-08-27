@@ -597,8 +597,8 @@ function MatchupCard({
         onClick={onToggle}
         className="w-full text-left px-3 py-2.5"
       >
-        {/* Volatile / table-dependent flags carried from the estimate */}
-        {(matchup.volatile || matchup.tableDependent) && (
+        {/* Volatile / table-dependent / start-dependent flags carried from the estimate */}
+        {(matchup.volatile || matchup.tableDependent || matchup.startDependent) && (
           <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
             {matchup.volatile && (
               <span
@@ -614,6 +614,14 @@ function MatchupCard({
                 title="Meget afhængig af bordet/terrænet — sæt bord-justeringen omhyggeligt."
               >
                 🗺️ Bord-afhængig
+              </span>
+            )}
+            {matchup.startDependent && (
+              <span
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[rgba(52,211,153,0.14)] text-[#34d399]"
+                title="Afhænger af hvem der får første tur — vægt hvem der starter."
+              >
+                🎲 Start-afhængig
               </span>
             )}
           </div>

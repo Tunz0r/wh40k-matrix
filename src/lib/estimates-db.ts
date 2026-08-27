@@ -21,6 +21,10 @@ export interface EstimateCell {
   // Outcome depends heavily on which table/terrain (layout) the game lands on —
   // a cue to set tableAdj carefully at the layout pick.
   tableDependent?: boolean;
+  // Outcome depends heavily on who starts / gets the first turn. Distinct from
+  // `volatile` (general swinginess): here the swing is specifically turn-order,
+  // a cue to weigh who-goes-first when pairing/deploying.
+  startDependent?: boolean;
   ver?: string;
 }
 
@@ -464,6 +468,22 @@ export async function setTableDependentCells(
   for (const key of keys) {
     const [teamSlug, cellKey] = key.split("/");
     updates[`${estNodeForTeam(teamSlug, tournamentSlug)}/${teamSlug}/estimates/${cellKey}/tableDependent`] = flag ? true : null;
+  }
+  await update(ref(getDb()), updates);
+}
+
+// Toggle the "start-dependent" flag on existing estimate cells (outcome swings
+// on who gets the first turn). Keys are `${teamSlug}/${ourIdx}_${theirIdx}`.
+export async function setStartDependentCells(
+  keys: string[],
+  flag: boolean,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<void> {
+  await authReady();
+  const updates: Record<string, true | null> = {};
+  for (const key of keys) {
+    const [teamSlug, cellKey] = key.split("/");
+    updates[`${estNodeForTeam(teamSlug, tournamentSlug)}/${teamSlug}/estimates/${cellKey}/startDependent`] = flag ? true : null;
   }
   await update(ref(getDb()), updates);
 }
@@ -1003,7 +1023,7 @@ export function lookupEstimateFlags(
   opponentName: string | null | undefined,
   ourIdx: number,
   theirList: OpponentList
-): { volatile: boolean; tableDependent: boolean } {
+): { volatile: boolean; tableDependent: boolean; startDependent: boolean } {
   const preferredSlug = opponentName ? slugifyTeam(opponentName) : null;
   let best: { sim: number; cell: EstimateCell; preferred: boolean } | null = null;
   for (const [slug, team] of Object.entries(opponents)) {
@@ -1019,7 +1039,7 @@ export function lookupEstimateFlags(
     });
   }
   const cell = best ? (best as { cell: EstimateCell }).cell : null;
-  return { volatile: !!cell?.volatile, tableDependent: !!cell?.tableDependent };
+  return { volatile: !!cell?.volatile, tableDependent: !!cell?.tableDependent, startDependent: !!cell?.startDependent };
 }
 
 // --- WTC estimate → color band ---

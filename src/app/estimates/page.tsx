@@ -29,6 +29,7 @@ import {
   setNeedsTestCells,
   setVolatileCells,
   setTableDependentCells,
+  setStartDependentCells,
   listSimilarity,
   clusterLists,
   appendListToMetaTeam,
@@ -894,6 +895,7 @@ export default function EstimatesPage() {
             onNeedsTest={(keys, flag) => setNeedsTestCells(keys, flag, activeSlug).catch(() => {})}
             onVolatile={(keys, flag) => setVolatileCells(keys, flag, activeSlug).catch(() => {})}
             onTableDependent={(keys, flag) => setTableDependentCells(keys, flag, activeSlug).catch(() => {})}
+            onStartDependent={(keys, flag) => setStartDependentCells(keys, flag, activeSlug).catch(() => {})}
           />
         )}
 
