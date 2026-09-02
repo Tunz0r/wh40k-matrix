@@ -951,56 +951,64 @@
   },
   "orks": {
     "BLITZ BRIGADE": {
-      "dp": 2,
-      "disposition": "RECONNAISSANCE"
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "BRUTE BOSSES": {
+      "dp": 1,
+      "disposition": "PURGE THE FOE"
     },
     "BULLY BOYZ": {
-      "dp": 2,
+      "dp": 1,
       "disposition": "PURGE THE FOE"
     },
     "DA BIG HUNT": {
-      "dp": 2,
+      "dp": 1,
       "disposition": "PURGE THE FOE"
     },
     "DREAD MOB": {
-      "dp": 2,
-      "disposition": "PRIORITY ASSETS"
-    },
-    "EQUATORIAL HORDES": {
       "dp": 1,
-      "disposition": "DISRUPTION"
+      "disposition": "PURGE THE FOE"
     },
-    "FREEBOOTER KREW": {
-      "dp": 2,
-      "disposition": "TAKE AND HOLD"
+    "FLYBOYZ": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
     },
     "GREEN TIDE": {
-      "dp": 3,
+      "dp": 1,
       "disposition": "TAKE AND HOLD"
     },
     "KULT OF SPEED": {
-      "dp": 2,
-      "disposition": "DISRUPTION"
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
     },
-    "MORE DAKKA!": {
+    "MADCAP MEKS": {
       "dp": 1,
       "disposition": "DISRUPTION"
     },
-    "ROLLIN' DEFF": {
+    "RUNT SWARM": {
       "dp": 1,
       "disposition": "PRIORITY ASSETS"
     },
-    "SPEEDWAAAGH!": {
-      "dp": 2,
-      "disposition": "RECONNAISSANCE"
+    "SHOOTA BOYZ": {
+      "dp": 1,
+      "disposition": "PURGE THE FOE"
     },
     "TAKTIKAL BRIGADE": {
       "dp": 1,
-      "disposition": "RECONNAISSANCE"
+      "disposition": "TAKE AND HOLD"
     },
     "WAR HORDE": {
       "dp": 3,
       "disposition": "TAKE AND HOLD"
+    },
+    "WRECKAS": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "WURRBAND": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
     }
   },
   "space-marines": {
