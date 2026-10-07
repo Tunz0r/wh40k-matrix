@@ -5,8 +5,17 @@
 
 import { FACTIONS, DISP_STYLES, type Disposition } from "./data";
 
-// Unit lines carry a points cost: "(415 points)", "(70 pts)" or "[70 pts]"
-const POINTS_RE = /[([]\s*(\d+)\s*(?:points|pts?)\s*[)\]]/i;
+// Unit lines carry a points cost: "(415 points)", "(70 pts)" or "[70 pts]".
+// The number may include a thousands separator — BCP exports army totals as
+// "(1.985 Points)" (EU) or "(1,985 pts)" (US) — so capture digits + separators
+// and strip them with pointsValue() before comparing.
+const POINTS_RE = /[([]\s*([\d.,]+)\s*(?:points|pts?)\s*[)\]]/i;
+
+// Numeric value of a POINTS_RE capture, tolerating thousands separators.
+// Points are always whole numbers, so "1.985"/"1,985" both → 1985.
+function pointsValue(captured: string): number {
+  return Number(captured.replace(/[.,\s]/g, ""));
+}
 
 // Lines that carry a cost but aren't units
 const NON_UNIT_RE =
@@ -25,7 +34,7 @@ export function parseArmyList(text: string): string[] {
     if (/^[•◦▪‣*+·-]/.test(line) || /^\s{2,}/.test(raw)) continue;
     const match = line.match(POINTS_RE);
     if (!match || match.index === undefined) continue;
-    if (Number(match[1]) >= ARMY_TOTAL_THRESHOLD) continue;
+    if (pointsValue(match[1]) >= ARMY_TOTAL_THRESHOLD) continue;
 
     // Keep only the text BEFORE the cost — anything after is wargear
     let name = line.slice(0, match.index).trim();
@@ -223,27 +232,50 @@ function detectMeta(chunk: string): {
 }
 
 // Split a multi-list document into per-list chunks, then parse each.
-// Handles WTC combined submissions (+ PLAYER / + FACTION KEYWORD headers) and
-// GW-app exports concatenated back to back.
+// Handles WTC combined submissions (+ PLAYER / + FACTION KEYWORD headers),
+// GW-app / BCP exports (army name + bracketed total at the top), and teams that
+// MIX the two — a WTC header on one list must not stop the others from splitting.
 export function parseTeamLists(text: string): ParsedList[] {
   const lines = text.split(/\r?\n/);
 
-  // Boundary markers: a new list starts at a WTC header or a GW-app army total.
-  const boundaries: number[] = [];
   const isWtcHeader = (l: string) => /^\s*\+\s*(player|faction\s*keyword)\b/i.test(l);
   const isArmyTotal = (l: string) => {
     const m = l.match(POINTS_RE);
-    return !!m && Number(m[1]) >= 1500;
+    return !!m && pointsValue(m[1]) >= 1500;
   };
-  const usesWtc = lines.some(isWtcHeader);
+  // A real unit line (carries a sub-army cost, isn't a bullet/header/total) — the
+  // signal that one list's BODY has begun, so the next header/total opens a NEW
+  // list instead of being folded in. Mirrors parseArmyList's per-line acceptance.
+  const isUnitLine = (raw: string): boolean => {
+    const line = raw.trim();
+    if (!line) return false;
+    if (/^[•◦▪‣*+·-]/.test(line) || /^\s{2,}/.test(raw)) return false;
+    const m = line.match(POINTS_RE);
+    if (!m || m.index === undefined) return false;
+    if (pointsValue(m[1]) >= ARMY_TOTAL_THRESHOLD) return false;
+    const name = line.slice(0, m.index).trim();
+    return !!name && !NON_UNIT_RE.test(name);
+  };
 
-  lines.forEach((l, i) => {
-    if (usesWtc) {
-      // One boundary per FACTION KEYWORD line (or PLAYER when no keyword nearby)
-      if (/^\s*\+\s*faction\s*keyword\b/i.test(l)) boundaries.push(i);
-    } else if (isArmyTotal(l)) {
-      boundaries.push(i);
+  // One boundary per list. A WTC header OR a bracketed army total opens a list,
+  // but only once per list: further headers/totals in the same list's header
+  // region (before any unit line) are ignored. This makes mixed-format teams and
+  // BCP lists that carry BOTH a bracketed total and a + FACTION KEYWORD split
+  // into exactly one chunk each. `lookback` grabs the GW-app army-name/faction
+  // lines that sit just above a bare total; WTC headers need no lookback.
+  const boundaries: { line: number; lookback: boolean }[] = [];
+  let sawUnits = true; // so the first header/total always opens a list
+  lines.forEach((raw, i) => {
+    const header = isWtcHeader(raw);
+    const total = isArmyTotal(raw);
+    if (header || total) {
+      if (sawUnits) {
+        boundaries.push({ line: i, lookback: total && !header });
+        sawUnits = false;
+      }
+      return;
     }
+    if (isUnitLine(raw)) sawUnits = true;
   });
 
   // Fall back to treating the whole thing as one list
@@ -254,11 +286,18 @@ export function parseTeamLists(text: string): ParsedList[] {
 
   const results: ParsedList[] = [];
   for (let b = 0; b < boundaries.length; b++) {
-    // Include a couple of lines before the boundary for GW-app (army name/faction
-    // sit just above the total) — but not past the previous chunk's end.
-    const rawStart = boundaries[b];
-    const start = usesWtc ? rawStart : Math.max(b === 0 ? 0 : boundaries[b - 1] + 1, rawStart - 3);
-    const end = b + 1 < boundaries.length ? boundaries[b + 1] : lines.length;
+    const { line: rawStart, lookback } = boundaries[b];
+    const prevEnd = b === 0 ? 0 : boundaries[b - 1].line + 1;
+    // Include the army name/faction lines sitting just above a GW-app total, but
+    // walk up only over non-unit lines and stop at the previous list's last unit
+    // (or the previous chunk's end) — never pull in the neighbour's units.
+    let start = rawStart;
+    if (lookback) {
+      for (let k = 0; k < 3 && start - 1 >= prevEnd && !isUnitLine(lines[start - 1]); k++) {
+        start--;
+      }
+    }
+    const end = b + 1 < boundaries.length ? boundaries[b + 1].line : lines.length;
     const chunk = lines.slice(start, end).join("\n");
     const units = parseArmyList(chunk);
     if (!units.length) continue;
