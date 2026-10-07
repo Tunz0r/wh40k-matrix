@@ -908,7 +908,9 @@ export default function TournamentDashboard({
   }, [tournament.seedingTiers, opponents, fbRounds]);
 
   function pickOpponent(team: OpponentTeam) {
-    setPracticeMode(false);
+    // Don't touch practiceMode here — the round's practice/real intent is chosen
+    // at round start (startNewRound / startPracticeRound) and must persist whether
+    // you pick a seeded team or import a roster.
     setOpponentRoster({
       v: 1,
       name: team.name,
@@ -1028,6 +1030,7 @@ export default function TournamentDashboard({
   }
 
   function startNewRound() {
+    setPracticeMode(false);
     setOpponentRoster(null);
     setOpponentImportText("");
     setMatchups([]);
@@ -1035,6 +1038,15 @@ export default function TournamentDashboard({
     setCreatingSession(false);
     resetModuleState();
     setView("round-opponent");
+  }
+
+  // Øve-runde: the same pairing → coaching flow as a real round, but practiceMode
+  // makes the created round label "(øvelse)" so it never locks the real team's
+  // estimates. Pair against any team (pick one, or import a mock roster), play it
+  // through, then reset the round afterwards.
+  function startPracticeRound() {
+    startNewRound();
+    setPracticeMode(true);
   }
 
   function importOpponent() {
@@ -1303,9 +1315,6 @@ export default function TournamentDashboard({
     setSessionUrl(null);
     resetModuleState();
   }
-
-  // Tonight's practice pairing: load a real opponent's lists and pair against
-  // them, then start the team room via "Start coaching session" as normal.
 
   if (!initialized) {
     return (
@@ -1782,13 +1791,23 @@ export default function TournamentDashboard({
                   </div>
                 </div>
               ) : (
-                <button
-                  onClick={startNewRound}
-                  disabled={!tournament.roster}
-                  className="text-sm font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-5 py-2.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Start runde {currentRoundNumber}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={startNewRound}
+                    disabled={!tournament.roster}
+                    className="text-sm font-semibold text-white bg-[#a855f7] hover:bg-[#9333ea] px-5 py-2.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Start runde {currentRoundNumber}
+                  </button>
+                  <button
+                    onClick={startPracticeRound}
+                    disabled={!tournament.roster}
+                    title="Øve-runde mod et hvilket som helst hold (eller et importeret mock-roster). Runden hedder '(øvelse)' og låser IKKE jeres estimater — nulstil den bagefter."
+                    className="text-sm font-medium text-[#a855f7] hover:text-[#c084fc] border border-[rgba(168,85,247,0.3)] hover:border-[#a855f7] px-4 py-2.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Øve-runde
+                  </button>
+                </div>
               )}
 
               <div className="mt-4 pt-4 border-t border-white/[0.08]">
@@ -1820,11 +1839,16 @@ export default function TournamentDashboard({
         {view === "round-opponent" && tournament.roster && (
           <div>
             <h2 className="text-sm font-semibold text-[#e8e8f0] mb-1">
-              Runde {currentRoundNumber} — Vælg modstander
+              Runde {currentRoundNumber}{practiceMode ? " (øvelse)" : ""} — Vælg modstander
             </h2>
             <p className="text-[11px] text-[#8888a0] mb-4">
               Vælg det land I møder — lists hentes fra estimat-databasen.
             </p>
+            {practiceMode && (
+              <div className="mb-4 rounded-lg border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.06)] px-3 py-2 text-[11px] text-[#fbbf24]">
+                🥊 <strong>Øve-runde</strong> — par mod et hvilket som helst hold, eller importér et mock-roster nedenfor. Runden hedder “(øvelse)”, så jeres rigtige estimater <strong>låses ikke</strong>. Nulstil runden bagefter.
+              </div>
+            )}
 
             <div className="grid md:grid-cols-2 gap-6">
               {/* Our roster (read-only) */}
@@ -1869,21 +1893,26 @@ export default function TournamentDashboard({
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {group.teams.map((t) => {
-                              const disabled = !t.hasLists || t.playedRound !== undefined;
+                              // In an øve-runde a team you've already faced is still
+                              // pickable (practice doesn't consume the real pairing).
+                              const played = t.playedRound !== undefined && !practiceMode;
+                              const disabled = !t.hasLists || played;
                               return (
                                 <button
                                   key={t.slug}
                                   disabled={disabled}
                                   onClick={() => pickOpponent(opponents[t.slug])}
                                   title={
-                                    t.playedRound !== undefined
+                                    played
                                       ? `Spillet i runde ${t.playedRound}`
                                       : !t.hasLists
                                         ? "Ingen lists — tilføj under Estimater"
-                                        : `Vælg ${t.name}`
+                                        : practiceMode
+                                          ? `Øve mod ${t.name}`
+                                          : `Vælg ${t.name}`
                                   }
                                   className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
-                                    t.playedRound !== undefined
+                                    played
                                       ? "border-white/[0.06] text-[#8888a0] line-through opacity-50 cursor-not-allowed"
                                       : !t.hasLists
                                         ? "border-white/[0.06] text-[#8888a0] opacity-40 cursor-not-allowed"
