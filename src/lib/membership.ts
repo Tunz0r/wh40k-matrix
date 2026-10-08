@@ -458,6 +458,22 @@ export async function fetchKnownPeople(
   return [...people].map(([uid, name]) => ({ uid, name }));
 }
 
+// Every signed-in login that has a display name, from the users registry.
+// _users is admin-read only (rules), so for a non-admin captain this resolves to
+// [] and callers fall back to fetchKnownPeople. Lets an admin assign ANY known
+// user to a seat, not just people already on one of their rosters.
+export async function fetchAllNamedUsers(): Promise<{ uid: string; name: string }[]> {
+  await authReady();
+  try {
+    const rec = ((await get(ref(getDb(), USERS))).val() as Record<string, { displayName?: string }>) || {};
+    return Object.entries(rec)
+      .map(([uid, u]) => ({ uid, name: (u.displayName || "").trim() }))
+      .filter((p) => p.name);
+  } catch {
+    return [];
+  }
+}
+
 // --- helpers ---------------------------------------------------------------
 
 // Subscribe to an admin-only node, tolerating the permission-denied a non-admin

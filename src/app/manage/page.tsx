@@ -14,7 +14,7 @@ import {
   type TournamentDoc,
 } from "@/lib/tournament-db";
 import type { RosterArmy } from "@/lib/roster";
-import { recomputeMembership, fetchKnownPeople } from "@/lib/membership";
+import { recomputeMembership, fetchKnownPeople, fetchAllNamedUsers } from "@/lib/membership";
 
 // Owner/captain (or super-admin) management of the ACTIVE tournament: open the
 // join window, share the invite link, see who has claimed which slot, kick, and
@@ -34,8 +34,23 @@ export default function ManagePage() {
 
   useEffect(() => subscribeToTournament(activeSlug, setDoc), [activeSlug]);
   useEffect(() => setOrigin(window.location.origin), []);
+  // People you can assign to a seat: everyone on your own rosters (fetchKnownPeople)
+  // PLUS, for an admin, every named login in the registry (fetchAllNamedUsers —
+  // denied → [] for a non-admin captain, so they keep the roster-only list).
   useEffect(() => {
-    if (user?.uid) fetchKnownPeople(user.uid, activeSlug).then(setKnown).catch(() => setKnown([]));
+    if (!user?.uid) { setKnown([]); return; }
+    let cancelled = false;
+    Promise.all([
+      fetchKnownPeople(user.uid, activeSlug).catch(() => []),
+      fetchAllNamedUsers().catch(() => []),
+    ]).then(([rosterPeople, allUsers]) => {
+      if (cancelled) return;
+      const m = new Map<string, string>();
+      for (const u of allUsers) m.set(u.uid, u.name);
+      for (const p of rosterPeople) m.set(p.uid, p.name); // roster-context name wins
+      setKnown([...m].map(([uid, name]) => ({ uid, name })).sort((a, b) => a.name.localeCompare(b.name)));
+    });
+    return () => { cancelled = true; };
   }, [user?.uid, activeSlug]);
   // Auto-admit: whenever the captain opens this page, fold any new claims into
   // membership so claimants get access without a separate "finalize" click.

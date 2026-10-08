@@ -338,7 +338,13 @@ export async function setSlotArmy(
 // Owner/admin frees a slot (un-claim / kick).
 export async function releaseSlot(slug: string, armyIdx: number): Promise<void> {
   await authReady();
-  await set(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}/claimedByUid`), null);
+  // Clear the player label too, not just the claim — otherwise the name lingers on
+  // the now-free seat and still shows up as a "member" in the dashboard readiness
+  // count (the ghost-member desync).
+  await update(ref(getDb(), `tournaments/${slug}/roster/armies/${armyIdx}`), {
+    claimedByUid: null,
+    player: null,
+  });
 }
 
 // Owner/admin assigns an existing user (uid) to a slot and labels it with their

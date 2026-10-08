@@ -856,9 +856,13 @@ export default function TournamentDashboard({
           if (team.estimates?.[`${i}_${j}`]) filled++;
         });
       }
+      // A seat counts as having a player only when it's actually claimed (or bound
+      // via the legacy playerId) — a lingering `player` name on a released/unclaimed
+      // seat is a ghost and must not inflate the "X/Y spillere" readiness count.
+      const claimed = !!(army.claimedByUid || army.playerId);
       return {
         faction: army.faction,
-        player: army.player || null,
+        player: claimed ? army.player || "Spiller" : null,
         pct: total ? Math.round((100 * filled) / total) : 0,
       };
     });
