@@ -45,7 +45,7 @@ export default function LoginScreen() {
             W
           </span>
           <div>
-            <div className="text-[14px] font-semibold text-[#e8e8f0]">WTC — Team Room</div>
+            <div className="text-[14px] font-semibold text-[#e8e8f0]">Team Room</div>
             <div className="text-[10px] text-[#8888a0]">Log ind for at fortsætte</div>
           </div>
         </div>

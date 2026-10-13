@@ -1334,7 +1334,7 @@ export default function TournamentDashboard({
       <header className="px-4 sm:px-6 py-4 pb-3 border-b border-white/[0.08] sticky top-12 bg-[#0f0f13] z-20">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
-            WTC Turnering
+            Turnering
             <span className="text-[#4ade80] ml-2 text-sm font-normal">
               — {teamName}
             </span>

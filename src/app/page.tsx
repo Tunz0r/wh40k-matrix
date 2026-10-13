@@ -30,7 +30,7 @@ export default function Home() {
             href="/tournament"
             className="text-[12px] font-medium text-[#a855f7] hover:text-[#c084fc] transition-colors bg-[rgba(168,85,247,0.1)] px-3 py-1 rounded-md border border-[rgba(168,85,247,0.2)]"
           >
-            WTC Turnering
+            Turnering
           </Link>
         </div>
       </header>

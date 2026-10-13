@@ -91,9 +91,8 @@ export default function SiteNav() {
             <span className="w-6 h-6 rounded-md bg-gradient-to-br from-[#a855f7] to-[#6d28d9] flex items-center justify-center text-[10px] font-black text-white">
               W
             </span>
-            <span className="text-[13px] font-semibold text-[#e8e8f0] tracking-tight hidden sm:inline">
-              WTC
-              <span className="text-[#4ade80] font-normal ml-1.5 hidden lg:inline">{teamName}</span>
+            <span className="text-[13px] font-semibold text-[#4ade80] tracking-tight hidden sm:inline truncate max-w-[180px]">
+              {teamName}
             </span>
           </Link>
 
