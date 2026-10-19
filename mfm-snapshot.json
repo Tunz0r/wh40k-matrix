@@ -34,41 +34,57 @@
     }
   },
   "adeptus-custodes": {
+    "AQUILAN SHIELD": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
     "AURIC CHAMPIONS": {
-      "dp": 2,
+      "dp": 1,
+      "disposition": "PURGE THE FOE"
+    },
+    "DREAD HOST": {
+      "dp": 1,
+      "disposition": "PURGE THE FOE"
+    },
+    "EMISSARIES IMPERATUS": {
+      "dp": 1,
       "disposition": "PRIORITY ASSETS"
     },
-    "LIONS OF THE EMPEROR": {
+    "EMPEROR’S CHOSEN": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "GRAV‑ASSAULT FORCE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "GUARDIANS OF THE THRONE": {
       "dp": 3,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "HONOURED COMPANIONS": {
+      "dp": 1,
       "disposition": "TAKE AND HOLD"
+    },
+    "LIONS OF THE EMPEROR": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
     },
     "MIGHT OF THE MORITOI": {
       "dp": 1,
       "disposition": "TAKE AND HOLD"
     },
     "NULL MAIDEN VIGIL": {
-      "dp": 2,
-      "disposition": "RECONNAISSANCE"
-    },
-    "SHIELD HOST": {
-      "dp": 2,
-      "disposition": "PURGE THE FOE"
-    },
-    "SILENT HUNTERS": {
-      "dp": 1,
-      "disposition": "RECONNAISSANCE"
-    },
-    "SOLAR SPEARHEAD": {
-      "dp": 2,
-      "disposition": "TAKE AND HOLD"
-    },
-    "TALONS OF THE EMPEROR": {
-      "dp": 3,
-      "disposition": "TAKE AND HOLD"
-    },
-    "THARANATOI HAMMERBLOW": {
       "dp": 1,
       "disposition": "DISRUPTION"
+    },
+    "SHADOWKEEPERS": {
+      "dp": 1,
+      "disposition": "PURGE THE FOE"
+    },
+    "SOLAR WATCH": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
     }
   },
   "adeptus-mechanicus": {
