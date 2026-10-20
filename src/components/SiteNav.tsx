@@ -139,8 +139,13 @@ export default function SiteNav() {
               </div>
             )}
 
+            {/* Guide / how-to */}
+            <Link href="/guide" title="Sådan bruger du appen" className={`ml-auto ${linkClass(pathname.startsWith("/guide"))}`}>
+              Guide
+            </Link>
+
             {/* Identity menu (right) */}
-            <div className="relative ml-auto">
+            <div className="relative">
               <button
                 onClick={() => setMenu(menu === "user" ? null : "user")}
                 title={displayName}
@@ -234,6 +239,9 @@ export default function SiteNav() {
               Min side
             </Link>
           )}
+          <Link href="/guide" className={`block px-3 py-2.5 rounded-md text-[13px] font-medium transition-colors ${pathname.startsWith("/guide") ? "bg-[rgba(168,85,247,0.15)] text-[#c084fc]" : "text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04]"}`}>
+            Guide
+          </Link>
           <Link href="/me" className={`block px-3 py-2.5 rounded-md text-[13px] font-medium transition-colors ${pathname === "/me" ? "bg-[rgba(168,85,247,0.15)] text-[#c084fc]" : "text-[#8888a0] hover:text-[#e8e8f0] hover:bg-white/[0.04]"}`}>
             Min træfsikkerhed
           </Link>

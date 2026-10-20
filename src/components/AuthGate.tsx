@@ -31,8 +31,10 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   if (!user) return <LoginScreen />;
   if (!access) {
     // Invite/registration links are reachable by any signed-in user (the point):
-    // /join = claim a roster seat; /event = register a team for an event.
-    if (pathname.startsWith("/join") || pathname.startsWith("/event")) return <>{children}</>;
+    // /join = claim a roster seat; /event = register a team for an event. The
+    // /guide how-to is public too, so a new user can read it before joining.
+    if (pathname.startsWith("/join") || pathname.startsWith("/event") || pathname.startsWith("/guide"))
+      return <>{children}</>;
     return <Landing />;
   }
 
