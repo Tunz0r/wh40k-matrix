@@ -4,6 +4,23 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+# Start here (so you're not on bare ground)
+
+This repo keeps its context in files, not in one person's head or chat memory —
+read these before working:
+
+- **[`GLOSSARY.md`](./GLOSSARY.md)** — the project's shared vocabulary.
+- **[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)** — stack, the multi-tenant
+  data model, the Firebase node map, key files, and the gotchas that will bite.
+- **[`docs/WORKFLOWS.md`](./docs/WORKFLOWS.md)** — local dev, deploying, Firebase
+  rules, the MFM bot.
+- **[`docs/adr/`](./docs/adr/)** — the hard-to-reverse decisions and *why*. Don't
+  "fix" something recorded there without reading it first.
+
+Non-negotiables (see the ADRs): never bulk-overwrite the `estimates` node; no PII
+(emails) in the Realtime Database; `database.rules.json` is published by hand;
+`src/lib/data.ts` mirrors the live MFM.
+
 # Keeping decisions in sync (we're a two-person team now)
 
 Two people work on this repo. To stay in sync, decisions and vocabulary live in

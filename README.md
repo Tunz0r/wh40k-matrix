@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WH40K team-tournament prep
 
-## Getting Started
+A tool for preparing **team tournaments** in Warhammer 40,000 (WTC-style): build
+each team's lists, estimate every matchup against the opponents, and run
+tournament day with pairing and live coaching. Multi-tenant — many teams prep the
+same event year-round, each isolated. Next.js + Firebase, deployed on Vercel.
 
-First, run the development server:
+## Quick start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # fill in the Firebase values (ask Martin / copy from Vercel)
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Set `NEXT_PUBLIC_ENABLE_TEST_LOGIN=1` in `.env.local` to get a local-only test
+login for poking at flows.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Where to look
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| | |
+|---|---|
+| **Vocabulary** — the shared language | [`GLOSSARY.md`](./GLOSSARY.md) |
+| **How it's built** — stack, data model, key files, gotchas | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) |
+| **How we operate** — dev, deploy, the MFM bot, rules | [`docs/WORKFLOWS.md`](./docs/WORKFLOWS.md) |
+| **Why we did it this way** — decisions | [`docs/adr/`](./docs/adr/) |
+| **Working with AI agents** — conventions | [`AGENTS.md`](./AGENTS.md) |
+| **In-app how-to** (for users) | `/guide` in the running app |
 
-## Learn More
+## The hard rules (read before touching data)
 
-To learn more about Next.js, take a look at the following resources:
+- **Never** bulk-overwrite or reset the Firebase `estimates` node — it's
+  production data, and past tournaments stay frozen in time.
+- **No PII in the Realtime Database** — display names only, never emails.
+- **`database.rules.json` is published by hand** in the Firebase console; editing
+  the file alone does nothing.
+- **`src/lib/data.ts` mirrors the live MFM** — keep it in sync when GW updates
+  points/dispositions.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+See [`docs/adr/`](./docs/adr/) for the reasoning behind each.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deploying
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Push to `master` → Vercel auto-deploys. Confirm with `npx vercel ls` (top row
+should read ● Ready). Details in [`docs/WORKFLOWS.md`](./docs/WORKFLOWS.md).
