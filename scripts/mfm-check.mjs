@@ -254,7 +254,7 @@ if (!oldSnap) {
   console.log(`Seeded MFM snapshot: ${factionSlugs(newSnap).length} factions, ${count} detachments.`);
   if (fs.existsSync(CHANGES)) fs.unlinkSync(CHANGES);
 } else if (body) {
-  const md = `# MFM update detected (${new Date().toISOString().slice(0, 10)})\n\nChanges on mfm.warhammer-community.com:\n\n${body}\n\nDetachment DP/disposition changes → re-sync \`src/lib/data.ts\` FACTIONS (see the MFM v1.1 sync procedure in memory). Unit-points changes don't touch data.ts, but the affected codexes are deprecated in the library so stale estimate sources show ⚠.\n`;
+  const md = `# MFM update detected (${new Date().toISOString().slice(0, 10)})\n\nChanges on mfm.warhammer-community.com:\n\n${body}\n\n\`src/lib/data.ts\` FACTIONS was re-synced from the snapshot automatically (same commit) and deploys itself — **review the diff**. Unit-points changes don't touch data.ts, but the affected codexes are deprecated in the library so stale estimate sources show ⚠.\n`;
   fs.writeFileSync(CHANGES, md);
   console.log(md);
   // Stamp codexes whose detachments OR unit points changed as deprecated.

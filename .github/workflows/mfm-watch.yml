@@ -1,7 +1,9 @@
 name: MFM watch
 
 # Checks mfm.warhammer-community.com weekly for detachment DP / Force Disposition
-# changes. On a change it commits the refreshed snapshot and opens an issue.
+# (and unit/codex) changes. On a change it refreshes the snapshot, re-syncs
+# src/lib/data.ts FACTIONS from it, deprecates affected codexes, commits both
+# files (Vercel then auto-deploys), and opens an issue describing the change.
 on:
   schedule:
     - cron: "0 7 * * 1" # Mondays 07:00 UTC
@@ -23,6 +25,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+
+      # Needed so sync-data-ts.mjs can run `npx tsc` to read/verify data.ts.
+      - name: Install deps
+        run: npm ci
 
       - name: Check MFM for changes
         run: node scripts/mfm-check.mjs
@@ -30,16 +37,22 @@ jobs:
           FIREBASE_BOT_EMAIL: ${{ secrets.FIREBASE_BOT_EMAIL }}
           FIREBASE_BOT_PASSWORD: ${{ secrets.FIREBASE_BOT_PASSWORD }}
 
-      - name: Commit snapshot if it changed
+      # Close the loop: regenerate data.ts FACTIONS from the refreshed snapshot so
+      # the app actually picks up the change. No-op when already in sync; reverts
+      # itself if the regenerated file fails to type-check.
+      - name: Sync data.ts from the snapshot
+        run: node scripts/sync-data-ts.mjs
+
+      - name: Commit snapshot + data.ts if they changed
         id: snap
         run: |
-          if git diff --quiet -- mfm-snapshot.json; then
+          if git diff --quiet -- mfm-snapshot.json src/lib/data.ts; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git config user.name "mfm-watch"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add mfm-snapshot.json
-            git commit -m "MFM snapshot update ($(date +%F))"
+            git add mfm-snapshot.json src/lib/data.ts
+            git commit -m "MFM update: refresh snapshot + re-sync data.ts ($(date +%F))"
             git push
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
