@@ -33,8 +33,8 @@ the repo, not in one person's head or chat session:
   ADR when a decision is hard to reverse, surprising without context, AND a real
   trade-off (all three). Most decisions don't qualify — keep ADRs few.
 
-These are maintained by the **`/grill-with-docs`** skill (Matt Pocock's skills,
-installed via `claude plugin install mattpocock-skills@claude-plugins-official`):
-it interviews you about a plan and writes the glossary/ADRs as you decide. You can
+These are maintained by the **`/grill-with-docs`** skill, which is vendored into
+[`.claude/skills/`](./.claude/skills/) (no install needed — it ships with the repo).
+It interviews you about a plan and writes the glossary/ADRs as you decide. You can
 also just edit the files directly. Either way, commit them so the other person
 (and their agent) picks the decisions up on `git pull`.
