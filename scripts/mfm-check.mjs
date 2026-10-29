@@ -1,13 +1,23 @@
 // MFM watcher — checks mfm.warhammer-community.com for changes to detachment
-// Detachment Points (DP) and Force Dispositions, which GW updates periodically.
-// Run by .github/workflows/mfm-watch.yml on a schedule. Fetches each faction
-// page (a browser User-Agent is required — plain bots get a 403), extracts every
-// detachment's {name, dp, disposition}, and diffs against the committed
+// Detachment Points (DP) and Force Dispositions AND to unit points (codex /
+// quarterly updates), which GW updates periodically. Run by
+// .github/workflows/mfm-watch.yml on a schedule. Fetches each faction page (a
+// browser User-Agent is required — plain bots get a 403), extracts every
+// detachment's {name, dp, disposition} plus which units carry GW's "UPDATED"
+// badge (points changed this cycle), and diffs against the committed
 // mfm-snapshot.json. Writes the new snapshot and, on any change, mfm-changes.md.
 //
 // The site is a Next.js RSC app but each detachment header is plain HTML:
 //   <span class="text-xl break-all">NAME</span>
 //   <span class="text-sm self-end pl-2">NDP</span> … <div …background-color:#hex>DISPOSITION</div>
+// and each changed unit shows a badge: <div …font-bold"><span>UPDATED</span></div>
+// just after that unit's <span class="font-bold">NAME(S)</span>.
+//
+// The snapshot is {slug: {detName: {dp, disposition}}} PLUS a reserved
+// "__updated" key = {slug: [sorted UPDATED unit labels]}. A faction is
+// deprecated in the library when an existing detachment's DP/disposition moves
+// OR its set of UPDATED units changes (so a codex/points rework is flagged even
+// when the detachment lineup is untouched — the Custodes-codex gap).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -16,6 +26,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SNAPSHOT = path.join(ROOT, "mfm-snapshot.json");
 const CHANGES = path.join(ROOT, "mfm-changes.md");
+const UPDATED_KEY = "__updated";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
@@ -56,29 +67,62 @@ function extractDetachments(html) {
   return out;
 }
 
+// The unit groups GW flagged "UPDATED" (points changed this cycle). Each UPDATED
+// badge sits just after that unit's <span class="font-bold">NAME(S)</span>; we
+// take the nearest preceding font-bold label within a short window. Returns a
+// sorted, de-duped list — a stable fingerprint of what changed for this faction.
+function extractUpdatedUnits(html) {
+  const spans = [];
+  const re = /<span class="font-bold">([^<]+)<\/span>/g;
+  let m;
+  while ((m = re.exec(html))) spans.push({ idx: m.index, text: decode(m[1]) });
+  const set = new Set();
+  const up = /<span>UPDATED<\/span>/g;
+  let u;
+  while ((u = up.exec(html))) {
+    let label = null;
+    for (const s of spans) {
+      if (s.idx < u.index) {
+        if (u.index - s.idx < 400) label = s.text; // nearest within window
+      } else break;
+    }
+    if (label) set.add(label);
+  }
+  return [...set].sort();
+}
+
 async function fetchFaction(slug) {
   const r = await fetch(`https://mfm.warhammer-community.com/en/${slug}`, {
     headers: { "User-Agent": UA, Accept: "text/html" },
   });
   if (!r.ok) throw new Error(`${slug}: HTTP ${r.status}`);
-  const dets = extractDetachments(await r.text());
+  const html = await r.text();
+  const dets = extractDetachments(html);
   if (Object.keys(dets).length === 0) throw new Error(`${slug}: no detachments parsed (site layout may have changed)`);
-  return dets;
+  return { dets, updated: extractUpdatedUnits(html) };
 }
 
 async function build() {
   const snapshot = {};
+  const updated = {};
   for (const slug of FACTIONS) {
     // Serial + small delay to be polite to the site.
-    snapshot[slug] = await fetchFaction(slug);
+    const { dets, updated: up } = await fetchFaction(slug);
+    snapshot[slug] = dets;
+    updated[slug] = up;
     await new Promise((r) => setTimeout(r, 300));
   }
+  snapshot[UPDATED_KEY] = updated;
   return snapshot;
 }
 
+const factionSlugs = (snap) => Object.keys(snap).filter((k) => k !== UPDATED_KEY);
+const detachmentTotal = (snap) => factionSlugs(snap).reduce((n, s) => n + Object.keys(snap[s]).length, 0);
+
 function diff(oldSnap, newSnap) {
   const lines = [];
-  for (const slug of Object.keys(newSnap)) {
+  // Detachment DP / disposition changes.
+  for (const slug of factionSlugs(newSnap)) {
     const before = oldSnap[slug] || {};
     const after = newSnap[slug];
     const changes = [];
@@ -92,8 +136,21 @@ function diff(oldSnap, newSnap) {
     for (const name of Object.keys(before)) {
       if (!after[name]) changes.push(`- **${name}** removed`);
     }
-    if (changes.length) lines.push(`### ${slug}\n${changes.join("\n")}`);
+    if (changes.length) lines.push(`### ${slug} — detachments\n${changes.join("\n")}`);
   }
+  // Unit points (UPDATED badges) changes.
+  const oldUp = oldSnap[UPDATED_KEY] || {};
+  const newUp = newSnap[UPDATED_KEY] || {};
+  const unitLines = [];
+  for (const slug of factionSlugs(newSnap)) {
+    const b = oldUp[slug] || [];
+    const a = newUp[slug] || [];
+    if (JSON.stringify(a) !== JSON.stringify(b)) {
+      const sample = a.slice(0, 6).join(", ") + (a.length > 6 ? ", …" : "");
+      unitLines.push(`- **${slug}**: ${a.length} unit(s) with updated points${a.length ? ` (${sample})` : ""} [was ${b.length}]`);
+    }
+  }
+  if (unitLines.length) lines.push(`### Unit points updated (codex / quarterly)\n${unitLines.join("\n")}`);
   return lines.join("\n\n");
 }
 
@@ -111,19 +168,27 @@ const SLUG_TO_FACTION = {
   "thousand-sons": "Thousand Sons", "tyranids": "Tyranids", "world-eaters": "World Eaters",
 };
 
-// Factions whose rules materially changed: an EXISTING detachment's DP or
-// Disposition moved. New/removed detachments alone don't deprecate lists.
+// Factions whose estimates are now stale: an EXISTING detachment's DP or
+// Disposition moved, OR the set of UPDATED units (points/codex) changed.
+// New/removed detachments alone don't deprecate lists.
 function significantlyChangedFactions(oldSnap, newSnap) {
-  const out = [];
-  for (const slug of Object.keys(newSnap)) {
+  const out = new Set();
+  for (const slug of factionSlugs(newSnap)) {
     const before = oldSnap[slug] || {};
     const after = newSnap[slug];
-    const changed = Object.keys(after).some(
+    const detChanged = Object.keys(after).some(
       (name) => before[name] && (before[name].dp !== after[name].dp || before[name].disposition !== after[name].disposition)
     );
-    if (changed) out.push(slug);
+    if (detChanged) out.add(slug);
   }
-  return out;
+  const oldUp = oldSnap[UPDATED_KEY] || {};
+  const newUp = newSnap[UPDATED_KEY] || {};
+  for (const slug of factionSlugs(newSnap)) {
+    const a = JSON.stringify(newUp[slug] || []);
+    const b = JSON.stringify(oldUp[slug] || []);
+    if (a !== b) out.add(slug);
+  }
+  return [...out];
 }
 
 // Stamp the changed codexes as deprecated in Firebase, signing in as the MFM
@@ -161,23 +226,23 @@ async function writeDeprecations(slugs) {
 }
 
 const newSnap = await build();
-const count = Object.values(newSnap).reduce((n, f) => n + Object.keys(f).length, 0);
+const count = detachmentTotal(newSnap);
 const oldSnap = fs.existsSync(SNAPSHOT) ? JSON.parse(fs.readFileSync(SNAPSHOT, "utf8")) : null;
 
 const body = oldSnap ? diff(oldSnap, newSnap) : "";
 fs.writeFileSync(SNAPSHOT, JSON.stringify(newSnap, null, 2) + "\n");
 
 if (!oldSnap) {
-  console.log(`Seeded MFM snapshot: ${Object.keys(newSnap).length} factions, ${count} detachments.`);
+  console.log(`Seeded MFM snapshot: ${factionSlugs(newSnap).length} factions, ${count} detachments.`);
   if (fs.existsSync(CHANGES)) fs.unlinkSync(CHANGES);
 } else if (body) {
-  const md = `# MFM update detected (${new Date().toISOString().slice(0, 10)})\n\nDetachment Points / Force Disposition changes on mfm.warhammer-community.com:\n\n${body}\n\nRe-sync \`src/lib/data.ts\` FACTIONS (see the MFM v1.1 sync procedure in memory).\n`;
+  const md = `# MFM update detected (${new Date().toISOString().slice(0, 10)})\n\nChanges on mfm.warhammer-community.com:\n\n${body}\n\nDetachment DP/disposition changes → re-sync \`src/lib/data.ts\` FACTIONS (see the MFM v1.1 sync procedure in memory). Unit-points changes don't touch data.ts, but the affected codexes are deprecated in the library so stale estimate sources show ⚠.\n`;
   fs.writeFileSync(CHANGES, md);
   console.log(md);
-  // Stamp codexes whose existing rules changed as deprecated in the library.
+  // Stamp codexes whose detachments OR unit points changed as deprecated.
   const changed = significantlyChangedFactions(oldSnap, newSnap);
   if (changed.length) await writeDeprecations(changed);
 } else {
-  console.log(`No MFM changes. ${Object.keys(newSnap).length} factions, ${count} detachments.`);
+  console.log(`No MFM changes. ${factionSlugs(newSnap).length} factions, ${count} detachments.`);
   if (fs.existsSync(CHANGES)) fs.unlinkSync(CHANGES);
 }
