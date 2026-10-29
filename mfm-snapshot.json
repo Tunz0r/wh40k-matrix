@@ -18,7 +18,8 @@
     },
     "HALLOWED MARTYRS": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "PENITENT HOST": {
       "dp": 2,
@@ -60,7 +61,8 @@
     },
     "GUARDIANS OF THE THRONE": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "PURGE THE FOE"
     },
     "HONOURED COMPANIONS": {
       "dp": 1,
@@ -110,7 +112,8 @@
     },
     "HALOSCREED BATTLE CLADE": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "PURGE THE FOE"
     },
     "LORDS OF THE FORGE": {
       "dp": 2,
@@ -136,7 +139,8 @@
     },
     "ASPECT HOST": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "RECONNAISSANCE"
     },
     "CORSAIR COTERIE": {
       "dp": 2,
@@ -214,7 +218,8 @@
     },
     "GRIZZLED COMPANY": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "PURGE THE FOE"
     },
     "HAMMER OF THE EMPEROR": {
       "dp": 2,
@@ -240,7 +245,8 @@
   "blood-angels": {
     "ANGELIC INHERITORS": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "PURGE THE FOE"
     },
     "ASSAULT BRETHREN": {
       "dp": 1,
@@ -264,7 +270,8 @@
     },
     "GLADIUS TASK FORCE": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "GRAVIS LINEBREAKER FORCE": {
       "dp": 1,
@@ -326,7 +333,8 @@
     },
     "DAEMONIC INCURSION": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "DISRUPTION"
     },
     "LEGION OF EXCESS": {
       "dp": 2,
@@ -376,7 +384,8 @@
     },
     "INFERNAL LANCE": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "PURGE THE FOE"
     },
     "LORDS OF DREAD": {
       "dp": 2,
@@ -398,7 +407,8 @@
     },
     "CREATIONS OF BILE": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PURGE THE FOE"
     },
     "CULT OF THE ARKIFANE": {
       "dp": 2,
@@ -422,7 +432,8 @@
     },
     "HURON’S MARAUDERS": {
       "dp": 3,
-      "disposition": "DISRUPTION"
+      "disposition": "DISRUPTION",
+      "disposition2": "PURGE THE FOE"
     },
     "MURDERTALON RAIDERS": {
       "dp": 1,
@@ -434,11 +445,13 @@
     },
     "PACTBOUND ZEALOTS": {
       "dp": 3,
-      "disposition": "DISRUPTION"
+      "disposition": "DISRUPTION",
+      "disposition2": "PRIORITY ASSETS"
     },
     "RENEGADE RAIDERS": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "RECONNAISSANCE"
     },
     "RENEGADE WARBAND": {
       "dp": 2,
@@ -480,7 +493,8 @@
     },
     "GLADIUS TASK FORCE": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "GRAVIS LINEBREAKER FORCE": {
       "dp": 1,
@@ -570,7 +584,8 @@
     },
     "VIRULENT VECTORIUM": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PURGE THE FOE"
     }
   },
   "deathwatch": {
@@ -580,7 +595,8 @@
     },
     "BLACK SPEAR TASK FORCE": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "PURGE THE FOE"
     },
     "DEVASTATOR BRETHREN": {
       "dp": 1,
@@ -592,7 +608,8 @@
     },
     "GLADIUS TASK FORCE": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "GRAVIS LINEBREAKER FORCE": {
       "dp": 1,
@@ -662,7 +679,8 @@
     },
     "REAPER’S WAGER": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "PURGE THE FOE"
     },
     "SKYSPLINTER ASSAULT": {
       "dp": 2,
@@ -680,11 +698,13 @@
   "emperors-children": {
     "CARNIVAL OF EXCESS": {
       "dp": 3,
-      "disposition": "DISRUPTION"
+      "disposition": "DISRUPTION",
+      "disposition2": "PRIORITY ASSETS"
     },
     "COTERIE OF THE CONCEITED": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "PURGE THE FOE"
     },
     "COURT OF THE PHOENICIAN": {
       "dp": 2,
@@ -738,7 +758,8 @@
     },
     "HOST OF ASCENSION": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "RECONNAISSANCE"
     },
     "OUTLANDER CLAW": {
       "dp": 2,
@@ -792,7 +813,8 @@
     },
     "WARPBANE TASK FORCE": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PURGE THE FOE"
     }
   },
   "imperial-knights": {
@@ -802,7 +824,8 @@
     },
     "FREEBLADE COMPANY": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "PURGE THE FOE"
     },
     "GATE WARDEN LANCE": {
       "dp": 2,
@@ -814,7 +837,8 @@
     },
     "QUESTORIS COMPANIONS": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "RECONNAISSANCE"
     },
     "SPEARHEAD-AT-ARMS": {
       "dp": 2,
@@ -848,7 +872,8 @@
     },
     "HEARTHBAND": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "RECONNAISSANCE"
     },
     "HEARTHFYRE ARSENAL": {
       "dp": 2,
@@ -878,7 +903,8 @@
     },
     "AWAKENED DYNASTY": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "CANOPTEK COURT": {
       "dp": 2,
@@ -914,7 +940,8 @@
     },
     "STARSHATTER ARSENAL": {
       "dp": 3,
-      "disposition": "PRIORITY ASSETS"
+      "disposition": "PRIORITY ASSETS",
+      "disposition2": "PURGE THE FOE"
     },
     "THE PHAERON'S ARMOURY": {
       "dp": 1,
@@ -972,7 +999,8 @@
     },
     "WAR HORDE": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PURGE THE FOE"
     },
     "WRECKAS": {
       "dp": 1,
@@ -990,7 +1018,8 @@
     },
     "BLADE OF ULTRAMAR": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "CERAMITE SENTINELS": {
       "dp": 2,
@@ -1014,7 +1043,8 @@
     },
     "GLADIUS TASK FORCE": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "GRAVIS LINEBREAKER FORCE": {
       "dp": 1,
@@ -1096,7 +1126,8 @@
     },
     "GLADIUS TASK FORCE": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "GRAVIS LINEBREAKER FORCE": {
       "dp": 1,
@@ -1174,11 +1205,13 @@
     },
     "MONT’KA": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "RETALIATION CADRE": {
       "dp": 3,
-      "disposition": "PURGE THE FOE"
+      "disposition": "PURGE THE FOE",
+      "disposition2": "RECONNAISSANCE"
     }
   },
   "thousand-sons": {
@@ -1188,11 +1221,13 @@
     },
     "GRAND COVEN": {
       "dp": 3,
-      "disposition": "DISRUPTION"
+      "disposition": "DISRUPTION",
+      "disposition2": "PRIORITY ASSETS"
     },
     "HEXWARP THRALLBAND": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "RECONNAISSANCE"
     },
     "RITUAL OF REGENERATION": {
       "dp": 1,
@@ -1200,7 +1235,8 @@
     },
     "RUBRICAE PHALANX": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "SEKHETAR COHORT": {
       "dp": 1,
@@ -1234,11 +1270,13 @@
     },
     "INVASION FLEET": {
       "dp": 3,
-      "disposition": "TAKE AND HOLD"
+      "disposition": "TAKE AND HOLD",
+      "disposition2": "PRIORITY ASSETS"
     },
     "SUBTERRANEAN ASSAULT": {
       "dp": 3,
-      "disposition": "DISRUPTION"
+      "disposition": "DISRUPTION",
+      "disposition2": "RECONNAISSANCE"
     },
     "SYNAPTIC NEXUS": {
       "dp": 2,

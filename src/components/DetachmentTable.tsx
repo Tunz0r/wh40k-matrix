@@ -8,6 +8,7 @@ import {
   GROUPS,
   DISPOSITIONS,
   slugify,
+  detachmentDispositions,
 } from "@/lib/data";
 import { DispositionBadge } from "./DispositionBadge";
 
@@ -57,7 +58,7 @@ export function DetachmentTable({
     const factionEntries: { faction: string; rows: Detachment[] }[] = [];
     for (const fac of fs) {
       let rows = FACTIONS[fac] || [];
-      if (filterDisposition) rows = rows.filter((r) => r.d === filterDisposition);
+      if (filterDisposition) rows = rows.filter((r) => detachmentDispositions(r).includes(filterDisposition));
       if (query) {
         rows = rows.filter(
           (r) =>
@@ -187,7 +188,15 @@ function FactionBlock({
             {r.dp}
           </td>
           <td className="px-4 py-[7px] border-b border-white/[0.08] group-hover:bg-[#1a1a22]">
-            <DispositionBadge disposition={r.d} />
+            {r.d2 ? (
+              <span className="flex items-center gap-1.5 flex-wrap">
+                <DispositionBadge disposition={r.d} />
+                <span className="text-[10px] text-[#8888a0]">eller</span>
+                <DispositionBadge disposition={r.d2} />
+              </span>
+            ) : (
+              <DispositionBadge disposition={r.d} />
+            )}
           </td>
         </tr>
       ))}

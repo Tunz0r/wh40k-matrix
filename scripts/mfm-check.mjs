@@ -50,19 +50,33 @@ const decode = (s) =>
     .trim();
 
 function extractDetachments(html) {
-  // NOTE: when GW changes a detachment's DP in a new MFM they inject a
-  //   <!-- --> ▲ / ▼ arrow (and sometimes an extra class like text-nowrap)
-  //   inside the DP span: `3DP<!-- --> ▲</span>`. The name span class also
-  //   varies (break-all / keep-all). So we tolerate any class suffix and any
-  //   trailing markup after the digit up to </span> — otherwise the exact
-  //   detachments that changed (the ones we care about) get silently dropped
-  //   and mis-reported as removed.
-  const re =
-    /<span class="text-xl[^"]*">([^<]+)<\/span>\s*<span class="text-sm self-end pl-2[^"]*">\s*(\d)DP(?:<!--[^>]*-->)?[^<]*<\/span>([\s\S]{0,500}?)<div class="[^"]*font-bold"[^>]*background-color:#[0-9A-Fa-f]{6}[^>]*>([^<]+)<\/div>/g;
-  const out = {};
+  // Scan detachment headers (name + DP badge), then collect the Force Disposition
+  // color-divs that follow each one up to the next header. Most detachments have
+  // ONE disposition; the generic 3DP detachments offer a CHOICE of TWO (e.g. T'au
+  // Retaliation Cadre = Purge the Foe OR Reconnaissance) — captured as
+  // `disposition` + `disposition2`.
+  // NOTE: when GW changes a detachment's DP they inject `<!-- --> ▲/▼` (and
+  // sometimes a text-nowrap class) inside the DP span, and the name span class
+  // varies (break-all / keep-all) — so both are matched loosely, otherwise the
+  // changed detachments get dropped and mis-reported as removed.
+  const hdr =
+    /<span class="text-xl[^"]*">([^<]+)<\/span>\s*<span class="text-sm self-end pl-2[^"]*">\s*(\d)DP(?:<!--[^>]*-->)?[^<]*<\/span>/g;
+  const dispDiv = /<div class="[^"]*font-bold"[^>]*background-color:#[0-9A-Fa-f]{6}[^>]*>([^<]+)<\/div>/g;
+  const heads = [];
   let m;
-  while ((m = re.exec(html))) {
-    out[decode(m[1])] = { dp: Number(m[2]), disposition: decode(m[4]) };
+  while ((m = hdr.exec(html))) heads.push({ name: decode(m[1]), dp: Number(m[2]), start: m.index, end: hdr.lastIndex });
+  const out = {};
+  for (let i = 0; i < heads.length; i++) {
+    const from = heads[i].end;
+    const to = i + 1 < heads.length ? heads[i + 1].start : Math.min(html.length, from + 1200);
+    const seg = html.slice(from, to);
+    const disps = [];
+    let d;
+    dispDiv.lastIndex = 0;
+    while ((d = dispDiv.exec(seg))) disps.push(decode(d[1]));
+    const entry = { dp: heads[i].dp, disposition: disps[0] || "" };
+    if (disps[1] && disps[1] !== disps[0]) entry.disposition2 = disps[1];
+    out[heads[i].name] = entry;
   }
   return out;
 }
@@ -129,9 +143,9 @@ function diff(oldSnap, newSnap) {
     for (const name of Object.keys(after)) {
       const a = after[name];
       const b = before[name];
-      if (!b) changes.push(`- **${name}** added (${a.dp}DP · ${a.disposition})`);
-      else if (b.dp !== a.dp || b.disposition !== a.disposition)
-        changes.push(`- **${name}**: ${b.dp}DP·${b.disposition} → ${a.dp}DP·${a.disposition}`);
+      if (!b) changes.push(`- **${name}** added (${a.dp}DP · ${[a.disposition, a.disposition2].filter(Boolean).join(" / ")})`);
+      else if (b.dp !== a.dp || b.disposition !== a.disposition || (b.disposition2 || null) !== (a.disposition2 || null))
+        changes.push(`- **${name}**: ${b.dp}DP·${[b.disposition, b.disposition2].filter(Boolean).join("/")} → ${a.dp}DP·${[a.disposition, a.disposition2].filter(Boolean).join("/")}`);
     }
     for (const name of Object.keys(before)) {
       if (!after[name]) changes.push(`- **${name}** removed`);
@@ -177,7 +191,11 @@ function significantlyChangedFactions(oldSnap, newSnap) {
     const before = oldSnap[slug] || {};
     const after = newSnap[slug];
     const detChanged = Object.keys(after).some(
-      (name) => before[name] && (before[name].dp !== after[name].dp || before[name].disposition !== after[name].disposition)
+      (name) =>
+        before[name] &&
+        (before[name].dp !== after[name].dp ||
+          before[name].disposition !== after[name].disposition ||
+          (before[name].disposition2 || null) !== (after[name].disposition2 || null))
     );
     if (detChanged) out.add(slug);
   }

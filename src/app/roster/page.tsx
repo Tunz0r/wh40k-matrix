@@ -9,6 +9,7 @@ import {
   DISP_STYLES,
   FACTIONS,
   GROUPS,
+  detachmentDispositions,
 } from "@/lib/data";
 import { DispositionBadge } from "@/components/DispositionBadge";
 import { serializeRoster, deserializeRoster, rosterToArmies, toRosterExport } from "@/lib/roster";
@@ -42,13 +43,9 @@ function armyDp(army: Army): number {
 }
 
 function armyDispositions(army: Army): Disposition[] {
-  return [
-    ...new Set(
-      army.detachments
-        .map((d) => d.detachment.d)
-        .filter((x): x is Disposition => x !== null)
-    ),
-  ];
+  // A detachment may offer two dispositions — include both so the player can
+  // choose either when building the list.
+  return [...new Set(army.detachments.flatMap((d) => detachmentDispositions(d.detachment)))];
 }
 
 function getChosenDispositionCounts(armies: Army[]): Record<Disposition, number> {
@@ -141,7 +138,7 @@ export default function RosterPage() {
       const groupFactions = GROUPS[filterGroup] || [];
       pool = pool.filter((d) => groupFactions.includes(d.faction));
     }
-    if (filterDisposition) pool = pool.filter((d) => d.detachment.d === filterDisposition);
+    if (filterDisposition) pool = pool.filter((d) => detachmentDispositions(d.detachment).includes(filterDisposition));
     if (query)
       pool = pool.filter(
         (d) => d.detachment.n.toLowerCase().includes(query) || d.faction.toLowerCase().includes(query)
@@ -164,7 +161,7 @@ export default function RosterPage() {
     if (det.dp > remainingDp) return;
     updateArmy(activeArmy, (a) => {
       const newDets = [...a.detachments, { detachment: det, faction }];
-      const disps = new Set(newDets.map((d) => d.detachment.d).filter((x): x is Disposition => x !== null));
+      const disps = new Set(newDets.flatMap((d) => detachmentDispositions(d.detachment)));
       let newChosen = a.chosenDisposition;
       if (disps.size === 1) {
         const only = [...disps][0];
@@ -180,7 +177,7 @@ export default function RosterPage() {
     updateArmy(armyIdx, (a) => {
       const newDets = a.detachments.filter((_, i) => i !== detIdx);
       if (newDets.length === 0) return emptyArmy();
-      const disps = new Set(newDets.map((d) => d.detachment.d).filter((x): x is Disposition => x !== null));
+      const disps = new Set(newDets.flatMap((d) => detachmentDispositions(d.detachment)));
       let newChosen = a.chosenDisposition;
       if (newChosen && !disps.has(newChosen)) newChosen = disps.size === 1 ? [...disps][0] : null;
       return { detachments: newDets, chosenDisposition: newChosen };

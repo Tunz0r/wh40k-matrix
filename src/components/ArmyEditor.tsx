@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FACTIONS, DISPOSITIONS, DISP_STYLES, type Disposition } from "@/lib/data";
+import { FACTIONS, DISPOSITIONS, DISP_STYLES, detachmentDispositions, type Disposition } from "@/lib/data";
 import type { RosterArmy } from "@/lib/roster";
 
 // Inline editor for a single army/list: faction, detachments, disposition.
@@ -59,7 +59,6 @@ export default function ArmyEditor({
         <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
           {factionDets.map((det) => {
             const checked = detachments.includes(det.n);
-            const s = det.d ? DISP_STYLES[det.d] : null;
             return (
               <button
                 key={det.n}
@@ -74,11 +73,24 @@ export default function ArmyEditor({
                   {checked ? "✓" : ""}
                 </span>
                 <span className="text-[11px] text-[#e8e8f0] flex-1 truncate">{det.n}</span>
-                <span
-                  className="text-[8px] font-semibold px-1 py-0.5 rounded whitespace-nowrap shrink-0"
-                  style={s ? { background: s.bg, color: s.color } : { color: "#8888a0" }}
-                >
-                  {det.d ?? "Ukendt"}
+                <span className="flex items-center gap-0.5 shrink-0">
+                  {detachmentDispositions(det).length ? (
+                    detachmentDispositions(det).map((dd, k) => {
+                      const ds = DISP_STYLES[dd];
+                      return (
+                        <span
+                          key={dd}
+                          className="text-[8px] font-semibold px-1 py-0.5 rounded whitespace-nowrap"
+                          style={{ background: ds.bg, color: ds.color }}
+                          title={k === 1 ? "Kan også spilles som denne disposition — vælg nedenfor" : undefined}
+                        >
+                          {dd}
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <span className="text-[8px] font-semibold px-1 py-0.5 rounded whitespace-nowrap text-[#8888a0]">Ukendt</span>
+                  )}
                 </span>
               </button>
             );
