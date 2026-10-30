@@ -242,6 +242,80 @@
       "disposition": "PURGE THE FOE"
     }
   },
+  "black-templars": {
+    "ASSAULT BRETHREN": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "DEATHWATCH SUPPORT": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "DEVASTATOR BRETHREN": {
+      "dp": 1,
+      "disposition": "PURGE THE FOE"
+    },
+    "FIST OF THE GOD-EMPEROR": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "GAUNTLET TASK FORCE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "GRAVIS LINEBREAKER FORCE": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "GRAVIS SIEGE FORCE": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "IRONCLAD CHAMPIONS": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "IRONSTORM SPEARHEAD": {
+      "dp": 1,
+      "disposition": "PURGE THE FOE"
+    },
+    "MARSHAL'S HOUSEHOLD": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "PHOBOS SHADOW FORCE": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "PHOBOS SHOCK FORCE": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    },
+    "STORMLANCE TASK FORCE": {
+      "dp": 1,
+      "disposition": "RECONNAISSANCE"
+    },
+    "TACTICAL BRETHREN": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "TACTICUS ATTACK FORCE": {
+      "dp": 1,
+      "disposition": "TAKE AND HOLD"
+    },
+    "TACTICUS FIRESTORM FORCE": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "TERMINATOR STORM FORCE": {
+      "dp": 1,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "VOW-SWORN CRUSADERS": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    }
+  },
   "blood-angels": {
     "ANGELIC INHERITORS": {
       "dp": 3,
@@ -817,6 +891,28 @@
       "disposition2": "PURGE THE FOE"
     }
   },
+  "imperial-agents": {
+    "IMPERIALIS FLEET": {
+      "dp": 2,
+      "disposition": "RECONNAISSANCE"
+    },
+    "ORDO HERETICUS, PURGATION FORCE": {
+      "dp": 2,
+      "disposition": "TAKE AND HOLD"
+    },
+    "ORDO MALLEUS, DAEMON HUNTERS": {
+      "dp": 2,
+      "disposition": "PRIORITY ASSETS"
+    },
+    "ORDO XENOS, ALIEN HUNTERS": {
+      "dp": 2,
+      "disposition": "PURGE THE FOE"
+    },
+    "VEILED BLADE ELIMINATION FORCE": {
+      "dp": 1,
+      "disposition": "DISRUPTION"
+    }
+  },
   "imperial-knights": {
     "DOMINUS FOEBREAKERS": {
       "dp": 1,
@@ -1344,6 +1440,9 @@
     "adeptus-mechanicus": [],
     "aeldari": [],
     "astra-militarum": [],
+    "black-templars": [
+      "ASSAULT INTERCESSOR SQUAD, BLADEGUARD VETERAN SQUAD, CRUSADER SQUAD, DEATHWATCH VETERANS, DECIMUS KILL TEAM, FORTIS KILL TEAM, INFERNUS SQUAD, INNER CIRCLE COMPANIONS, INTERCESSOR SQUAD, STERNGUARD VETERAN SQUAD, SWORD BRETHREN SQUAD, VANGUARD VETERAN SQUAD"
+    ],
     "blood-angels": [
       "ASSAULT INTERCESSOR SQUAD, BLADEGUARD VETERAN SQUAD, CRUSADER SQUAD, DEATHWATCH VETERANS, DECIMUS KILL TEAM, FORTIS KILL TEAM, INFERNUS SQUAD, INNER CIRCLE COMPANIONS, INTERCESSOR SQUAD, STERNGUARD VETERAN SQUAD, SWORD BRETHREN SQUAD, VANGUARD VETERAN SQUAD"
     ],
@@ -1362,6 +1461,7 @@
     "emperors-children": [],
     "genestealer-cults": [],
     "grey-knights": [],
+    "imperial-agents": [],
     "imperial-knights": [],
     "leagues-of-votann": [],
     "necrons": [],

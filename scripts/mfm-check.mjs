@@ -31,12 +31,16 @@ const UPDATED_KEY = "__updated";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
+// Every faction page on the MFM index that the app uses. (The index also lists
+// titan-legions / chaos-titan-legions, which aren't standard team-list factions
+// and aren't in data.ts, so they're intentionally left out.)
 const FACTIONS = [
   "adepta-sororitas", "adeptus-custodes", "adeptus-mechanicus", "aeldari", "astra-militarum",
-  "blood-angels", "chaos-daemons", "chaos-knights", "chaos-space-marines", "dark-angels",
-  "death-guard", "deathwatch", "drukhari", "emperors-children", "genestealer-cults",
-  "grey-knights", "imperial-knights", "leagues-of-votann", "necrons", "orks",
-  "space-marines", "space-wolves", "tau-empire", "thousand-sons", "tyranids", "world-eaters",
+  "black-templars", "blood-angels", "chaos-daemons", "chaos-knights", "chaos-space-marines",
+  "dark-angels", "death-guard", "deathwatch", "drukhari", "emperors-children",
+  "genestealer-cults", "grey-knights", "imperial-agents", "imperial-knights", "leagues-of-votann",
+  "necrons", "orks", "space-marines", "space-wolves", "tau-empire",
+  "thousand-sons", "tyranids", "world-eaters",
 ];
 
 const decode = (s) =>
@@ -173,10 +177,12 @@ function diff(oldSnap, newSnap) {
 const SLUG_TO_FACTION = {
   "adepta-sororitas": "Adepta Sororitas", "adeptus-custodes": "Adeptus Custodes",
   "adeptus-mechanicus": "Adeptus Mechanicus", "aeldari": "Aeldari", "astra-militarum": "Astra Militarum",
+  "black-templars": "Black Templars",
   "blood-angels": "Blood Angels", "chaos-daemons": "Chaos Daemons", "chaos-knights": "Chaos Knights",
   "chaos-space-marines": "Chaos Space Marines", "dark-angels": "Dark Angels", "death-guard": "Death Guard",
   "deathwatch": "Deathwatch", "drukhari": "Drukhari", "emperors-children": "Emperor's Children",
-  "genestealer-cults": "Genestealer Cults", "grey-knights": "Grey Knights", "imperial-knights": "Imperial Knights",
+  "genestealer-cults": "Genestealer Cults", "grey-knights": "Grey Knights",
+  "imperial-agents": "Imperial Agents", "imperial-knights": "Imperial Knights",
   "leagues-of-votann": "Leagues of Votann", "necrons": "Necrons", "orks": "Orks",
   "space-marines": "Space Marines", "space-wolves": "Space Wolves", "tau-empire": "T'au Empire",
   "thousand-sons": "Thousand Sons", "tyranids": "Tyranids", "world-eaters": "World Eaters",
