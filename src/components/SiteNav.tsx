@@ -29,7 +29,8 @@ const CAPTAIN_CORE: NavLink[] = [
 ];
 const CAPTAIN_MORE: NavLink[] = [
   { href: "/roster", label: "Roster", match: (p) => p.startsWith("/roster") },
-  { href: "/stats", label: "Feltets stats", match: (p) => p.startsWith("/stats") },
+  { href: "/stats", label: "Feltets stats", match: (p) => p.startsWith("/stats") && !p.startsWith("/stats-priority") },
+  { href: "/stats-priority", label: "Prioritet-stats ★", match: (p) => p.startsWith("/stats-priority") },
   { href: "/sanity", label: "Konsistens-tjek", match: (p) => p.startsWith("/sanity") },
   { href: "/warmups", label: "Træningskampe", match: (p) => p.startsWith("/warmups") },
   { href: "/calibration", label: "Præcision", match: (p) => p.startsWith("/calibration") },
