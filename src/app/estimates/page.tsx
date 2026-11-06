@@ -48,12 +48,14 @@ import {
   subscribeToLibraryTeams,
   optInArchetype,
   optOutArchetype,
+  setTeamPinned,
   subscribeToDeprecations,
   staleFactionsIn,
   type DeprecationMap,
 } from "@/lib/estimates-db";
 
 const OTHER_TIER = "Andre hold";
+const PRIORITY_TIER = "⭐ Prioritet — skal udfyldes";
 
 function shortFaction(name: string): string {
   return name.length > 14 ? name.slice(0, 13) + "…" : name;
@@ -302,6 +304,26 @@ export default function EstimatesPage() {
     const extras = [...extraSections.entries()].map(([name, teams]) => ({ name, teams }));
     return [...seedingTiers, ...extras].filter((t) => t.teams.length > 0);
   }, [fbDoc, opponents]);
+
+  // Each team's real section, so a pinned team (shown in the priority band) still
+  // re-imports/persists under its own tier, never "Prioritet".
+  const origTierBySlug = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of tiers) for (const name of t.teams) m.set(slugifyTeam(name), t.name);
+    return m;
+  }, [tiers]);
+
+  // Display order: pinned teams float to a priority band at the top (per-camp
+  // flag, not shared), removed from their normal tier so they aren't listed twice.
+  const sections = useMemo(() => {
+    const pinnedNames = Object.values(opponents).filter((t) => t.pinned).map((t) => t.name);
+    const pinnedSet = new Set(pinnedNames.map((n) => slugifyTeam(n)));
+    const priority = pinnedNames.length ? [{ name: PRIORITY_TIER, teams: pinnedNames }] : [];
+    const rest = tiers
+      .map((t) => ({ ...t, teams: t.teams.filter((name) => !pinnedSet.has(slugifyTeam(name))) }))
+      .filter((t) => t.teams.length > 0);
+    return [...priority, ...rest];
+  }, [tiers, opponents]);
 
   const totals = useMemo(() => {
     let teams = 0, cells = 0, manual = 0, auto = 0;
@@ -634,7 +656,7 @@ export default function EstimatesPage() {
                   : "bg-[#22222e] text-[#8888a0] hover:text-[#e8e8f0]"
               }`}
             >
-              Pr. land
+              Pr. hold
             </button>
             <button
               onClick={() => switchMode("player")}
@@ -896,9 +918,9 @@ export default function EstimatesPage() {
           />
         )}
 
-        {effMode === "country" && tiers.map((tier) => (
-          <div key={tier.name} className="rounded-xl border border-white/[0.08] p-4">
-            <h2 className="text-xs font-semibold text-[#8888a0] uppercase tracking-wider mb-3">
+        {effMode === "country" && sections.map((tier) => (
+          <div key={tier.name} className={`rounded-xl border p-4 ${tier.name === PRIORITY_TIER ? "border-amber-300/30 bg-amber-300/[0.03]" : "border-white/[0.08]"}`}>
+            <h2 className={`text-xs font-semibold uppercase tracking-wider mb-3 ${tier.name === PRIORITY_TIER ? "text-amber-300" : "text-[#8888a0]"}`}>
               {tier.name}
             </h2>
             <div className="space-y-2">
@@ -914,6 +936,13 @@ export default function EstimatesPage() {
                 return (
                   <div key={slug} className="rounded-lg border border-white/[0.08]">
                     <div className="flex items-center gap-3 p-3">
+                      <button
+                        onClick={() => setTeamPinned(slug, !team?.pinned, activeSlug).catch(() => {})}
+                        title={team?.pinned ? "Fjern prioritet" : "Markér som prioritet — rykkes til toppen (kun dit hold, deles ikke med andre)"}
+                        className={`text-[14px] leading-none transition-colors ${team?.pinned ? "text-amber-300" : "text-[#44445a] hover:text-amber-300"}`}
+                      >
+                        {team?.pinned ? "★" : "☆"}
+                      </button>
                       <span className="text-[12px] font-semibold text-[#e8e8f0]">{teamName}</span>
                       {locked && (
                         <span className="text-[9px] font-semibold text-[#8888a0] bg-[#22222e] px-1.5 py-0.5 rounded" title="Estimater er låst — holdet er allerede spillet">
@@ -934,7 +963,7 @@ export default function EstimatesPage() {
                           {!locked && (
                             <>
                               <button
-                                onClick={() => setImportFor({ name: teamName, tier: tier.name })}
+                                onClick={() => setImportFor({ name: teamName, tier: origTierBySlug.get(slug) ?? OTHER_TIER })}
                                 className="text-[10px] text-[#8888a0] hover:text-[#e8e8f0] transition-colors"
                               >
                                 Opdater lists
@@ -950,7 +979,7 @@ export default function EstimatesPage() {
                         </>
                       ) : (
                         <button
-                          onClick={() => setImportFor({ name: teamName, tier: tier.name })}
+                          onClick={() => setImportFor({ name: teamName, tier: origTierBySlug.get(slug) ?? OTHER_TIER })}
                           className="ml-auto text-[11px] text-[#a855f7] hover:text-[#c084fc] transition-colors"
                         >
                           + Tilføj lists

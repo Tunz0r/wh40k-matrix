@@ -45,6 +45,7 @@ export interface OpponentTeam {
   wtc?: boolean; // true = a real WTC 2026 roster (loaded from the doc), vs a stale/placeholder team
   createdAt?: number; // for library sources: when the event/lists are from (freshness)
   optIn?: boolean; // per-tournament marker: this archetype is pulled into the tournament's view
+  pinned?: boolean; // per-CAMP priority flag: the viewer flagged this team to float to the top of their estimate list. Lives in the tournament's own node (like estimate cells), NEVER the shared field — not inherited by other camps in the event.
 }
 
 export type OpponentMap = Record<string, OpponentTeam>;
@@ -128,7 +129,7 @@ export function subscribeToOpponents(
     if (useField) {
       for (const [k, fieldTeam] of Object.entries(fieldTeams)) {
         if (!fieldTeam || !fieldTeam.name) continue;
-        result[k] = { ...fieldTeam, estimates: { ...(baseTeams[k]?.estimates || {}) } };
+        result[k] = { ...fieldTeam, estimates: { ...(baseTeams[k]?.estimates || {}) }, pinned: !!baseTeams[k]?.pinned };
       }
     } else {
       for (const [k, team] of Object.entries(baseTeams)) {
@@ -153,7 +154,7 @@ export function subscribeToOpponents(
         const optedIn = slug === TEAM_SLUG || baseTeams[teamKey] !== undefined;
         if (!optedIn) continue;
         const legacy = slug === TEAM_SLUG ? libTeam.estimates || {} : {};
-        result[teamKey] = { ...libTeam, estimates: { ...legacy, ...(baseTeams[teamKey]?.estimates || {}) } };
+        result[teamKey] = { ...libTeam, estimates: { ...legacy, ...(baseTeams[teamKey]?.estimates || {}) }, pinned: !!baseTeams[teamKey]?.pinned };
       }
     }
     callback(result);
@@ -276,6 +277,19 @@ export async function optInArchetype(
 ): Promise<void> {
   await authReady();
   await update(ref(getDb(), `${baseFor(tournamentSlug)}/${archetypeSlug}`), { optIn: true });
+}
+
+// Flag (or unflag) an opponent team as a priority for THIS camp so it floats to
+// the top of the estimate list. Per-CAMP: written to the tournament's own node,
+// exactly like estimate cells, so it never leaks to the shared event field and
+// other camps don't inherit it.
+export async function setTeamPinned(
+  teamSlug: string,
+  pinned: boolean,
+  tournamentSlug: string = TEAM_SLUG
+): Promise<void> {
+  await authReady();
+  await update(ref(getDb(), `${estNodeForTeam(teamSlug, tournamentSlug)}/${teamSlug}`), { pinned: pinned ? true : null });
 }
 
 // Remove an archetype from this tournament (opt-out) — drops its per-tournament
