@@ -7,6 +7,7 @@ import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
 import {
   subscribeToOpponents,
   clusterLists,
+  slugifyTeam,
   type OpponentMap,
   type OpponentList,
 } from "@/lib/estimates-db";
@@ -85,7 +86,7 @@ export default function StatsPage() {
   const [opponents, setOpponents] = useState<OpponentMap>({});
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
 
-  const { activeSlug, activeFieldSlug } = useActiveTournament();
+  const { activeSlug, activeFieldSlug, active } = useActiveTournament();
   useEffect(() => {
     try {
       const u1 = subscribeToOpponents(setOpponents, activeSlug, false, activeFieldSlug); // tournament-local field only
@@ -95,12 +96,23 @@ export default function StatsPage() {
   }, [activeSlug, activeFieldSlug]);
 
   const stats = useMemo(() => {
-    // Real WTC 2026 field: teams flagged wtc + our own roster.
-    const wtcEntries = Object.entries(opponents).filter(([, t]) => t.wtc);
+    // The field = every team in the active tournament's opponent field. The legacy
+    // WTC 2026 node mixes real rosters with stale placeholders, flagged `wtc`; when
+    // that flag is present we honour it (exact old behaviour), otherwise — any
+    // self-serve tournament — every team in the field counts.
+    const allEntries = Object.entries(opponents);
+    const hasWtcFlag = allEntries.some(([, t]) => t.wtc);
+    const fieldEntries = hasWtcFlag ? allEntries.filter(([, t]) => t.wtc) : allEntries;
     type Team = { name: string; armies: OpponentList[] };
-    const teams: Team[] = wtcEntries.map(([, t]) => ({ name: t.name, armies: t.armies || [] }));
+    const teams: Team[] = fieldEntries.map(([, t]) => ({ name: t.name, armies: t.armies || [] }));
+    // Add our own roster — but only when it isn't already one of the field teams.
+    // Self-serve events (e.g. a BCP import) list every team, our own included, so
+    // adding the roster there would double-count us.
+    const ownName = doc?.teamName || TEAM_NAME;
+    const ownSlug = slugifyTeam(ownName);
+    const ownInField = fieldEntries.some(([k, t]) => k === ownSlug || slugifyTeam(t.name) === ownSlug);
     const roster = doc?.roster?.armies || [];
-    if (roster.length) teams.push({ name: TEAM_NAME, armies: roster.map((a) => ({ faction: a.faction, detachments: a.detachments, disposition: a.disposition })) });
+    if (roster.length && !ownInField) teams.push({ name: ownName, armies: roster.map((a) => ({ faction: a.faction, detachments: a.detachments, disposition: a.disposition })) });
 
     const lists = teams.flatMap((t) => t.armies);
     const listCount = lists.length;
@@ -157,8 +169,8 @@ export default function StatsPage() {
 
     // archetypes (clusters) over the wtc field only, ranked by size with the
     // running cumulative share — so we can name the core that makes up the field.
-    const wtcMap: OpponentMap = Object.fromEntries(wtcEntries);
-    const clusters = clusterLists(wtcMap);
+    const fieldMap: OpponentMap = Object.fromEntries(fieldEntries);
+    const clusters = clusterLists(fieldMap);
     const clusteredTotal = clusters.reduce((a, c) => a + c.members.length, 0) || 1;
     let cumRun = 0;
     const rankedArchetypes = [...clusters]
@@ -197,7 +209,7 @@ export default function StatsPage() {
     // Averaged over a team's 8 lists → low = brings unique tech, high = all netlists.
     const sizeByKey = new Map<string, number>();
     for (const c of clusters) for (const m of c.members) sizeByKey.set(`${m.teamSlug}_${m.listIdx}`, c.members.length);
-    const teamSpice = wtcEntries.map(([slug, t]) => {
+    const teamSpice = fieldEntries.map(([slug, t]) => {
       const armies = t.armies || [];
       let echoSum = 0, uniq = 0, counted = 0;
       armies.forEach((_, idx) => {
@@ -225,7 +237,7 @@ export default function StatsPage() {
     }).filter((x): x is { faction: string; total: number; det: string; share: number; distinct: number } => !!x);
 
     // --- Top-seed tech: what Tier-1 teams over/under-index on vs the field (lift) ---
-    const tier1Entries = wtcEntries.filter(([, t]) => /tier\s*1\b/i.test(t.tier || ""));
+    const tier1Entries = fieldEntries.filter(([, t]) => /tier\s*1\b/i.test(t.tier || ""));
     const tier1Lists = tier1Entries.flatMap(([, t]) => t.armies || []);
     const t1Faction = new Map<string, number>();
     for (const l of tier1Lists) if (l.faction) t1Faction.set(l.faction, (t1Faction.get(l.faction) || 0) + 1);
@@ -256,20 +268,20 @@ export default function StatsPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-semibold text-[#e8e8f0] tracking-tight">
             Statistik
-            <span className="text-[#4ade80] ml-2 text-sm font-normal">— WTC 2026 felt</span>
+            <span className="text-[#4ade80] ml-2 text-sm font-normal">— {active?.name ?? "Feltet"}</span>
           </h1>
           <span className="text-[11px] text-[#8888a0]">
             {s.teams.length} hold · {s.listCount} lister · {s.clusters.length} arketyper
           </span>
         </div>
         <p className="text-[10px] text-[#8888a0] mt-1">
-          Meta-overblik over hele WTC 2026-feltet (inkl. {TEAM_NAME}). Enheds-statistik dækker de {s.listsWithUnits} lister med indsat liste-indhold.
+          Meta-overblik over feltet ({s.teams.length} hold). Enheds-statistik dækker de {s.listsWithUnits} lister med indsat liste-indhold.
         </p>
       </header>
 
       <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
         {noData ? (
-          <p className="text-[11px] text-[#8888a0]">Ingen WTC-hold indlæst endnu.</p>
+          <p className="text-[11px] text-[#8888a0]">Ingen hold i feltet endnu.</p>
         ) : (
           <>
             {/* Summary tiles */}
@@ -390,7 +402,7 @@ export default function StatsPage() {
               </div>
             </Card>
 
-            <Card title="Populære disposition-sammensætninger" desc="hvordan hold fordeler deres 8 lister på dispositioner">
+            <Card title="Populære disposition-sammensætninger" desc="hvordan hold fordeler deres lister på dispositioner">
               <div className="space-y-2">
                 {s.compositions.slice(0, 10).map((c, i) => (
                   <div key={i} className="flex items-center gap-2 flex-wrap">
