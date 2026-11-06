@@ -45,6 +45,7 @@ import { computeStandings } from "@/lib/standings";
 import { formatUnits, formatUnitsLines } from "@/lib/list-parser";
 import { uploadActualList } from "@/lib/profile-actions";
 import { matchupForecast, type MatchupForecast } from "@/lib/forecast";
+import { useDispBias, getDispBias } from "@/lib/disp-bias";
 
 // --- Types ---
 
@@ -377,6 +378,7 @@ function EstimateMatrix({
   attackersOur?: number[];
   attackersTheir?: number[];
 }) {
+  const [dispBias, setDispBias] = useDispBias();
   const short = (s: string) => (s.length > 15 ? s.slice(0, 14) + "…" : s);
   const ourIdxs = ourArmies.map((_, i) => i).filter((i) => !hiddenOur?.has(i));
   const theirIdxs = theirArmies.map((_, j) => j).filter((j) => !hiddenTheir?.has(j));
@@ -393,7 +395,7 @@ function EstimateMatrix({
   const values = new Map<string, MatchupForecast>();
   for (const i of ourIdxs)
     for (const j of theirIdxs)
-      values.set(`${i}_${j}`, matchupForecast(opponents, warmups, i, theirArmies[j], ourArmies[i], oppName));
+      values.set(`${i}_${j}`, matchupForecast(opponents, warmups, i, theirArmies[j], ourArmies[i], oppName, dispBias));
   const hasAny = [...values.values()].some((f) => f.base !== null || f.n > 0);
   if (ourIdxs.length === 0 || theirIdxs.length === 0) return null;
 
@@ -427,6 +429,20 @@ function EstimateMatrix({
         )}
       </summary>
       <div className="px-3 pb-3 overflow-x-auto">
+        <div className="flex items-center gap-2 mb-2 text-[10px]">
+          <button
+            onClick={() => setDispBias(!dispBias)}
+            title="Disposition-fordel fra meta-winrates (listhammer): ±BP for vores dispositions matchup mod deres, lagt oveni forecastet. Fra som standard."
+            className={`px-2 py-0.5 rounded-md border transition-colors ${
+              dispBias
+                ? "border-[#4ade80]/60 text-[#4ade80] bg-[rgba(74,222,128,0.1)]"
+                : "border-white/[0.1] text-[#8888a0] hover:text-[#e8e8f0]"
+            }`}
+          >
+            {dispBias ? "Disp-bias: til ✓" : "Disp-bias: fra"}
+          </button>
+          {dispBias && <span className="text-[#8888a0]">· ±N = disposition-fordel lagt oveni</span>}
+        </div>
         <table className="border-separate border-spacing-1.5">
           <thead>
             <tr>
@@ -1133,7 +1149,7 @@ export default function TournamentDashboard({
     // estimate shifted to our measured result where we've warmed up vs this
     // archetype, else the raw estimate. This is the number coaching then tracks.
     const prefill = (ourIdx: number, theirIdx: number) => {
-      const f = matchupForecast(opponents, fbDoc?.warmups, ourIdx, armiesB[theirIdx], armiesA[ourIdx], opponentRoster.name);
+      const f = matchupForecast(opponents, fbDoc?.warmups, ourIdx, armiesB[theirIdx], armiesA[ourIdx], opponentRoster.name, getDispBias());
       // f.adjusted now folds in both warmup and the disposition edge; it equals
       // base when neither applies. Coaching tracks this number.
       return f.base !== null || f.n > 0 ? f.adjusted : 0;

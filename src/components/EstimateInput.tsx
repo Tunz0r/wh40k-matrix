@@ -86,7 +86,7 @@ export default function EstimateInput({
           🗺️
         </span>
       )}
-      {dispBP !== 0 && !showAdj && (
+      {adjusted && dispBP !== 0 && !showAdj && (
         <span
           className="absolute -bottom-1 -right-1 text-[8px] font-bold leading-none px-0.5 rounded bg-[#0f0f13] pointer-events-none"
           style={{ color: dispBP > 0 ? "#4ade80" : "#f87171" }}

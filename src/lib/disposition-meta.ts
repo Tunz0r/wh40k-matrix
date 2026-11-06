@@ -1,17 +1,17 @@
 import type { Disposition } from "./data";
 
 // Disposition-vs-disposition win rates from listhammer.info/stats (11th ed,
-// trailing 4 weeks of qualifying events, mirror matches excluded), read
-// 2026-07-28. Cell = the ROW disposition's win rate (%) against the COLUMN
-// disposition; the diagonal (mirror) is 50. Refresh from the same source as the
-// meta shifts — Disruption being the field's punching bag is the load-bearing
-// signal today.
+// trailing qualifying events, mirror matches excluded), read 2026-11-06. Cell =
+// the ROW disposition's win rate (%) against the COLUMN disposition; the diagonal
+// (mirror) is 50. Refresh from the same source as the meta shifts — the current
+// load-bearing signal is Priority Assets crushing Disruption (58%), while the
+// rest of the field sits within a point or two of even.
 export const DISP_MATCHUP_WR: Record<Disposition, Record<Disposition, number>> = {
-  "Take and Hold":   { "Take and Hold": 50, "Priority Assets": 50.4, "Reconnaissance": 50.8, "Purge the Foe": 51.9, "Disruption": 55.6 },
-  "Priority Assets": { "Take and Hold": 49.6, "Priority Assets": 50, "Reconnaissance": 50.6, "Purge the Foe": 52.1, "Disruption": 56.0 },
-  "Reconnaissance":  { "Take and Hold": 49.2, "Priority Assets": 49.4, "Reconnaissance": 50, "Purge the Foe": 51.3, "Disruption": 53.9 },
-  "Purge the Foe":   { "Take and Hold": 48.1, "Priority Assets": 47.9, "Reconnaissance": 48.7, "Purge the Foe": 50, "Disruption": 54.0 },
-  "Disruption":      { "Take and Hold": 44.4, "Priority Assets": 44.0, "Reconnaissance": 46.2, "Purge the Foe": 46.1, "Disruption": 50 },
+  "Take and Hold":   { "Take and Hold": 50, "Priority Assets": 48.2, "Reconnaissance": 50, "Purge the Foe": 50.1, "Disruption": 51.5 },
+  "Priority Assets": { "Take and Hold": 51.8, "Priority Assets": 50, "Reconnaissance": 48.3, "Purge the Foe": 48.1, "Disruption": 58 },
+  "Reconnaissance":  { "Take and Hold": 50, "Priority Assets": 51.8, "Reconnaissance": 50, "Purge the Foe": 49, "Disruption": 51.3 },
+  "Purge the Foe":   { "Take and Hold": 49.9, "Priority Assets": 52, "Reconnaissance": 51, "Purge the Foe": 50, "Disruption": 49.3 },
+  "Disruption":      { "Take and Hold": 48.5, "Priority Assets": 42, "Reconnaissance": 48.7, "Purge the Foe": 50.7, "Disruption": 50 },
 };
 
 // BP awarded per 1 percentage-point of win-rate edge, and the cap. Disposition is

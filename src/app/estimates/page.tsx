@@ -12,6 +12,7 @@ import EstimateInput from "@/components/EstimateInput";
 import PlayerEstimates from "@/components/PlayerEstimates";
 import { parseArmyList, parseTeamLists, parseEventLists, formatUnits, formatUnitsLines, type ParsedTeam } from "@/lib/list-parser";
 import { dispositionEdgeBP } from "@/lib/disposition-meta";
+import { useDispBias } from "@/lib/disp-bias";
 import {
   type OpponentMap,
   type OpponentTeam,
@@ -130,9 +131,10 @@ export default function EstimatesPage() {
   const [unitsShown, setUnitsShown] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<{ key: string; text: string } | null>(null);
   const [mode, setMode] = useState<"country" | "player">("country");
-  // Disposition-matchup bias: off = raw manual estimates; on = fold the
-  // disposition win-rate edge (±2 BP) into the shown value. Never writes.
-  const [dispAdj, setDispAdj] = useState(false);
+  // Disposition-matchup bias: off = raw manual estimates; on = show the ±BP corner
+  // chips and fold the win-rate edge into the shown value. Global + opt-in (shared
+  // across pages via disp-bias.ts), off by default. Never writes to the estimate.
+  const [dispAdj, setDispAdj] = useDispBias();
   const [archOpen, setArchOpen] = useState(false);
   const [archText, setArchText] = useState("");
   const [versions, setVersions] = useState<VersionsNode>({
@@ -143,15 +145,10 @@ export default function EstimatesPage() {
   useEffect(() => {
     const saved = localStorage.getItem("wtc-est-mode");
     if (saved === "player" || saved === "country") setMode(saved);
-    if (localStorage.getItem("wtc-est-dispadj") === "1") setDispAdj(true);
   }, []);
 
   function toggleDispAdj() {
-    setDispAdj((v) => {
-      const nv = !v;
-      localStorage.setItem("wtc-est-dispadj", nv ? "1" : "0");
-      return nv;
-    });
+    setDispAdj(!dispAdj);
   }
 
   function switchMode(m: "country" | "player") {

@@ -112,16 +112,20 @@ export function matchupForecast(
   ourIdx: number,
   theirList: OpponentList,
   ourArchetype?: ArchetypeRef | null,
-  opponentName?: string | null
+  opponentName?: string | null,
+  // Disposition bias is opt-in (see disp-bias.ts): off by default, so forecasts
+  // and the dashboard stay raw unless the viewer turns it on.
+  applyDispBias: boolean = false
 ): MatchupForecast {
   const base = lookupEstimate(opponents, opponentName ?? null, ourIdx, theirList);
   const w = archetypeWarmupStats(warmups, ourIdx, theirList, ourArchetype);
   // Disposition-matchup edge (our disposition vs theirs), folded on top of the
-  // warmup-corrected value. Only applied when there's actually an estimate to
-  // adjust, so an empty cell doesn't sprout a phantom ±2.
-  const dispBP = dispositionEdgeBP(ourArchetype?.disposition, theirList.disposition);
+  // warmup-corrected value — but only when the viewer opted into it AND there's
+  // actually an estimate to adjust, so an empty cell doesn't sprout a phantom ±2.
+  const rawBP = dispositionEdgeBP(ourArchetype?.disposition, theirList.disposition);
   const hasEstimate = base !== null || !!w;
+  const dispBP = applyDispBias && hasEstimate ? rawBP : 0;
   const warm = w ? (shrunkForecast(base, w) ?? base ?? 0) : (base ?? 0);
   const adjusted = hasEstimate ? Math.max(0, Math.min(20, warm + dispBP)) : 0;
-  return { base, adjusted, n: w?.onArchetype ?? 0, avgActual: w?.avgActual ?? null, dispBP: hasEstimate ? dispBP : 0 };
+  return { base, adjusted, n: w?.onArchetype ?? 0, avgActual: w?.avgActual ?? null, dispBP };
 }
