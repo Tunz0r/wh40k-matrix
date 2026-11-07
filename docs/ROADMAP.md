@@ -47,11 +47,34 @@ Optional next: a dedicated error service (Sentry) if volume/stack-traces are eve
 needed beyond the in-app log.
 
 ### 2. A test safety-net on the risky code
-There are **no tests**. The most logic-heavy, edge-case-prone code —
-`list-parser.ts`, `forecast.ts`, the estimates read-merge — is verified only by
-`tsc` + `next build`, which don't catch logic regressions. Add **Vitest** with a
-handful of cases on the parser first (GW-app, WTC, NewRecruit, mixed team split,
-divider lines, dual-army lists — all real bugs we've hit).
+There are **no tests**. The app is verified only by `tsc` + `next build`, which
+catch type errors but **not logic regressions**.
+
+**Why this is the next priority (not a nice-to-have):**
+- **`list-parser.ts` is load-bearing and silently fails.** It turns pasted army
+  lists (GW-app / WTC / NewRecruit, mixed per team) into the faction / detachment /
+  disposition / units that feed estimates → forecasts → pairing. A parsing
+  regression doesn't throw — it quietly mis-splits a team or drops a list, and the
+  bad data flows all the way to a pairing decision. Garbage in, garbage out, and
+  nobody notices until a tournament.
+- **It changes often.** Every new export format, MFM shift, or edge case touches
+  it — exactly the code most likely to regress.
+- **It's a proven bug magnet.** Just this session we fixed: mixed GW/WTC/NewRecruit
+  in one document, pure-divider lines spawning phantom teams, a list containing two
+  full armies, and `[bracket]` vs `(paren)` point costs. Each is a perfect
+  regression test — and a candidate to silently come back.
+- **It unblocks the second contributor.** Tests are executable documentation of
+  intent and a guardrail so a change (ours or the brother's) that breaks a known
+  case fails loudly in CI instead of in production.
+
+**Scope (small — pure functions, ~a day, no infra):** add **Vitest** and cover the
+pure core first:
+- `list-parser.ts`: `parseArmyList`, `parseTeamLists`, `parseEventLists`,
+  `matchFaction`, `matchDetachments`, `firstDisposition` — one case per real bug
+  above, plus happy paths for each export format.
+- `forecast.ts`: `shrunkForecast`, `matchupForecast` (incl. the `applyDispBias`
+  on/off paths), `dispositionEdgeBP`.
+- Wire `vitest` into a `test` script and run it in CI next to the build.
 
 ## P1 — operational robustness
 

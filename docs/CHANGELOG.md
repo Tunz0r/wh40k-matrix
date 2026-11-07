@@ -16,6 +16,9 @@ full detail.
     `stats_viewed`); added **error logging** (`trackError` + global
     `onerror`/`unhandledrejection` handlers + key write-failure sites); the admin
     panel now shows an errors tile and a recent-errors list.
+  - *Decisions captured:* [ADR-0005](./adr/0005-usage-analytics-rtdb-event-log.md)
+    (why a no-PII RTDB event log, not a 3rd-party service) + GLOSSARY terms
+    (Priority/pinned, Disposition bias, Usage event / `track()`, Error logging).
 - **Bigger per-team estimate matrix.** Full army names on the row labels, wider
   column headers, larger cells (`EstimateInput` gained a `size` prop). Other
   matrices unchanged.

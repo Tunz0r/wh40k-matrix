@@ -69,6 +69,19 @@ The WTC process each round that assigns our lists to theirs
 Opponent teams grouped by expected strength (Tier 1–4), weighting which matchups
 to prep first.
 
+**Priority (★ / pinned / "skal udfyldes")**:
+A per-camp flag on an opponent that floats it to a priority band at the top of the
+estimate list. Stored in the camp's OWN node (`estimates/{dataSlug}/{team}/pinned`),
+like estimate cells — **never** the shared field, so other camps don't inherit it.
+`/stats-priority` shows the meta stats for just the ★-tagged teams.
+_Avoid_: favourite, starred (in prose; "pinned" in code is fine)
+
+**Disposition bias**:
+The small ±BP nudge a matchup gets from the disposition win-rate table
+(`src/lib/disposition-meta.ts`, from listhammer). It's a minor signal next to the
+list matchup, so it's **off by default** and opt-in via a global toggle
+(`src/lib/disp-bias.ts`); `matchupForecast` only folds it in when enabled.
+
 **Team room**:
 A camp's live coaching view during a round, shared with coaches; updates live.
 
@@ -100,3 +113,16 @@ of the live MFM. `src/lib/data.ts` FACTIONS must mirror the snapshot
 **Archetype / library**:
 A clustered list type in the global reference library (`estimates/_library`), reused
 across camps. Marked **stale (⚠)** when its codex changes (library deprecation).
+
+## Usage & analytics
+
+**Usage event / `track()`**:
+A tiny, fire-and-forget usage record (`src/lib/analytics.ts`) appended to the
+`events/` node — `{ e, uid, ts, …props }`. **No PII**: uid only, never names/emails/
+list content. Powers the admin **Brugsstatistik** panel (`/admin`). See
+[`docs/adr/0005-usage-analytics-rtdb-event-log.md`](docs/adr/0005-usage-analytics-rtdb-event-log.md).
+
+**Error logging (`trackError`)**:
+The same stream, for failures instead of actions — a global `onerror`/
+`unhandledrejection` handler plus the key write-failure sites. Shown as the errors
+tile + recent-errors list in the admin panel, so we see what breaks, not just what's used.
