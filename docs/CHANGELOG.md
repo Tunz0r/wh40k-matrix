@@ -6,6 +6,13 @@ full detail.
 
 ## 2026-11-07
 
+- **Rules auto-deploy (P1 ops).** `database.rules.json` now deploys via CI
+  (`.github/workflows/deploy-rules.yml`) on every push to master that changes it —
+  no more manual Firebase-console paste (the old #1 silent-breakage trap). **One-time
+  setup:** add the `FIREBASE_SERVICE_ACCOUNT` repo secret (a service account with the
+  "Firebase Realtime Database Admin" role). ADR-0003 + ARCHITECTURE/AGENTS/WORKFLOWS
+  updated. (The scheduled membership-rebuild idea was deliberately deferred — see
+  ROADMAP P1 for why.)
 - **Events-maintenance agent** (`.github/workflows/events-maintenance.yml` +
   `scripts/events-maintenance.mjs`). Keeps the usage/error log healthy, daily:
   - *#1 Error-watch* — if any `error` events in the last 24h, upsert ONE rolling

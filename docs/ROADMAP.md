@@ -89,12 +89,20 @@ pure core first:
 
 ## P1 — operational robustness
 
-- **`database.rules.json` is published manually.** Editing the file changes
-  nothing in prod until someone pastes it into the Firebase console — a silent
-  landmine. Add `firebase deploy --only database` to CI, or at least a checklist.
-- **Membership index rebuilds only when an admin/captain opens the app** (throttled,
-  `recomputeMembership()`). A scheduled rebuild (we already run GitHub Actions)
-  would close the gap for self-serve tournaments with no active admin.
+- ~~**`database.rules.json` is published manually.**~~ ✅ **done** — rules now
+  auto-deploy via CI (`.github/workflows/deploy-rules.yml`) on push to master,
+  via a `FIREBASE_SERVICE_ACCOUNT` secret. No more manual console paste. See
+  [ADR-0003](./adr/0003-no-pii-in-rtdb-manual-rules.md).
+- **Membership index rebuild — deliberately deferred.** `recomputeMembership()`
+  runs on every membership-changing action and (throttled) when an admin/captain
+  opens the app. The only gap is a dormant tournament where someone joins and no
+  owner visits for a while — and it **self-heals** the moment an owner next opens
+  the app. A scheduled rebuild would need to run with admin privileges (making the
+  MFM bot an admin has bad side effects — the super-admin bootstrap would claim
+  owner-less tournaments *for the bot*), or a risky refactor of security-critical,
+  untested code. Not worth it for a self-healing, low-impact gap. Revisit only if
+  real access-lag bites; if so, extract recompute's pure core + test it, then run
+  it from CI via the service account (bypasses rules, no bootstrap side effect).
 - **No staging** — everything goes straight to `master` → prod. Fast, but no
   safety valve.
 

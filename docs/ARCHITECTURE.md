@@ -87,8 +87,8 @@ Pages (`src/app/*`): `estimates` (the matrix), `tournament/[id]` (camp dashboard
 - **RTDB rejects `undefined`** in writes — strip it (`stripUndefined`) or the write fails.
 - **Deleting a node** needs a `.write` rule at that node/ancestor; owner leaves are
   nulled per-uid, not the whole node (avoids PERMISSION_DENIED).
-- **`database.rules.json` is published MANUALLY** in the Firebase console — editing
-  the file alone changes nothing in production.
+- **`database.rules.json` auto-deploys via CI** (`.github/workflows/deploy-rules.yml`)
+  on push to master — edit the file and push; no manual console paste.
 - **Never bulk-overwrite the estimates node** — it's production data. See
   [`docs/adr/0001-tournaments-frozen-in-time.md`](adr/0001-tournaments-frozen-in-time.md).
 - **`data.ts` must mirror the live MFM** — see

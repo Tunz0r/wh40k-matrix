@@ -1,0 +1,36 @@
+name: Deploy RTDB rules
+
+# Publishes database.rules.json to Firebase automatically whenever it changes on
+# master — so a rule edit takes effect without the manual console paste that used
+# to be the #1 silent-breakage trap (see docs/adr/0003). Validates the JSON first.
+#
+# One-time setup: add a repo secret FIREBASE_SERVICE_ACCOUNT = the JSON key of a
+# service account with the "Firebase Realtime Database Admin" role. Until then this
+# job fails loudly (and nothing else is affected).
+on:
+  push:
+    branches: [master]
+    paths: ["database.rules.json"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate rules JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('database.rules.json','utf8')); console.log('rules JSON OK')"
+      - name: Write service-account key
+        run: printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Deploy database rules
+        run: npx -y firebase-tools@13 deploy --only database --project wtcpairing --non-interactive
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json

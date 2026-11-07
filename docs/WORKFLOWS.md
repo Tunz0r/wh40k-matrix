@@ -41,10 +41,12 @@ Branch first if you're not meant to be on `master`; commit/push only when asked.
 
 ## Firebase security rules
 
-`database.rules.json` is the source of truth, but **it is published by hand** in
-the Firebase console (Realtime Database → Rules → Publish). A rule change in the
-file does nothing until published — if something looks broken after a rules edit,
-check whether it was published.
+`database.rules.json` is the source of truth and is **auto-deployed by CI**
+(`.github/workflows/deploy-rules.yml`) on every push to master that changes it, via
+the `FIREBASE_SERVICE_ACCOUNT` secret. Just edit the file and push. You can also
+deploy on demand (`gh workflow run deploy-rules.yml`) or locally with
+`npx firebase-tools deploy --only database`. If a rules change seems to have no
+effect, check that the deploy-rules run went green.
 
 ## The MFM bot (points/disposition updates)
 

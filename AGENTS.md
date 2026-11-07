@@ -21,8 +21,8 @@ read these before working:
   what's shipped recently, newest first.
 
 Non-negotiables (see the ADRs): never bulk-overwrite the `estimates` node; no PII
-(emails) in the Realtime Database; `database.rules.json` is published by hand;
-`src/lib/data.ts` mirrors the live MFM.
+(emails) in the Realtime Database; `database.rules.json` auto-deploys via CI on
+push; `src/lib/data.ts` mirrors the live MFM.
 
 # Keeping decisions in sync (we're a two-person team now)
 
