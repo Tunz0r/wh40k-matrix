@@ -35,20 +35,27 @@ let lastPageKey = "";
 // signed out, and swallows any write error).
 export function track(event: AppEvent, props?: Props): void {
   try {
-    const uid = currentUser()?.uid;
-    if (!uid) return;
     // Collapse duplicate page views from re-renders / StrictMode double-mounts.
     if (event === "page_view") {
       const key = String(props?.path ?? "");
       if (key === lastPageKey) return;
       lastPageKey = key;
     }
-    void push(ref(getDb(), "events"), {
-      e: event,
-      uid,
-      ts: serverTimestamp(),
-      ...(props || {}),
-    }).catch(() => {});
+    // Wait for auth to restore before reading the uid — on a fresh page load the
+    // event fires (useEffect on mount) BEFORE Firebase has rehydrated the user, so
+    // a synchronous read would drop it. authReady resolves once the user is known.
+    void authReady()
+      .then(() => {
+        const uid = currentUser()?.uid;
+        if (!uid) return;
+        return push(ref(getDb(), "events"), {
+          e: event,
+          uid,
+          ts: serverTimestamp(),
+          ...(props || {}),
+        });
+      })
+      .catch(() => {});
   } catch {
     // never throw from analytics
   }
