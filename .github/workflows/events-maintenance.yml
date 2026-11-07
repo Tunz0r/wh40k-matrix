@@ -1,0 +1,30 @@
+name: Events maintenance
+
+# Daily: alerts on app errors (opens/updates one rolling GitHub issue) and prunes
+# old usage events so the `events/` node stays small. See scripts/events-maintenance.mjs
+# and docs/ROADMAP.md. Best-effort — it never fails the build and touches nothing else.
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    # FIREBASE_BOT_* live in the "Production" environment, not as repo secrets.
+    environment: Production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Error-watch + prune the events log
+        run: node scripts/events-maintenance.mjs
+        env:
+          FIREBASE_BOT_EMAIL: ${{ secrets.FIREBASE_BOT_EMAIL }}
+          FIREBASE_BOT_PASSWORD: ${{ secrets.FIREBASE_BOT_PASSWORD }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

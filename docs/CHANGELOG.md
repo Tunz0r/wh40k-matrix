@@ -6,6 +6,14 @@ full detail.
 
 ## 2026-11-07
 
+- **Events-maintenance agent** (`.github/workflows/events-maintenance.yml` +
+  `scripts/events-maintenance.mjs`). Keeps the usage/error log healthy, daily:
+  - *#1 Error-watch* — if any `error` events in the last 24h, upsert ONE rolling
+    GitHub issue (`[app-errors]`) with a signature breakdown. Low-noise: one
+    issue, at most one comment/day, only on days with errors.
+  - *#2 Prune* — delete events older than 60 days (+ a 50k hard cap).
+  - Runs as the MFM bot; the `events` rule now grants that bot read + delete.
+    **Publish `database.rules.json`** (manual) for the bot to read/prune.
 - **Test safety-net (Vitest).** 21 unit tests over the pure, bug-prone core —
   `list-parser` (one case per real bug: mixed formats, two-army lists, bracket vs
   paren points, team/list splitting), `forecast` (`shrunkForecast`,

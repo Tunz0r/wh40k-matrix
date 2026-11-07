@@ -40,7 +40,9 @@ Amplitude).
 - The `events` rule, like all rules, is **published by hand** in the Firebase
   console. Until it's published, writes are silently rejected (and `track()`
   swallows the error) — the admin panel shows a "publish the rules" message.
-- The `events` node grows unbounded. At our scale that's fine for a long time;
-  prune or cap (e.g. a scheduled trim) if it ever matters.
+- The `events` node grows unbounded, so a **daily maintenance agent**
+  (`scripts/events-maintenance.mjs`, `.github/workflows/events-maintenance.yml`)
+  prunes events older than 60 days and alerts on errors. It runs as the MFM bot,
+  so the `events` rule grants `_bots` read + delete (admins still read in-app).
 - If we later need stack traces / alerting beyond the in-app log, add a dedicated
   error service (Sentry) alongside — it doesn't replace this decision.

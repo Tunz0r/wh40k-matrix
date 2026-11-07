@@ -40,11 +40,17 @@ We had zero analytics and no error monitoring, and ~123 `catch {}` / `.catch(() 
   type, most-visited routes, 14-day trend, active users, an **errors (7d)** tile
   and a recent-errors list.
 
+- A **daily maintenance agent** (`.github/workflows/events-maintenance.yml`):
+  error-watch (upserts one rolling `[app-errors]` GitHub issue on new errors) +
+  prune (drops events older than 60 days). Closes the loop so nobody has to watch
+  `/admin`, and keeps the node bounded.
+
 > ⚠️ The `events` rule is in `database.rules.json` but **must be published by hand**
-> in the Firebase console before writes land (see the manual-rules gotcha below).
+> in the Firebase console before writes land (and before the bot can read/prune —
+> the rule now grants `_bots` read + delete). See the manual-rules gotcha below.
 
 Optional next: a dedicated error service (Sentry) if volume/stack-traces are ever
-needed beyond the in-app log.
+needed beyond the in-app log; a weekly usage digest (a Claude scheduled agent).
 
 ### 2. A test safety-net on the risky code  ✅ *shipped*
 There were **no tests** — the app was verified only by `tsc` + `next build`, which

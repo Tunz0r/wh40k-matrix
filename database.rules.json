@@ -151,7 +151,8 @@
       }
     },
     "events": {
-      ".read": "auth != null && root.child('tournaments/_admins/'+auth.uid).exists()",
+      ".read": "auth != null && (root.child('tournaments/_admins/'+auth.uid).exists() || root.child('tournaments/_bots/'+auth.uid).exists())",
+      ".write": "auth != null && root.child('tournaments/_bots/'+auth.uid).exists()",
       "$id": {
         ".write": "auth != null && !data.exists() && newData.child('uid').val() === auth.uid"
       }
