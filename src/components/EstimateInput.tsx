@@ -9,6 +9,7 @@ export default function EstimateInput({
   locked,
   dispBP = 0,
   adjusted,
+  size = "sm",
 }: {
   cell: EstimateCell | undefined;
   onChange: (v: number | null) => void;
@@ -17,7 +18,10 @@ export default function EstimateInput({
   // corner chip; folded into the displayed value when `adjusted` is on.
   dispBP?: number;
   adjusted?: boolean;
+  // "md" = the larger cell used on the per-team estimate matrix (easier to read).
+  size?: "sm" | "md";
 }) {
+  const box = size === "md" ? "w-14 h-11 text-[15px]" : "w-11 h-9 text-[13px]";
   const [focused, setFocused] = useState(false);
   const base = cell?.v;
   const effective = base != null ? Math.max(0, Math.min(20, base + dispBP)) : undefined;
@@ -43,7 +47,7 @@ export default function EstimateInput({
           if (e.target.value === "") { onChange(null); return; }
           onChange(Math.max(0, Math.min(20, Number(e.target.value) || 0)));
         }}
-        className={`w-11 h-9 text-center text-[13px] font-bold rounded border outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${cell?.auto ? "opacity-70" : ""} ${locked ? "cursor-not-allowed opacity-60" : ""}`}
+        className={`${box} text-center font-bold rounded border outline-none focus:border-[#a855f7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${cell?.auto ? "opacity-70" : ""} ${locked ? "cursor-not-allowed opacity-60" : ""}`}
         style={
           style
             ? { background: style.bg, color: style.fg, borderColor: style.border }

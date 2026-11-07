@@ -1025,16 +1025,16 @@ export default function EstimatesPage() {
                           />
                         </div>
                         <div className="overflow-x-auto">
-                        <table className="border-separate border-spacing-1">
+                        <table className="border-separate border-spacing-1.5">
                           <thead>
                             <tr>
-                              <th className="text-left text-[9px] text-[#8888a0] font-semibold pr-2">
+                              <th className="text-left text-[10px] text-[#8888a0] font-semibold pr-3">
                                 Vores \ Deres
                               </th>
                               {team.armies.map((list, j) => (
                                 <th
                                   key={j}
-                                  className="text-[9px] text-[#8888a0] font-semibold w-11 max-w-11 truncate px-0.5 cursor-help"
+                                  className="text-[10px] text-[#8888a0] font-semibold w-16 max-w-16 truncate px-0.5 cursor-help"
                                   title={listTitle(list)}
                                 >
                                   {j + 1}. {shortFaction(list.faction)}
@@ -1046,10 +1046,10 @@ export default function EstimatesPage() {
                             {ourArmies.map((army, i) => (
                               <tr key={i}>
                                 <th
-                                  className="text-left text-[10px] text-[#e8e8f0] font-medium pr-2 whitespace-nowrap"
+                                  className="text-left text-[11.5px] text-[#e8e8f0] font-medium pr-3 whitespace-nowrap"
                                   title={`${army.faction} — ${(army.detachments || []).join(", ")}`}
                                 >
-                                  {i + 1}. {shortFaction(army.faction)}
+                                  {i + 1}. {army.faction}
                                 </th>
                                 {team.armies.map((oppList, j) => (
                                   <td key={j} title={listTitle(oppList)}>
@@ -1059,6 +1059,7 @@ export default function EstimatesPage() {
                                       locked={locked}
                                       dispBP={dispositionEdgeBP(army.disposition, oppList.disposition)}
                                       adjusted={dispAdj}
+                                      size="md"
                                     />
                                   </td>
                                 ))}
