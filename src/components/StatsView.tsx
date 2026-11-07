@@ -12,6 +12,7 @@ import {
   type OpponentList,
 } from "@/lib/estimates-db";
 import { DISP_STYLES, DISPOSITIONS, getGroupForFaction, type Disposition } from "@/lib/data";
+import { track } from "@/lib/analytics";
 
 const GROUP_COLORS: Record<string, string> = {
   "Space Marines": "#60a5fa",
@@ -87,6 +88,7 @@ export default function StatsView({ variant = "field" }: { variant?: "field" | "
   const [doc, setDoc] = useState<TournamentDoc | null>(null);
 
   const { activeSlug, activeFieldSlug, active } = useActiveTournament();
+  useEffect(() => { track("stats_viewed", { variant }); }, [variant]);
   useEffect(() => {
     try {
       const u1 = subscribeToOpponents(setOpponents, activeSlug, false, activeFieldSlug); // tournament-local field only

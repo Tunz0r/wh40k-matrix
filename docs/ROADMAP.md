@@ -23,23 +23,28 @@ they're **observability, a quality safety-net, and operational robustness**.
 
 ## P0 — highest priority
 
-### 1. Usage + error visibility  ✅ *first slice shipped*
+### 1. Usage + error visibility  ✅ *shipped*
 We had zero analytics and no error monitoring, and ~123 `catch {}` / `.catch(() => {})`
-/ `alert()` sites swallow failures. Shipped so far:
+/ `alert()` sites swallow failures. Shipped:
 
 - **Vercel Web Analytics** (cookieless page-level traffic) in the root layout.
 - A thin **`track(event, props)`** (`src/lib/analytics.ts`) → append-only `events/`
   node in RTDB, **no PII** (uid only, per [ADR-0003](./adr/0003-no-pii-in-rtdb-manual-rules.md)).
   Instrumented: `page_view`, `estimate_set`, `bulk_import`, `list_paste`,
-  `team_pinned`, `pairing_committed`, `warmup_logged`, `tournament_created`.
+  `team_pinned`, `pairing_committed`, `warmup_logged`, `tournament_created`,
+  `roster_imported`, `team_joined`, `stats_viewed`.
+- **Error logging** via `trackError(ctx, err)`: global `window.onerror` +
+  `unhandledrejection` handlers, plus the key write-failure sites (bulk import,
+  list save, seat claim). Deduped so a crash loop can't spam the log.
 - An admin **Brugsstatistik** panel (`/admin`, `UsageAnalytics.tsx`): events by
-  type, most-visited routes, 14-day trend, active users.
+  type, most-visited routes, 14-day trend, active users, an **errors (7d)** tile
+  and a recent-errors list.
 
 > ⚠️ The `events` rule is in `database.rules.json` but **must be published by hand**
 > in the Firebase console before writes land (see the manual-rules gotcha below).
 
-Still to do: pipe swallowed errors into the same log (or add Sentry), and
-instrument the remaining events (`roster_imported`, `team_joined`, `stats_viewed`).
+Optional next: a dedicated error service (Sentry) if volume/stack-traces are ever
+needed beyond the in-app log.
 
 ### 2. A test safety-net on the risky code
 There are **no tests**. The most logic-heavy, edge-case-prone code —

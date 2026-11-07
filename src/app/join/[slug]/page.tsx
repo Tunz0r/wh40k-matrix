@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { subscribeToRoster, claimSlot, setSlotName } from "@/lib/tournament-db";
 import { upsertSelfUser } from "@/lib/membership";
+import { track, trackError } from "@/lib/analytics";
 import type { RosterExport } from "@/lib/roster";
 
 // Invite landing: a signed-in user opens /join/{dataSlug} (shared by the owner
@@ -38,13 +39,15 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
     setErr(null);
     try {
       await claimSlot(slug, idx, user.uid);
+      track("team_joined");
       // Label the seat with the chosen name and persist it as this login's
       // display name so it shows up everywhere (never the email).
       await setSlotName(slug, idx, chosen).catch(() => {});
       await upsertSelfUser(user.uid, chosen).catch(() => {});
       // Straight into the team — no extra "gå ind" click needed.
       window.location.assign("/");
-    } catch {
+    } catch (e) {
+      trackError("claim_seat", e);
       setErr("Kunne ikke vælge pladsen. Måske er den lige blevet taget, eller holdet er lukket.");
       setBusy(null);
     }

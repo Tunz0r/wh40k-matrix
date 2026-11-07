@@ -24,7 +24,8 @@ export type AppEvent =
   | "roster_imported"
   | "stats_viewed"
   | "tournament_created"
-  | "team_joined";
+  | "team_joined"
+  | "error";
 
 type Props = Record<string, string | number | boolean>;
 
@@ -48,6 +49,29 @@ export function track(event: AppEvent, props?: Props): void {
       ts: serverTimestamp(),
       ...(props || {}),
     }).catch(() => {});
+  } catch {
+    // never throw from analytics
+  }
+}
+
+// --- Errors ---
+
+let lastErrKey = "";
+let lastErrAt = 0;
+
+// Log a failure to the same stream, so admins can see what breaks — not just what
+// gets used. `ctx` is a short, stable label ("saveEstimate", "unhandledrejection");
+// the message is truncated and admin-only, but keep obviously-sensitive strings
+// out of it. Deduped within 5s so a crash loop can't spam the log.
+export function trackError(ctx: string, err?: unknown): void {
+  try {
+    const msg = (err instanceof Error ? err.message : String(err ?? "")).slice(0, 180);
+    const key = ctx + "|" + msg;
+    const now = Date.now();
+    if (key === lastErrKey && now - lastErrAt < 5000) return;
+    lastErrKey = key;
+    lastErrAt = now;
+    track("error", { ctx, msg });
   } catch {
     // never throw from analytics
   }

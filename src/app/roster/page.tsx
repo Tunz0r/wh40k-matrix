@@ -14,6 +14,7 @@ import {
 import { DispositionBadge } from "@/components/DispositionBadge";
 import { serializeRoster, deserializeRoster, rosterToArmies, toRosterExport } from "@/lib/roster";
 import { saveTeamSetup } from "@/lib/tournament-db";
+import { track } from "@/lib/analytics";
 import { useActiveTournament } from "@/lib/active-tournament";
 
 interface DetachmentPick {
@@ -211,6 +212,7 @@ export default function RosterPage() {
     const data = deserializeRoster(importText.trim());
     if (!data) { alert("Ugyldigt roster format."); return; }
     const imported = rosterToArmies(data);
+    track("roster_imported", { armies: imported.length });
     setTeamSize(imported.length);
     setArmies(imported);
     setRosterName(data.name);

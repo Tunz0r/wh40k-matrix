@@ -33,6 +33,7 @@ const EVENT_LABELS: Record<string, string> = {
   stats_viewed: "Stats åbnet",
   tournament_created: "Turnering oprettet",
   team_joined: "Hold tilmeldt",
+  error: "Fejl",
 };
 
 // The first path segment of a /route, grouped for the page-view breakdown.
@@ -84,6 +85,13 @@ export default function UsageAnalytics() {
     }
 
     const sortDesc = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1]);
+    const errors = events.filter((e) => e.e === "error");
+    const errors7 = errors.filter((e) => (e.ts || 0) >= since7).length;
+    const recentErrors = errors.slice(-8).reverse().map((e) => ({
+      ctx: String(e.ctx ?? "?"),
+      msg: String(e.msg ?? ""),
+      ts: e.ts || 0,
+    }));
     return {
       total: events.length,
       recent7: recent7.length,
@@ -93,15 +101,18 @@ export default function UsageAnalytics() {
       byEvent: sortDesc(byEvent),
       byRoute: sortDesc(byRoute),
       byDay: [...byDay.entries()],
+      errors7,
+      recentErrors,
       firstTs: events[0]?.ts ?? null,
     };
   }, [events]);
 
   const tiles = [
-    { k: "Events i alt", v: stats.total },
-    { k: "Sidste 7 dage", v: stats.recent7 },
-    { k: "Aktive brugere (7d)", v: stats.users7 },
-    { k: "Aktive i dag", v: stats.users1 },
+    { k: "Events i alt", v: stats.total, warn: false },
+    { k: "Sidste 7 dage", v: stats.recent7, warn: false },
+    { k: "Aktive brugere (7d)", v: stats.users7, warn: false },
+    { k: "Aktive i dag", v: stats.users1, warn: false },
+    { k: "Fejl (7d)", v: stats.errors7, warn: stats.errors7 > 0 },
   ];
 
   const maxEvent = stats.byEvent[0]?.[1] || 1;
@@ -124,10 +135,10 @@ export default function UsageAnalytics() {
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {tiles.map((t) => (
-              <div key={t.k} className="rounded-lg bg-white/[0.03] p-2.5 text-center">
-                <div className="text-xl font-bold text-[#e8e8f0] tabular-nums">{t.v}</div>
+              <div key={t.k} className={`rounded-lg p-2.5 text-center ${t.warn ? "bg-[rgba(248,113,113,0.1)]" : "bg-white/[0.03]"}`}>
+                <div className={`text-xl font-bold tabular-nums ${t.warn ? "text-[#f87171]" : "text-[#e8e8f0]"}`}>{t.v}</div>
                 <div className="text-[9px] text-[#8888a0] mt-0.5">{t.k}</div>
               </div>
             ))}
@@ -163,6 +174,21 @@ export default function UsageAnalytics() {
               ))}
             </div>
           </div>
+          {stats.recentErrors.length > 0 && (
+            <div>
+              <div className="text-[10px] text-[#f87171] uppercase tracking-wider font-semibold mb-2">Seneste fejl</div>
+              <div className="space-y-1">
+                {stats.recentErrors.map((e, i) => (
+                  <div key={i} className="flex items-baseline gap-2 text-[10px]">
+                    <span className="text-[#8888a0] shrink-0 tabular-nums w-20">{new Date(e.ts).toLocaleString("da-DK", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                    <span className="text-[#f87171] shrink-0 font-semibold">{e.ctx}</span>
+                    <span className="text-[#c8c8d4] truncate" title={e.msg}>{e.msg}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <p className="text-[9px] text-[#8888a0]">
             {stats.users} unikke brugere i alt. Rå side-trafik ligger også i Vercel Web Analytics (cookieløst).
           </p>

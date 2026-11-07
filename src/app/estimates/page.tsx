@@ -13,7 +13,7 @@ import PlayerEstimates from "@/components/PlayerEstimates";
 import { parseArmyList, parseTeamLists, parseEventLists, formatUnits, formatUnitsLines, type ParsedTeam } from "@/lib/list-parser";
 import { dispositionEdgeBP } from "@/lib/disposition-meta";
 import { useDispBias } from "@/lib/disp-bias";
-import { track } from "@/lib/analytics";
+import { track, trackError } from "@/lib/analytics";
 import {
   type OpponentMap,
   type OpponentTeam,
@@ -395,7 +395,8 @@ export default function EstimatesPage() {
       setBulkOpen(false);
       setBulkText("");
       setBulkParsed(null);
-    } catch {
+    } catch (e) {
+      trackError("bulk_import", e);
       alert("Kunne ikke skrive alle lists — tjek Firebase / at du er med i eventet.");
     }
     setBulkBusy(false);
@@ -463,7 +464,7 @@ export default function EstimatesPage() {
       estimates,
       ...(existing?.notes ? { notes: existing.notes } : {}),
     };
-    saveOpponentTeam(slug, team, activeSlug, activeFieldSlug).catch(() => alert("Kunne ikke gemme — tjek Firebase"));
+    saveOpponentTeam(slug, team, activeSlug, activeFieldSlug).catch((e) => { trackError("saveOpponentTeam", e); alert("Kunne ikke gemme — tjek Firebase"); });
     track("list_paste", { lists: mergedArmies.length });
     setImportFor(null);
     setImportText("");

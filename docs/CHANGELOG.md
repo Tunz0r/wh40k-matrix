@@ -12,6 +12,10 @@ full detail.
   **Brugsstatistik** panel on `/admin` shows what's actually used. Added the
   `events` rule to `database.rules.json` — **publish it by hand** in the Firebase
   console. See [`ROADMAP.md`](./ROADMAP.md) P0#1.
+  - *Finished:* instrumented all events (incl. `roster_imported`, `team_joined`,
+    `stats_viewed`); added **error logging** (`trackError` + global
+    `onerror`/`unhandledrejection` handlers + key write-failure sites); the admin
+    panel now shows an errors tile and a recent-errors list.
 - **Bigger per-team estimate matrix.** Full army names on the row labels, wider
   column headers, larger cells (`EstimateInput` gained a `size` prop). Other
   matrices unchanged.
