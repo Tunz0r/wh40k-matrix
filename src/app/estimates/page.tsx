@@ -13,6 +13,7 @@ import PlayerEstimates from "@/components/PlayerEstimates";
 import { parseArmyList, parseTeamLists, parseEventLists, formatUnits, formatUnitsLines, type ParsedTeam } from "@/lib/list-parser";
 import { dispositionEdgeBP } from "@/lib/disposition-meta";
 import { useDispBias } from "@/lib/disp-bias";
+import { track } from "@/lib/analytics";
 import {
   type OpponentMap,
   type OpponentTeam,
@@ -390,6 +391,7 @@ export default function EstimatesPage() {
         // Lists only — estimates stay PER-TEAM (grafted on read), never shared.
         await saveOpponentTeam(slug, { name: t.name, tier: "", armies }, activeSlug, activeFieldSlug);
       }
+      track("bulk_import", { teams: bulkParsed.length });
       setBulkOpen(false);
       setBulkText("");
       setBulkParsed(null);
@@ -462,6 +464,7 @@ export default function EstimatesPage() {
       ...(existing?.notes ? { notes: existing.notes } : {}),
     };
     saveOpponentTeam(slug, team, activeSlug, activeFieldSlug).catch(() => alert("Kunne ikke gemme — tjek Firebase"));
+    track("list_paste", { lists: mergedArmies.length });
     setImportFor(null);
     setImportText("");
     setExpanded(slug);
@@ -485,6 +488,7 @@ export default function EstimatesPage() {
     clusterTargets?: { teamSlug: string; listIdx: number }[]
   ) {
     if (playedRounds.has(teamSlug)) return;
+    if (value !== null) track("estimate_set");
     const updates: Record<string, EstimateCell | null> = {};
     updates[`${teamSlug}/${ourIdx}_${theirIdx}`] =
       value === null ? null : stampVersion({ v: value }, currentVersion);
@@ -937,7 +941,7 @@ export default function EstimatesPage() {
                   <div key={slug} className="rounded-lg border border-white/[0.08]">
                     <div className="flex items-center gap-3 p-3">
                       <button
-                        onClick={() => setTeamPinned(slug, !team?.pinned, activeSlug).catch(() => {})}
+                        onClick={() => { track("team_pinned", { on: !team?.pinned }); setTeamPinned(slug, !team?.pinned, activeSlug).catch(() => {}); }}
                         title={team?.pinned ? "Fjern prioritet" : "Markér som prioritet — rykkes til toppen (kun dit hold, deles ikke med andre)"}
                         className={`text-[14px] leading-none transition-colors ${team?.pinned ? "text-amber-300" : "text-[#44445a] hover:text-amber-300"}`}
                       >

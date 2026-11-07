@@ -44,6 +44,7 @@ import {
   type ArchetypeDescriptor,
 } from "@/lib/estimates-db";
 import { archetypeWarmupStats } from "@/lib/forecast";
+import { track } from "@/lib/analytics";
 import { parseTeamLists, formatUnitsLines } from "@/lib/list-parser";
 import {
   fetchSession,
@@ -504,6 +505,7 @@ export default function PlayerPage() {
     };
     try {
       await addWarmupGame(activeSlug, myIdx, game);
+      track("warmup_logged");
       // Closing the loop: testing the matchup clears its "needs testing" flag
       // on this army's estimate cells for the archetype.
       const testedKeys = wuSelected.members

@@ -46,6 +46,7 @@ import { formatUnits, formatUnitsLines } from "@/lib/list-parser";
 import { uploadActualList } from "@/lib/profile-actions";
 import { matchupForecast, type MatchupForecast } from "@/lib/forecast";
 import { useDispBias, getDispBias } from "@/lib/disp-bias";
+import { track } from "@/lib/analytics";
 
 // --- Types ---
 
@@ -1141,6 +1142,7 @@ export default function TournamentDashboard({
     if (choiceA === null || choiceB === null) return;
     if (layoutChoiceA === null || layoutChoiceB === null) return;
     if (!tournament.roster || !opponentRoster) return;
+    track("pairing_committed");
 
     const armiesA = tournament.roster.armies;
     const armiesB = opponentRoster.armies;

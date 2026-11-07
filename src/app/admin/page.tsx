@@ -20,6 +20,7 @@ import {
 } from "@/lib/membership";
 import { subscribeToRegistry, deleteTournament, type TournamentMeta } from "@/lib/tournaments-registry";
 import { subscribeToEvents, deleteEvent, convertCampToEvent, campsForEvent, type EventMeta } from "@/lib/events";
+import UsageAnalytics from "@/components/UsageAnalytics";
 
 // Admin-only hub: grant/revoke access. Every login shows up here (recorded on
 // sign-in); the admin gives each a role — bind to a player, assign as a coach of
@@ -108,6 +109,8 @@ export default function AdminPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
       <h1 className="text-lg font-semibold text-[#e8e8f0]">Admin — adgang & roller</h1>
+
+      <UsageAnalytics />
 
       {msg && <p className="text-[12px] text-[#4ade80]">{msg}</p>}
 

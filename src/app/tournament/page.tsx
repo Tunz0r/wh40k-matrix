@@ -10,6 +10,7 @@ import {
   type TournamentStatus,
 } from "@/lib/tournaments-registry";
 import { slugifyId } from "@/lib/events";
+import { track } from "@/lib/analytics";
 import { subscribeToTournament, type TournamentDoc } from "@/lib/tournament-db";
 import { subscribeToMyTournaments } from "@/lib/membership";
 import { computeStandings } from "@/lib/standings";
@@ -70,6 +71,7 @@ export default function TournamentIndexPage() {
     setBusy(true);
     try {
       await addTournament({ id: proposedId, name: nm, dataSlug: proposedId, teamName: teamName.trim(), teamSize, status: "upcoming" });
+      track("tournament_created");
       setActive(proposedId);
       setName("");
       setTeamName("");

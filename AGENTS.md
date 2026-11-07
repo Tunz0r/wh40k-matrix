@@ -16,6 +16,9 @@ read these before working:
   rules, the MFM bot.
 - **[`docs/adr/`](./docs/adr/)** — the hard-to-reverse decisions and *why*. Don't
   "fix" something recorded there without reading it first.
+- **[`docs/ROADMAP.md`](./docs/ROADMAP.md)** — product review: what's missing and
+  what to build next (priorities). **[`docs/CHANGELOG.md`](./docs/CHANGELOG.md)** —
+  what's shipped recently, newest first.
 
 Non-negotiables (see the ADRs): never bulk-overwrite the `estimates` node; no PII
 (emails) in the Realtime Database; `database.rules.json` is published by hand;
