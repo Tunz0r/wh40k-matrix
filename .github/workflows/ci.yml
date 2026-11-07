@@ -1,0 +1,24 @@
+name: CI
+
+# Type-checks and runs the unit tests on every push to master and every PR, so a
+# regression in the parser / forecast fails loudly here instead of in production.
+# (Vercel builds + deploys separately on push to master.)
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Unit tests
+        run: npm test

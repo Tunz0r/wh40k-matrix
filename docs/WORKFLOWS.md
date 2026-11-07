@@ -16,6 +16,18 @@ npm run dev                  # http://localhost:3000
 - `npm run build` to typecheck + build, `npm run lint` to lint.
 - `.env.local` is gitignored — never commit real Firebase values or secrets.
 
+## Tests
+
+```bash
+npm test          # Vitest — the pure-logic unit tests (list-parser, forecast, …)
+npm run test:watch
+```
+
+Pure-function tests only (no DB/DOM), so they need no env. **Add a case when you
+touch `list-parser.ts` / `forecast.ts`** — every real parser bug is a regression
+waiting to come back. CI (`.github/workflows/ci.yml`) type-checks + runs `npm test`
+on every push and PR.
+
 ## Deploying
 
 Push to `master` → Vercel auto-deploys. **Confirm it landed** (don't assume):

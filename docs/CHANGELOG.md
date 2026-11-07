@@ -6,6 +6,12 @@ full detail.
 
 ## 2026-11-07
 
+- **Test safety-net (Vitest).** 21 unit tests over the pure, bug-prone core —
+  `list-parser` (one case per real bug: mixed formats, two-army lists, bracket vs
+  paren points, team/list splitting), `forecast` (`shrunkForecast`,
+  `matchupForecast` incl. disposition-bias on/off), `disposition-meta`. Run with
+  `npm test`; a CI workflow (`.github/workflows/ci.yml`) type-checks + tests on
+  every push and PR. See [`ROADMAP.md`](./ROADMAP.md) P0#2.
 - **Usage analytics + Vercel Web Analytics** (`src/lib/analytics.ts`,
   `components/Analytics.tsx`, `components/UsageAnalytics.tsx`). A thin, no-PII
   `track()` logs key actions to an append-only `events/` node; an admin

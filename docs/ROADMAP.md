@@ -46,9 +46,14 @@ We had zero analytics and no error monitoring, and ~123 `catch {}` / `.catch(() 
 Optional next: a dedicated error service (Sentry) if volume/stack-traces are ever
 needed beyond the in-app log.
 
-### 2. A test safety-net on the risky code
-There are **no tests**. The app is verified only by `tsc` + `next build`, which
-catch type errors but **not logic regressions**.
+### 2. A test safety-net on the risky code  ✅ *shipped*
+There were **no tests** — the app was verified only by `tsc` + `next build`, which
+catch type errors but **not logic regressions**. Now: a **Vitest** suite (21 tests)
+over the pure core — `list-parser` (one case per real bug below + each export
+format), `forecast` (`shrunkForecast`, `matchupForecast` incl. the bias on/off
+paths) and `disposition-meta` — run via `npm test` and in CI
+(`.github/workflows/ci.yml`) on every push + PR, so a regression fails loudly
+before prod. Grow the suite as new edge cases appear.
 
 **Why this is the next priority (not a nice-to-have):**
 - **`list-parser.ts` is load-bearing and silently fails.** It turns pasted army
@@ -99,8 +104,7 @@ pure core first:
 
 ## Suggested order
 
-1. **Finish the analytics slice** (errors into the log; remaining events) — biggest
-   insight per effort. *(slice 1 done)*
-2. **Vitest on `list-parser` / `forecast`** — stop regressions before prod.
-3. **Scheduled membership rebuild + rules-deploy in CI** — close the two ops gaps.
-4. **Toasts instead of alerts** + stats→action links — polish.
+1. ~~**Finish the analytics slice**~~ ✅ done.
+2. ~~**Vitest on `list-parser` / `forecast`**~~ ✅ done (21 tests + CI).
+3. **Scheduled membership rebuild + rules-deploy in CI** — close the two ops gaps (P1).
+4. **Toasts instead of alerts** + stats→action links — polish (P2).
